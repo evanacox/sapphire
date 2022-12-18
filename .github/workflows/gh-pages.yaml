@@ -1,0 +1,53 @@
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+name: Build Documentation
+
+jobs:
+  build:
+    name: Build & Deploy Pages
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install stable toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+
+      - uses: Swatinem/rust-cache@v1
+
+      - name: Build API Docs
+        uses: actions-rs/cargo@v1
+        env:
+          RUSTDOCFLAGS: --html-in-header ./docs/rustdoc/header.html --html-after-content ./docs/rustdoc/after.html
+        with:
+          command: doc
+          args: --no-deps --package sapphire
+
+      - name: Setup mdBook
+        uses: peaceiris/actions-mdbook@v1
+        with:
+          mdbook-version: '0.4.18'
+
+      - name: Build Book
+        working-directory: ./docs
+        run: |
+          mdbook build
+      - name: Create public dir
+        working-directory: ./
+        run: |
+          mkdir -p ./public/api
+          mv ./docs/book/* ./public
+          mv ./target/doc/* ./public/api
+      - name: Deploy
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./public
