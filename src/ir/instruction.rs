@@ -406,10 +406,7 @@ impl Instruction for ICmpInst {
 
 impl BinaryInst for ICmpInst {
     fn is_commutative(&self) -> bool {
-        match self.op() {
-            ICmpOp::EQ | ICmpOp::NE => true,
-            _ => false,
-        }
+        matches!(self.op(), ICmpOp::EQ | ICmpOp::NE)
     }
 }
 
@@ -487,10 +484,10 @@ impl Instruction for FCmpInst {
 
 impl BinaryInst for FCmpInst {
     fn is_commutative(&self) -> bool {
-        match self.op() {
-            FCmpOp::OEQ | FCmpOp::ONE | FCmpOp::UEQ | FCmpOp::UNE => true,
-            _ => false,
-        }
+        matches!(
+            self.op(),
+            FCmpOp::OEQ | FCmpOp::ONE | FCmpOp::UEQ | FCmpOp::UNE
+        )
     }
 }
 

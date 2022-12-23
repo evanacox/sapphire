@@ -105,7 +105,7 @@ impl<T: Packable> PackedOption<T> {
     /// ```
     #[inline]
     pub fn some(value: T) -> Self {
-        assert_eq!(value.is_reserved_null(), false);
+        assert!(!value.is_reserved_null());
 
         Self(value)
     }
@@ -276,9 +276,9 @@ impl<T: Packable> From<Option<T>> for PackedOption<T> {
     }
 }
 
-impl<T: Packable> Into<Option<T>> for PackedOption<T> {
-    fn into(self) -> Option<T> {
-        self.expand()
+impl<T: Packable> From<PackedOption<T>> for Option<T> {
+    fn from(value: PackedOption<T>) -> Self {
+        value.expand()
     }
 }
 

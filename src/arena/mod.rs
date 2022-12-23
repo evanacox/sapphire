@@ -47,7 +47,7 @@ where
     K: ArenaKey,
     V: Debug + 'a,
 {
-    writeln!(f, "{} {{", name)?;
+    writeln!(f, "{name} {{")?;
 
     for (k, v) in it {
         writeln!(f, "  {:?} -> {:?}", k.index(), v)?;

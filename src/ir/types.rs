@@ -533,7 +533,7 @@ impl Type {
     /// let ty = Type::array(&mut ctx, Type::i32(), 16); // => [i32; 16]
     /// ```
     pub fn array(ctx: &mut TypeContext, inner: Type, length: usize) -> Self {
-        ctx.array(inner, length as usize)
+        ctx.array(inner, length)
     }
 
     /// Creates a structure type from a given list of fields.
@@ -861,9 +861,9 @@ impl Type {
     }
 }
 
-impl Into<UType> for Type {
-    fn into(self) -> UType {
-        self.unpack()
+impl From<Type> for UType {
+    fn from(value: Type) -> Self {
+        value.unpack()
     }
 }
 
@@ -910,7 +910,7 @@ impl UType {
         match self {
             Self::Bool(_) => Type::bool(),
             Self::Ptr(_) => Type::ptr(),
-            Self::Int(i) => Type::int(i.width() as u32),
+            Self::Int(i) => Type::int(i.width()),
             Self::Float(f) => Type::float(f.format()),
             Self::Array(a) => Type::array_from_ref(a.inner),
             Self::Struct(s) => Type::struct_from_ref(s.inner),

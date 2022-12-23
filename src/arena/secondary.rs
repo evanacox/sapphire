@@ -605,6 +605,12 @@ where
     }
 }
 
+impl<K: ArenaKey, V> Default for SecondaryMap<K, V> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<K, V> PartialEq for SecondaryMap<K, V>
 where
     K: ArenaKey,
@@ -654,14 +660,16 @@ type BitsetFilterIntoIter<T> = Map<
     fn((<T as Iterator>::Item, bool)) -> <T as Iterator>::Item,
 >;
 
+type BitsetFilterIter<T, Other> = Map<
+    Filter<Zip<T, Other>, fn(&(<T as Iterator>::Item, bool)) -> bool>,
+    fn((<T as Iterator>::Item, bool)) -> <T as Iterator>::Item,
+>;
+
 trait BitsetFilterIterator: Iterator + Sized {
     fn filter_uninitialized_slots<Other: Iterator<Item = bool>>(
         self,
         bits: Other,
-    ) -> Map<
-        Filter<Zip<Self, Other>, fn(&(Self::Item, bool)) -> bool>,
-        fn((Self::Item, bool)) -> Self::Item,
-    > {
+    ) -> BitsetFilterIter<Self, Other> {
         // for whatever reason, rust nightly won't do the implicit conversion even though
         // the conversion itself is safe since there's no closure state. i have no idea
         let filter = (|(_, init)| *init) as fn(&(Self::Item, bool)) -> bool;
