@@ -3,8 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Sapphire</title>
-        <meta name="robots" content="noindex" />
+        <title>Sapphire IR - Sapphire</title>
 
 
         <!-- Custom HTML head -->
@@ -83,7 +82,7 @@
 
         <nav id="sidebar" class="sidebar" aria-label="Table of contents">
             <div class="sidebar-scrollbox">
-                <ol class="chapter"><li class="chapter-item expanded affix "><a href="index.html">Preface</a></li><li class="chapter-item expanded "><a href="sir.html"><strong aria-hidden="true">1.</strong> Sapphire IR</a></li></ol>
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="index.html">Preface</a></li><li class="chapter-item expanded "><a href="sir.html" class="active"><strong aria-hidden="true">1.</strong> Sapphire IR</a></li></ol>
             </div>
             <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
         </nav>
@@ -147,11 +146,7 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1 id="preface"><a class="header" href="#preface">Preface</a></h1>
-<h2 id="api-documentation"><a class="header" href="#api-documentation">API Documentation</a></h2>
-<p>This book does not contain any API documentation for the Sapphire library. If you want that,
-you need to go <a href="https://pages.evanacox.io/sapphire/api/sapphire">here</a>.</p>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="sapphire-ir-sir-reference"><a class="header" href="#sapphire-ir-sir-reference">Sapphire IR (SIR) Reference</a></h1>
+                        <h1 id="sapphire-ir-sir-reference"><a class="header" href="#sapphire-ir-sir-reference">Sapphire IR (SIR) Reference</a></h1>
 <pre><code class="language-other">type %boxed.i32 = { ptr }  
   
 fn ptr @boxed.allocate(i64 %0)  
@@ -784,6 +779,9 @@ Reading the same <code>undef</code> value multiple times will yield the same val
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="index.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
 
 
                         <div style="clear: both"></div>
@@ -792,6 +790,9 @@ Reading the same <code>undef</code> value multiple times will yield the same val
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="index.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
 
             </nav>
 
@@ -815,13 +816,6 @@ Reading the same <code>undef</code> value multiple times will yield the same val
 
         <!-- Custom JS scripts -->
 
-        <script>
-        window.addEventListener('load', function() {
-            MathJax.Hub.Register.StartupHook('End', function() {
-                window.setTimeout(window.print, 100);
-            });
-        });
-        </script>
 
     </body>
 </html>
