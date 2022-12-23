@@ -8,10 +8,13 @@
 //                                                                           //
 //======---------------------------------------------------------------======//
 
-pub mod arena;
-mod packed_option;
-pub mod string_pool;
+//! Provides several utility APIs that are used inside of various modules
+//! inside of the compiler.
+//!
+//! This is the general catch-all for random utility code.
 
-pub use arena::*;
+mod packed_option;
+mod string_pool;
+
 pub use packed_option::*;
 pub use string_pool::*;

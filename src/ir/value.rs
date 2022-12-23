@@ -7,9 +7,3 @@
 // following link: https://opensource.org/licenses/BSD-3-Clause              //
 //                                                                           //
 //======---------------------------------------------------------------======//
-
-use crate::ir::{Block, InstData, Type};
-use static_assertions::assert_eq_size;
-
-#[cfg(feature = "enable-serde")]
-use serde::{Deserialize, Serialize};

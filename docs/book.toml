@@ -4,3 +4,8 @@ language = "en"
 multilingual = false
 src = "src"
 title = "Sapphire"
+
+[output.html]
+mathjax-support = true
+site-url = "/sapphire/docs/"
+git-repository-url = "https://github.com/evanacox/sapphire/tree/master/docs"

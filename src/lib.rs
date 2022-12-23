@@ -14,6 +14,7 @@
 // limitations under the License.                                            //
 //======---------------------------------------------------------------======//
 
+#![allow(dead_code)]
 #![deny(
     unreachable_pub,
     missing_docs,
@@ -23,10 +24,12 @@
     rustdoc::broken_intra_doc_links,
     rustdoc::private_intra_doc_links
 )]
+#![feature(is_some_and)]
 
 //! # Sapphire
 //!
 //! These are the basic APIs for building, manipulating and emitting SIR.
 
+pub mod arena;
 pub mod ir;
 pub mod utility;

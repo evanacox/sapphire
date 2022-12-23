@@ -8,10 +8,15 @@
 //                                                                           //
 //======---------------------------------------------------------------======//
 
+//! This module provides the interfaces and the types required to properly
+//! manipulate the IR that Sapphire uses internally.
+//!
+//! This only contains the code for representing and transforming the IR itself,
+//! the transforms done by optimizations and whatnot are defined in other places.
+
 mod block;
-mod constant;
+mod data_flow;
 mod debug;
-mod entities;
 mod function;
 mod instruction;
 mod module;
@@ -19,11 +24,9 @@ mod types;
 mod value;
 
 pub use block::*;
-pub use constant::*;
+pub use data_flow::*;
 pub use debug::*;
-pub use entities::*;
 pub use function::*;
 pub use instruction::*;
 pub use module::*;
 pub use types::*;
-pub use value::*;

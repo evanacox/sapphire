@@ -8,17 +8,28 @@
 //                                                                           //
 //======---------------------------------------------------------------======//
 
+use crate::dense_arena_key;
 use crate::ir::{Inst, Value};
-use slotmap::new_key_type;
+use smallvec::SmallVec;
 
 #[cfg(feature = "enable-serde")]
 use serde::{Deserialize, Serialize};
-use smallvec::SmallVec;
 
-new_key_type! {
+dense_arena_key! {
+    /// References a single basic block in the program.
+    ///
+    /// Must be resolved with a [`DataFlowGraph`](crate::ir::DataFlowGraph) into an actual
+    /// [`BasicBlock`] object.
     pub struct Block;
 }
 
+/// Models a single basic block in a function within the IR.
+///
+/// These are made up of two key things:
+///
+///   1. A linear sequence of instructions, ending in a terminator.
+///   2. Zero or more basic-block parameters modeling the φs that the block has as input.
+///
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
 #[cfg_attr(feature = "enable-serde", derive(Serialize, Deserialize))]
 pub struct BasicBlock {

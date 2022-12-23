@@ -11,6 +11,10 @@
 #[cfg(feature = "enable-serde")]
 use serde::{Deserialize, Serialize};
 
+/// Holds the "debug info" for an instruction, i.e. where it came from.
+///
+/// This is necessary information for testing analysis passes and providing
+/// meaningful error information, so this is required for every instruction.
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
 #[cfg_attr(feature = "enable-serde", derive(Serialize, Deserialize))]
 pub struct DebugInfo {}

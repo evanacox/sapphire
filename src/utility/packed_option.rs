@@ -8,7 +8,7 @@
 //                                                                           //
 //======---------------------------------------------------------------======//
 
-use slotmap::{DefaultKey, Key};
+use crate::arena::PackableKey;
 use std::fmt::{Debug, Formatter, Result};
 use std::mem;
 
@@ -39,20 +39,25 @@ use serde::{Deserialize, Serialize};
 /// assert_eq!(opt.is_some(), true);
 /// ```
 pub trait Packable {
+    /// Gets the reserved value of the type.
+    ///
+    /// This value is not meant to be constructed normally in any circumstances.
     fn reserved_null() -> Self;
 
+    /// Checks if the current object is equivalent to the constant
+    /// returned by [`Self::reserved_null`].
     fn is_reserved_null(&self) -> bool;
 }
 
-impl<T: Key> Packable for T {
+impl<K: PackableKey> Packable for K {
     #[inline]
     fn reserved_null() -> Self {
-        Self::null()
+        Self::reserved()
     }
 
     #[inline]
     fn is_reserved_null(&self) -> bool {
-        self.is_null()
+        self.is_reserved()
     }
 }
 
@@ -65,14 +70,16 @@ impl<T: Key> Packable for T {
 ///
 #[derive(Clone, Copy, PartialEq, PartialOrd, Eq, Ord, Hash)]
 #[cfg_attr(feature = "enable-serde", derive(Serialize, Deserialize))]
-pub struct PackedOption<T: Packable = DefaultKey>(T);
+pub struct PackedOption<T: Packable>(T);
 
 impl<T: Packable> PackedOption<T> {
     /// Creates a `None` instance of `PackedOption`.
     ///
     /// ```
     /// # use sapphire::utility::*;
-    /// let null = PackedOption::none();
+    /// # use sapphire::dense_arena_key;
+    /// dense_arena_key! { struct Key; }
+    /// let null = PackedOption::<Key>::none();
     /// assert_eq!(null.is_none(), true);
     /// ```
     #[inline]
@@ -107,7 +114,9 @@ impl<T: Packable> PackedOption<T> {
     ///
     /// ```
     /// # use sapphire::utility::*;
-    /// let null = PackedOption::none();
+    /// # use sapphire::dense_arena_key;
+    /// dense_arena_key! { struct Key; }
+    /// let null = PackedOption::<Key>::none();
     /// assert_eq!(null.is_none(), true);
     /// ```
     #[inline]
@@ -119,7 +128,9 @@ impl<T: Packable> PackedOption<T> {
     ///
     /// ```
     /// # use sapphire::utility::*;
-    /// let null = PackedOption::none();
+    /// # use sapphire::dense_arena_key;
+    /// dense_arena_key! { struct Key; }
+    /// let null = PackedOption::<Key>::none();
     /// assert_eq!(null.is_some(), false);
     /// ```
     #[inline]
@@ -132,7 +143,28 @@ impl<T: Packable> PackedOption<T> {
     ///
     /// ```
     /// # use sapphire::utility::*;
-    /// let null = PackedOption::none();
+    /// # use sapphire::dense_arena_key;
+    /// dense_arena_key! { struct K; }
+    /// let null = PackedOption::<K>::none();
+    /// assert_eq!(null.expand_ref(), None);
+    /// ```
+    #[inline]
+    pub fn expand_ref(&self) -> Option<&T> {
+        if self.is_none() {
+            None
+        } else {
+            Some(&self.0)
+        }
+    }
+
+    /// Expand the packed option into a normal `Option` that can
+    /// be pattern-matched on as expected.
+    ///
+    /// ```
+    /// # use sapphire::utility::*;
+    /// # use sapphire::dense_arena_key;
+    /// dense_arena_key! { struct K; }
+    /// let null = PackedOption::<K>::none();
     /// assert_eq!(null.expand(), None);
     /// ```
     #[inline]
@@ -148,8 +180,9 @@ impl<T: Packable> PackedOption<T> {
     ///
     /// ```
     /// # use sapphire::utility::*;
-    /// # use slotmap::*;
-    /// let null = PackedOption::none();
+    /// # use sapphire::dense_arena_key;
+    /// dense_arena_key! { struct Key; }
+    /// let null = PackedOption::<Key>::none();
     /// assert_eq!(null.expand(), None);
     /// ```
     #[inline]
@@ -164,18 +197,18 @@ impl<T: Packable> PackedOption<T> {
     ///
     /// ```
     /// # use sapphire::utility::*;
-    /// # #[derive(Eq, PartialEq, Ord, PartialOrd)]
-    /// # struct NonZero(i32);
-    /// # impl Packable for NonZero {
+    /// # #[derive(Debug, Eq, PartialEq, Ord, PartialOrd)]
+    /// # struct NotZero(i32);
+    /// # impl Packable for NotZero {
     /// #    fn reserved_null() -> Self {
-    /// #        NonZero(0)
+    /// #        NotZero(0)
     /// #    }    
     /// #    fn is_reserved_null(&self) -> bool {     
     /// #        self.0 == 0
     /// #     }
     /// # }
-    /// let opt = PackedOption::some(NonZero(15));
-    /// assert_eq!(opt.unwrap(), NonZero(15));
+    /// let opt = PackedOption::some(NotZero(15));
+    /// assert_eq!(opt.unwrap(), NotZero(15));
     /// ```
     #[inline]
     pub fn unwrap(self) -> T {
@@ -186,18 +219,18 @@ impl<T: Packable> PackedOption<T> {
     ///
     /// ```
     /// # use sapphire::utility::*;
-    /// # #[derive(Eq, PartialEq, Ord, PartialOrd)]
-    /// # struct NonZero(i32);
-    /// # impl Packable for NonZero {
+    /// # #[derive(Debug, Eq, PartialEq, Ord, PartialOrd)]
+    /// # struct NotZero(i32);
+    /// # impl Packable for NotZero {
     /// #    fn reserved_null() -> Self {
-    /// #        NonZero(0)
+    /// #        NotZero(0)
     /// #    }    
     /// #    fn is_reserved_null(&self) -> bool {     
     /// #        self.0 == 0
     /// #     }
     /// # }
-    /// let opt = PackedOption::some(NonZero(15));
-    /// assert_eq!(opt.expect("what?"), NonZero(15));
+    /// let opt = PackedOption::some(NotZero(15));
+    /// assert_eq!(opt.expect("what?"), NotZero(15));
     /// ```
     #[inline]
     pub fn expect(self, msg: &str) -> T {
@@ -207,19 +240,20 @@ impl<T: Packable> PackedOption<T> {
     /// Takes the value out of the packed option, leaving a `None` in its place.
     /// ```
     /// # use sapphire::utility::*;
-    /// # #[derive(Eq, PartialEq, Ord, PartialOrd)]
-    /// # struct NonZero(i32);
-    /// # impl Packable for NonZero {
+    /// # #[derive(Debug, Eq, PartialEq, Ord, PartialOrd)]
+    /// # struct NotZero(i32);
+    /// # impl Packable for NotZero {
     /// #    fn reserved_null() -> Self {
-    /// #        NonZero(0)
+    /// #        NotZero(0)
     /// #    }    
     /// #    fn is_reserved_null(&self) -> bool {     
     /// #        self.0 == 0
     /// #     }
     /// # }
-    /// let mut opt = PackedOption::some(NonZero(15));
-    /// assert_eq!(opt.take(), Some(NonZero(15)));
+    /// let mut opt = PackedOption::some(NotZero(15));
+    /// assert_eq!(opt.take(), Some(NotZero(15)));
     /// assert_eq!(opt.is_none(), true);
+    /// assert_eq!(opt.take(), None);
     /// ```
     #[inline]
     pub fn take(&mut self) -> Option<T> {
@@ -253,25 +287,26 @@ where
     T: Packable + Debug,
 {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-        self.expand().fmt(f)
+        self.expand_ref().fmt(f)
     }
 }
 
 #[cfg(test)]
 mod test {
+    use crate::arena::ArenaMap;
+    use crate::dense_arena_key;
     use crate::utility::PackedOption;
-    use slotmap::{new_key_type, SlotMap};
+
+    dense_arena_key! {
+        struct E;
+    }
 
     #[test]
     fn observer_methods() {
-        new_key_type! {
-            struct KeyTy;
-        }
+        let mut map = ArenaMap::default();
+        let key: E = map.insert("Hello!");
 
-        let mut map = SlotMap::default();
-        let key: KeyTy = map.insert("Hello!");
-
-        let mut none = PackedOption::<KeyTy>::default();
+        let none = PackedOption::default();
         let mut some = PackedOption::some(key);
 
         assert_eq!(none.is_none(), true);

@@ -8,18 +8,21 @@
 //                                                                           //
 //======---------------------------------------------------------------======//
 
+use crate::arena::ArenaMap;
 use crate::ir::{Func, Function, TypeContext};
-use slotmap::SlotMap;
 
 #[cfg(feature = "enable-serde")]
 use serde::{Deserialize, Serialize};
 
 /// Contains all the data necessary for a single module of SIR.
+///
+/// This models all of the information that would be represented inside of
+/// a textual module of SIR.
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "enable-serde", derive(Serialize, Deserialize))]
 pub struct Module {
     types: TypeContext,
-    functions: SlotMap<Func, Function>,
+    functions: ArenaMap<Func, Function>,
 }
 
 impl Module {
@@ -27,5 +30,10 @@ impl Module {
     /// and (possibly) a real body.
     pub fn function(&self, func: Func) -> &Function {
         &self.functions[func]
+    }
+
+    /// Gets the type context associated with the module.
+    pub fn type_ctx(&self) -> &TypeContext {
+        &self.types
     }
 }

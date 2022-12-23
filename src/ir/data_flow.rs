@@ -8,14 +8,15 @@
 //                                                                           //
 //======---------------------------------------------------------------======//
 
-use crate::ir::{BasicBlock, Block, InstData, Sig, Signature};
-use slotmap::{new_key_type, SecondaryMap, SlotMap};
+use crate::arena::{ArenaKey, ArenaMap, SecondaryMap};
+use crate::dense_arena_key;
+use crate::ir::{BasicBlock, Block, InstData, Sig, Signature, Type};
 use static_assertions::assert_eq_size;
 
 #[cfg(feature = "enable-serde")]
 use serde::{Deserialize, Serialize};
 
-new_key_type! {
+dense_arena_key! {
     struct EntityRef;
 }
 
@@ -24,16 +25,28 @@ new_key_type! {
 /// function-scoped values in SIR, this is effectively equivalent to a
 /// `llvm::Value*`.
 ///
-/// All values are owned and stored as [`ValueData`] objects,
+/// All values are owned and stored as [`ValueDef`] objects,
 /// but since those are large and expensive to move around these are
 /// copied around instead.
 ///
-/// These are completely useless without the associated [`EntityStorage`] they
+/// These are completely useless without the associated [`DataFlowGraph`] they
 /// come from, as they are just keys into a giant table. The DFG contains all the
 /// information that actually makes these useful.
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
 #[cfg_attr(feature = "enable-serde", derive(Serialize, Deserialize))]
 pub struct Value(EntityRef);
+
+// some IR needs underlying access in order to store fake values in these,
+// this is basically only here for `CallInst`s
+impl Value {
+    pub(in crate::ir) fn raw_from(key: impl ArenaKey) -> Self {
+        Self(EntityRef::new(key.index()))
+    }
+
+    pub(in crate::ir) fn raw_into<T: ArenaKey>(self) -> T {
+        T::new(self.0.index())
+    }
+}
 
 /// While [`Value`]s refer to a result of some sort, [`Inst`]s refer to
 /// the instructions themselves. This has a subtly different meaning: an [`Inst`]
@@ -47,6 +60,25 @@ pub struct Value(EntityRef);
 #[cfg_attr(feature = "enable-serde", derive(Serialize, Deserialize))]
 pub struct Inst(EntityRef);
 
+// some IR needs underlying access in order to store fake values in these,
+// this is basically only here for `CallInst`s
+impl Inst {
+    pub(in crate::ir) fn raw_from(key: impl ArenaKey) -> Self {
+        Self(EntityRef::new(key.index()))
+    }
+
+    pub(in crate::ir) fn raw_into<T: ArenaKey>(self) -> T {
+        T::new(self.0.index())
+    }
+}
+
+#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
+#[cfg_attr(feature = "enable-serde", derive(Serialize, Deserialize))]
+struct BlockParam {
+    ty: Type,
+    index: u32,
+}
+
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
 #[cfg_attr(feature = "enable-serde", derive(Serialize, Deserialize))]
 enum EntityData {
@@ -54,11 +86,17 @@ enum EntityData {
     Param(BlockParam),
 }
 
-#[repr(u32)]
+assert_eq_size!(EntityData, [u64; 4]);
+
+/// Provides the definition of a value. A value can either be the result
+/// from an instruction, or a parameter provided to a block (a φ node).
+#[repr(u64)]
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
 #[cfg_attr(feature = "enable-serde", derive(Serialize, Deserialize))]
 pub enum ValueDef {
+    /// The value is the result of an instruction
     Inst(Inst),
+    /// The value is the nth block parameter of the referenced block
     Block(Block, u32),
 }
 
@@ -71,14 +109,14 @@ assert_eq_size!(ValueDef, [u64; 2]);
 ///
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "enable-serde", derive(Serialize, Deserialize))]
-pub struct EntityStorage {
-    blocks: SlotMap<Block, BasicBlock>,
-    entities: SlotMap<EntityRef, EntityData>,
+pub struct DataFlowGraph {
+    blocks: ArenaMap<Block, BasicBlock>,
+    entities: ArenaMap<EntityRef, EntityData>,
     values: SecondaryMap<EntityRef, ValueDef>,
-    sigs: SlotMap<Sig, Signature>,
+    sigs: ArenaMap<Sig, Signature>,
 }
 
-impl EntityStorage {
+impl DataFlowGraph {
     /// Gets a function's [`Signature`] from a given [`Sig`]. Any [`Sig`]
     /// used by any indirect or direct calls inside the function body
     /// can be resolved here.
@@ -86,7 +124,7 @@ impl EntityStorage {
         &self.sigs[sig]
     }
 
-    /// Gets a single instruction's [`InstructionData`] from a given [`Inst`].
+    /// Gets a single instruction's [`InstData`] from a given [`Inst`].
     /// Any [`Inst`] used anywhere in this function can be resolved here.
     pub fn data(&self, inst: Inst) -> &InstData {
         match &self.entities[inst.0] {
@@ -94,6 +132,4 @@ impl EntityStorage {
             _ => panic!("got an `Inst` that did not refer to an instruction"),
         }
     }
-
-    pub fn create_inst(&)
 }

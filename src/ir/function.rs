@@ -8,9 +8,9 @@
 //                                                                           //
 //======---------------------------------------------------------------======//
 
+use crate::dense_arena_key;
 use crate::ir::{DataFlowGraph, Type};
 use bitflags::bitflags;
-use slotmap::new_key_type;
 use smallvec::SmallVec;
 
 #[cfg(feature = "enable-serde")]
@@ -24,13 +24,13 @@ bitflags! {
         /// alias any other pointers accessible by the function. Note that
         /// a `noalias` pointer *can* have aliases at the call site, this only
         /// asserts that the function itself cannot access the pointer through any other means.
-        const Noalias = 1;
+        const NOALIAS = 1;
         /// `nonnull`: simply asserts that the pointer is not `null`.
-        const Nonnull = 2;
+        const NONNULL = 2;
         /// `dereferenceable`: asserts that dereferencing the pointer will not
         /// trap or cause any side-effects besides loading the memory, and that
         /// it is thus safe to load from speculatively.
-        const Dereferenceable = 4;
+        const DEREFERENCEABLE = 4;
     }
 }
 
@@ -41,13 +41,13 @@ bitflags! {
         /// `noalias`: Only applicable to pointers. Asserts that a pointer does not
         /// alias any other pointers accessible in the program, this is meant for
         /// functions that behave in a `malloc`-like way.
-        const Noalias = 1;
+        const NOALIAS = 1;
         /// `nonnull`: simply asserts that the pointer is not `null`.
-        const Nonnull = 2;
+        const NONNULL = 2;
         /// `dereferenceable`: asserts that dereferencing the pointer will not
         /// trap or cause any side-effects besides loading the memory, and that
         /// it is thus safe to load from speculatively.
-        const Dereferenceable = 4;
+        const DEREFERENCEABLE = 4;
     }
 }
 
@@ -62,7 +62,7 @@ pub enum CallConv {
     SysV,
 }
 
-new_key_type! {
+dense_arena_key! {
     /// The reference type for [`Signature`]s. They are keys into a table
     /// stored inside the [`DataFlowGraph`] of the function that they are used in.
     ///
@@ -92,12 +92,16 @@ impl Signature {
     }
 }
 
-new_key_type! {
+dense_arena_key! {
     /// The reference type for a [`Function`]. These can be looked up
-    /// at the [`Module`] level.
+    /// at the [`Module`](crate::ir::Module) level.
     pub struct Func;
 }
 
+/// Models a single function in the IR.
+///
+/// Contains a list of basic blocks and a list of parameters (included
+/// in the signature), and a name.
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "enable-serde", derive(Serialize, Deserialize))]
 pub struct Function {
@@ -107,10 +111,13 @@ pub struct Function {
 }
 
 impl Function {
+    /// Gets the signature of the function.
     pub fn signature(&self) -> &Signature {
         &self.sig
     }
 
+    /// Gets the return type of the function. If the function
+    /// is a `void` function, [`None`] is returned.
     pub fn return_ty(&self) -> Option<Type> {
         self.signature().return_ty()
     }
