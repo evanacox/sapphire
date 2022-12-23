@@ -19,7 +19,7 @@ jobs:
       - name: Install stable toolchain
         uses: actions-rs/toolchain@v1
         with:
-          toolchain: stable
+          toolchain: nightly
 
       - uses: Swatinem/rust-cache@v1
 
@@ -31,21 +31,23 @@ jobs:
           command: doc
           args: --no-deps --package sapphire
 
-      - name: Setup mdBook
+      - name: Setup mdbook
         uses: peaceiris/actions-mdbook@v1
         with:
-          mdbook-version: '0.4.18'
+          mdbook-version: 'latest'
 
       - name: Build Book
         working-directory: ./docs
         run: |
           mdbook build
+
       - name: Create public dir
         working-directory: ./
         run: |
           mkdir -p ./public/api
           mv ./docs/book/* ./public
           mv ./target/doc/* ./public/api
+
       - name: Deploy
         uses: peaceiris/actions-gh-pages@v3
         with:
