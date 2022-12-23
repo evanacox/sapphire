@@ -1,0 +1,3 @@
+(function() {var implementors = {
+"sapphire":[["impl <a class=\"trait\" href=\"https://docs.rs/num-traits/0.2/num_traits/cast/trait.FromPrimitive.html\" title=\"trait num_traits::cast::FromPrimitive\">FromPrimitive</a> for <a class=\"enum\" href=\"sapphire/ir/enum.FloatFormat.html\" title=\"enum sapphire::ir::FloatFormat\">FloatFormat</a>"]]
+};if (window.register_implementors) {window.register_implementors(implementors);} else {window.pending_implementors = implementors;}})()
