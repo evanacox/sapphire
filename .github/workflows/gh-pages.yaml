@@ -16,12 +16,14 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Install stable toolchain
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install nightly toolchain
         uses: actions-rs/toolchain@v1
         with:
           toolchain: nightly
-
-      - uses: Swatinem/rust-cache@v1
+          default: true
+          override: true
 
       - name: Build API Docs
         uses: actions-rs/cargo@v1

@@ -17,14 +17,14 @@ jobs:
       - name: Checkout sources
         uses: actions/checkout@v3
 
+      - uses: Swatinem/rust-cache@v2
+
       - name: Install nightly toolchain
         uses: actions-rs/toolchain@v1
         with:
           profile: default
           toolchain: nightly
           override: true
-
-      - uses: Swatinem/rust-cache@v2
 
       - name: Run cargo check
         uses: actions-rs/cargo@v1
@@ -55,7 +55,7 @@ jobs:
         uses: actions-rs/tarpaulin@v0.1
         with:
           version: 'latest'
-          args: '-- --test-threads 1'
+          args: '--run-types Tests,Doctests -- --test-threads 1'
 
       - name: Upload to codecov.io
-        uses: codecov/codecov-action@v1.0.2
+        uses: codecov/codecov-action@v3
