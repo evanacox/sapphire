@@ -1,0 +1,3 @@
+(function() {var implementors = {
+"sapphire":[["impl&lt;T, const N:&nbsp;<a class=\"primitive\" href=\"https://doc.rust-lang.org/nightly/std/primitive.usize.html\">usize</a>&gt; <a class=\"trait\" href=\"https://doc.rust-lang.org/nightly/core/borrow/trait.Borrow.html\" title=\"trait core::borrow::Borrow\">Borrow</a>&lt;<a class=\"primitive\" href=\"https://doc.rust-lang.org/nightly/std/primitive.slice.html\">[T]</a>&gt; for <a class=\"struct\" href=\"sapphire/utility/struct.TinyArray.html\" title=\"struct sapphire::utility::TinyArray\">TinyArray</a>&lt;T, N&gt;"]]
+};if (window.register_implementors) {window.register_implementors(implementors);} else {window.pending_implementors = implementors;}})()
