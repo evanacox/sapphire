@@ -137,7 +137,7 @@ macro_rules! dense_arena_key {
                 self.0 == u32::MAX
             }
         }
-        
+
         dense_arena_key!($($rest)*);
     };
 
