@@ -441,9 +441,6 @@ where
         let size = seq.size_hint().unwrap_or(128);
         let mut values = Vec::with_capacity(size);
 
-        // we just deserialize a sequence of `&str`s and then do our magic
-        // outside of that.
-        //
         // any indices that were deserialized as part of other data structures
         // rely on the order here so we maintain that
         while let Some(value) = seq.next_element()? {

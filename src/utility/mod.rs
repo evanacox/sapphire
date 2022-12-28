@@ -15,6 +15,8 @@
 
 mod packed_option;
 mod string_pool;
+mod tiny;
 
 pub use packed_option::*;
 pub use string_pool::*;
+pub use tiny::*;

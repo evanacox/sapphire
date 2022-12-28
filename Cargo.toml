@@ -11,7 +11,7 @@ num-traits = "0.2.15"
 serde = { version = "1.0.151", features = ["derive"], optional = true }
 serde_test = { version = "1.0.151", optional = true }
 smallbitvec = "2.5.1"
-smallvec = "1.10.0"
+smallvec = { version = "1.10.0", features = ["const_generics", "const_new"] }
 static_assertions = "1.1.0"
 
 [features]

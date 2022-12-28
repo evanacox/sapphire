@@ -9,6 +9,7 @@
 //======---------------------------------------------------------------======//
 
 use crate::ir::{Block, FloatFormat, Func, Sig, Type, Value};
+use crate::utility::TinyArray;
 use static_assertions::assert_eq_size;
 use std::slice;
 
@@ -25,9 +26,9 @@ use serde::{Deserialize, Serialize};
 #[cfg_attr(feature = "enable-serde", derive(Serialize, Deserialize))]
 pub enum InstData {
     /// `call T @function(args...)`, models a direct call to a known function.
-    // Call(CallInst),
+    Call(CallInst),
     /// `call T %var(args...)`, models an indirect call through a pointer.
-    // IndirectCall(IndirectCallInst),
+    IndirectCall(IndirectCallInst),
     /// `icmp op T %a, %b`, models an integer comparison
     ICmp(ICmpInst),
     /// `fcmp op T %a, %b`, models a floating-point comparison
@@ -134,11 +135,11 @@ pub enum InstData {
     GlobalAddr(GlobalAddrInst),
 }
 
-assert_eq_size!(InstData, [u64; 4]);
-
 impl Instruction for InstData {
     fn operands(&self) -> &[Value] {
         match self {
+            InstData::Call(e) => e.operands(),
+            InstData::IndirectCall(e) => e.operands(),
             InstData::ICmp(e) => e.operands(),
             InstData::FCmp(e) => e.operands(),
             InstData::Sel(e) => e.operands(),
@@ -196,6 +197,8 @@ impl Instruction for InstData {
 
     fn result_ty(&self) -> Option<Type> {
         match self {
+            InstData::Call(e) => e.result_ty(),
+            InstData::IndirectCall(e) => e.result_ty(),
             InstData::ICmp(e) => e.result_ty(),
             InstData::FCmp(e) => e.result_ty(),
             InstData::Sel(e) => e.result_ty(),
@@ -780,9 +783,11 @@ impl UnaryInst for FloatUnaryInst {}
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
 #[cfg_attr(feature = "enable-serde", derive(Serialize, Deserialize))]
 pub struct CallInst {
-    output: Option<Type>, // compiler is combining the combining of `Option` and `Type` here
-    operands: Vec<Value>,
+    output: Option<Type>,
+    operands: TinyArray<Value, 2>,
 }
+
+assert_eq_size!(TinyArray<Value, 2>, [u64; 2]);
 
 impl CallInst {
     pub(in crate::ir) fn new(
@@ -797,7 +802,7 @@ impl CallInst {
 
         Self {
             output,
-            operands: vec,
+            operands: TinyArray::from_vec(vec),
         }
     }
 
@@ -810,7 +815,7 @@ impl CallInst {
 
     /// Gets the arguments being passed into the function
     pub fn args(&self) -> &[Value] {
-        &self.operands[1..]
+        &self.operands[2..]
     }
 
     /// Gets the function signature
@@ -838,7 +843,7 @@ impl Instruction for CallInst {
 #[cfg_attr(feature = "enable-serde", derive(Serialize, Deserialize))]
 pub struct IndirectCallInst {
     output: Option<Type>, // compiler is combining the combining of `Option` and `Type` here
-    operands: Vec<Value>,
+    operands: TinyArray<Value, 2>,
 }
 
 impl IndirectCallInst {
@@ -853,7 +858,7 @@ impl IndirectCallInst {
         vec.extend_from_slice(args);
 
         Self {
-            operands: vec,
+            operands: TinyArray::from_vec(vec),
             output,
         }
     }
