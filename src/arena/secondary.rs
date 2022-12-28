@@ -8,6 +8,7 @@
 //                                                                           //
 //======---------------------------------------------------------------======//
 
+use crate::arena;
 use crate::arena::iter::{Iter, IterMut, Keys};
 use crate::arena::{ArenaKey, ArenaMap};
 use smallbitvec::{sbvec, SmallBitVec};
@@ -19,7 +20,6 @@ use std::mem::MaybeUninit;
 use std::ops::{Index, IndexMut};
 use std::{fmt, iter};
 
-use crate::arena;
 #[cfg(feature = "enable-serde")]
 use serde::{
     de::MapAccess, de::Visitor, ser::SerializeMap, Deserialize, Deserializer, Serialize, Serializer,
@@ -635,7 +635,23 @@ where
     V: Debug,
 {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        arena::write_map(f, "SecondaryMap", self.iter())
+        arena::debug_write_map(f, "SecondaryMap", self.iter())
+    }
+}
+
+impl<K, V> Drop for SecondaryMap<K, V>
+where
+    K: ArenaKey,
+{
+    fn drop(&mut self) {
+        // we simply iterate over initialized values and use [`MaybeUnint::assume_init_drop`] on them
+        for value in self
+            .slots
+            .iter_mut()
+            .filter_uninitialized_slots(self.initialized.iter())
+        {
+            unsafe { value.assume_init_drop() }
+        }
     }
 }
 
@@ -646,10 +662,17 @@ impl<K: ArenaKey, V> IntoIterator for SecondaryMap<K, V> {
         fn((usize, MaybeUninit<V>)) -> (K, V),
     >;
 
-    fn into_iter(self) -> Self::IntoIter {
-        self.slots
+    fn into_iter(mut self) -> Self::IntoIter {
+        // we can steal the values, since we yield them as Ts we know that the caller
+        // will drop them once they come out of the iterator. the uninitialized slots
+        // can be safely ignored, the space will be reclaimed once the iterator
+        // is dropped and the vec/bitvec are deallocated.
+        let slots = mem::take(&mut self.slots);
+        let bits = mem::take(&mut self.initialized);
+
+        slots
             .into_iter()
-            .filter_uninitialized_slots(self.initialized.into_iter())
+            .filter_uninitialized_slots(bits.into_iter())
             .enumerate()
             .map(|(i, val)| (K::new(i), unsafe { val.assume_init() }))
     }
@@ -724,7 +747,7 @@ where
 {
     type Value = SecondaryMap<K, V>;
 
-    fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn expecting(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
         write!(
             formatter,
             "expecting a SecondaryMap made up of a sequence of `bool`s and a sequence of `V`s"
@@ -808,6 +831,7 @@ where
 mod tests {
     use super::*;
     use crate::dense_arena_key;
+    use std::cell::RefCell;
 
     dense_arena_key! { struct E; }
 
@@ -916,7 +940,7 @@ mod tests {
 
         // key should stop existing after its removed
         assert_eq!(m2.take(k3), Some(100));
-        assert_eq!(m2.contains(k3), false);
+        assert!(!m2.contains(k3));
 
         // should be none now, key doesnt exist anymore
         assert_eq!(m2.take(k3), None);
@@ -941,6 +965,57 @@ mod tests {
 
         assert_eq!(it.next(), Some(k3));
         assert_eq!(it.next(), None);
+    }
+
+    struct CountsDrops<'a>(&'a RefCell<usize>);
+
+    impl<'a> Drop for CountsDrops<'a> {
+        fn drop(&mut self) {
+            *self.0.borrow_mut() += 1;
+        }
+    }
+
+    #[test]
+    fn drop() {
+        let counter = RefCell::new(0usize);
+
+        // sequential
+        {
+            let mut map = ArenaMap::new();
+            let mut secondary = SecondaryMap::new();
+
+            let k1: E = map.insert(5);
+            let k2 = map.insert(6);
+            let k3 = map.insert(7);
+            let k4 = map.insert(8);
+
+            secondary.insert(k1, CountsDrops(&counter));
+            secondary.insert(k2, CountsDrops(&counter));
+            secondary.insert(k3, CountsDrops(&counter));
+            secondary.insert(k4, CountsDrops(&counter));
+        }
+
+        assert_eq!(*counter.borrow(), 4);
+
+        *counter.borrow_mut() = 0;
+
+        // random
+        {
+            let mut map = ArenaMap::new();
+            let mut secondary = SecondaryMap::new();
+
+            let key = loop {
+                let k: E = map.insert(1);
+
+                if k.index() == 100 {
+                    break k;
+                }
+            };
+
+            secondary.insert(key, CountsDrops(&counter));
+        }
+
+        assert_eq!(*counter.borrow(), 1);
     }
 
     #[cfg(feature = "enable-serde")]

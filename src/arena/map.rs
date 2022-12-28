@@ -416,7 +416,7 @@ where
     V: Debug,
 {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        arena::write_map(f, "ArenaMap", self.iter())
+        arena::debug_write_map(f, "ArenaMap", self.iter())
     }
 }
 
@@ -454,7 +454,7 @@ mod tests {
 
         let k = m1.insert(6);
 
-        m2[k];
+        let _ = m2[k];
     }
 
     #[test]
@@ -466,8 +466,8 @@ mod tests {
         let v: Vec<E> = m.keys().collect();
         assert_eq!(v, []);
 
-        assert_eq!(m.contains(r0), false);
-        assert_eq!(m.contains(r1), false);
+        assert!(!m.contains(r0));
+        assert!(!m.contains(r1));
     }
 
     #[test]
@@ -478,9 +478,116 @@ mod tests {
 
         assert_eq!(m[k0], 12);
         assert_eq!(m[k1], 33);
+        assert_eq!(&mut m[k1], &mut 33);
 
         let v: Vec<E> = m.keys().collect();
         assert_eq!(v, [k0, k1]);
+    }
+
+    #[test]
+    fn next_key() {
+        let mut m = ArenaMap::new();
+        let k0: E = m.next_key();
+        let k1 = m.insert(12);
+
+        assert_eq!(k0, k1);
+        assert_eq!(m[k0], m[k1]);
+    }
+
+    #[test]
+    fn get() {
+        let mut m = ArenaMap::new();
+        let k0: E = m.insert(12);
+        let k1 = m.next_key();
+
+        assert_eq!(m.get(k0), Some(&12));
+        assert_eq!(m.get(k1), None);
+    }
+
+    #[test]
+    fn get_mut() {
+        let mut m = ArenaMap::new();
+        let k0: E = m.insert(12);
+        let k1 = m.next_key();
+
+        assert_eq!(m.get_mut(k0), Some(&mut 12));
+        assert_eq!(m.get_mut(k1), None);
+    }
+
+    #[test]
+    fn len_is_empty() {
+        let mut m = ArenaMap::<E, i32>::new();
+
+        assert_eq!(m.len(), 0);
+        assert!(m.is_empty());
+
+        m.insert(15);
+
+        assert_eq!(m.len(), 1);
+        assert!(!m.is_empty());
+    }
+
+    #[test]
+    fn reserve() {
+        let mut m = ArenaMap::<E, i32>::new();
+
+        m.reserve(15);
+
+        assert!(m.capacity() >= 15);
+    }
+
+    #[test]
+    fn reserve_exact() {
+        let mut m = ArenaMap::<E, i32>::new();
+
+        m.reserve_exact(15);
+
+        assert!(m.capacity() >= 15);
+    }
+
+    #[test]
+    fn shrink_to_fit() {
+        let mut m = ArenaMap::<E, i32>::new();
+
+        for i in 0..10 {
+            let _ = m.insert(i);
+        }
+
+        m.shrink_to_fit();
+
+        assert!(m.capacity() >= 10);
+    }
+
+    #[test]
+    fn last() {
+        let mut m = ArenaMap::<E, i32>::new();
+
+        assert_eq!(m.last(), None);
+        assert_eq!(m.last_mut(), None);
+
+        let _ = m.insert(15);
+        let k2 = m.insert(20);
+
+        assert_eq!(m.last(), Some((k2, &20)));
+        assert_eq!(m.last_mut(), Some((k2, &mut 20)));
+    }
+
+    #[test]
+    fn into_iter() {
+        let mut m: ArenaMap<E, usize> = ArenaMap::new();
+
+        m.insert(12);
+        m.insert(33);
+
+        for (i, (key, value)) in m.into_iter().enumerate() {
+            assert_eq!(key.index(), i);
+
+            match i {
+                0 => assert_eq!(value, 12),
+                1 => assert_eq!(value, 33),
+                _ => unreachable!(),
+            }
+        }
     }
 
     #[test]
@@ -549,13 +656,12 @@ mod tests {
     #[test]
     fn keys() {
         let mut m: ArenaMap<E, usize> = ArenaMap::new();
+
         m.insert(12);
         m.insert(33);
 
-        let mut i = 0;
-        for key in m.keys() {
+        for (i, key) in m.keys().enumerate() {
             assert_eq!(key.index(), i);
-            i += 1;
         }
     }
 
@@ -655,6 +761,63 @@ mod tests {
             assert_eq!(prev.index(), key.index() - 1);
 
             prev = key;
+        }
+    }
+
+    #[test]
+    fn equal() {
+        let mut m1: ArenaMap<E, i32> = ArenaMap::new();
+        let mut m2: ArenaMap<E, i32> = ArenaMap::new();
+
+        assert_eq!(m1, m2);
+
+        for i in 0..50 {
+            m1.insert(i);
+            m2.insert(i);
+        }
+
+        assert_eq!(m1, m2);
+    }
+
+    #[test]
+    fn not_equal() {
+        let mut m1: ArenaMap<E, i32> = ArenaMap::new();
+        let mut m2: ArenaMap<E, i32> = ArenaMap::new();
+
+        m1.insert(15);
+
+        // empty != non-empty
+        assert_ne!(m1, m2);
+
+        m1.insert(20);
+        m2.insert(20);
+        m2.insert(15);
+
+        // inserted same, diff order
+        assert_ne!(m1, m2);
+    }
+
+    #[test]
+    fn debug() {
+        let mut m1: ArenaMap<E, i32> = ArenaMap::new();
+        let _ = m1.insert(15);
+        let _ = m1.insert(20);
+
+        {
+            let debug_normal = format!("{m1:?}");
+            let expected = r#"ArenaMap {E(0): 15, E(1): 20}"#;
+
+            assert_eq!(debug_normal, expected);
+        }
+
+        {
+            let debug_pretty = format!("{m1:#?}");
+            let expected = r#"ArenaMap {
+    E(0): 15,
+    E(1): 20,
+}"#;
+
+            assert_eq!(debug_pretty, expected);
         }
     }
 }
