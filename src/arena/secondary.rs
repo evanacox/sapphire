@@ -635,7 +635,7 @@ where
     V: Debug,
 {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        arena::write_map(f, "SecondaryMap", self.iter())
+        arena::debug_write_map(f, "SecondaryMap", self.iter())
     }
 }
 
@@ -724,7 +724,7 @@ where
 {
     type Value = SecondaryMap<K, V>;
 
-    fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn expecting(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
         write!(
             formatter,
             "expecting a SecondaryMap made up of a sequence of `bool`s and a sequence of `V`s"
@@ -916,7 +916,7 @@ mod tests {
 
         // key should stop existing after its removed
         assert_eq!(m2.take(k3), Some(100));
-        assert_eq!(m2.contains(k3), false);
+        assert!(!m2.contains(k3));
 
         // should be none now, key doesnt exist anymore
         assert_eq!(m2.take(k3), None);

@@ -8,6 +8,7 @@
 //                                                                           //
 //======---------------------------------------------------------------======//
 
+use crate::arena;
 use crate::arena::iter::IntoIter;
 use crate::arena::{ArenaKey, ArenaMap};
 use ahash::{AHashMap, RandomState};
@@ -20,7 +21,6 @@ use std::marker::PhantomData;
 use std::ops::Index;
 use std::rc::Rc;
 
-use crate::arena;
 #[cfg(feature = "enable-serde")]
 use serde::{de::SeqAccess, de::Visitor, Deserialize, Deserializer, Serialize, Serializer};
 
@@ -382,7 +382,7 @@ where
     V: Debug + Eq + Hash,
 {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        arena::write_map(f, "UniqueArenaMap", self.iter())
+        arena::debug_write_map(f, "UniqueArenaMap", self.iter())
     }
 }
 
@@ -431,7 +431,7 @@ where
     type Value = UniqueArenaMap<K, V>;
 
     fn expecting(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
-        write!(formatter, "a sequence of `str` values")
+        write!(formatter, "a sequence of `T` values")
     }
 
     fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>

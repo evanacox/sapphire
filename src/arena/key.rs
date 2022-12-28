@@ -8,6 +8,8 @@
 //                                                                           //
 //======---------------------------------------------------------------======//
 
+use std::fmt::Debug;
+
 /// Models a type that can act as a key for the arena map types.
 ///
 /// This arena key can have a configurable size, and can lead to panics if
@@ -16,7 +18,7 @@
 /// Note that in most cases this trait should not be implemented directly,
 /// prefer to use the [`arena_key`](crate::arena_key) or [`dense_arena_key`](crate::dense_arena_key)
 /// macros that provide the implementation for you.
-pub trait ArenaKey: Copy + Eq {
+pub trait ArenaKey: Copy + Eq + Debug {
     /// Creates a new key from a given arena index. This should do any necessary
     /// conversions to convert a `usize` index into the internal storage type,
     /// ideally the conversion should be lossless.
@@ -69,7 +71,7 @@ macro_rules! arena_key {
     ( $(#[$outer:meta])* $vis:vis struct $name:ident($ty:ty); $($rest:tt)* ) => {
         $(#[$outer])*
         #[repr(transparent)]
-        #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
+        #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
         #[cfg_attr(feature = "enable-serde", derive(serde::Serialize, serde::Deserialize))]
         $vis struct $name($ty);
 
@@ -84,6 +86,12 @@ macro_rules! arena_key {
             #[inline]
             fn index(self) -> usize {
                 self.0 as usize
+            }
+        }
+
+        impl ::std::fmt::Debug for $name {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+                std::write!(f, "{}({})", std::stringify!($name), self.0)
             }
         }
 
@@ -116,7 +124,7 @@ macro_rules! arena_key {
 #[macro_export(local_inner_macros)]
 macro_rules! dense_arena_key {
     ( $(#[$outer:meta])* $vis:vis struct $name:ident; $($rest:tt)* ) => {
-        arena_key! { $(#[$outer])* $vis struct $name(u32); $($rest)* }
+        arena_key! { $(#[$outer])* $vis struct $name(u32); }
 
         impl $crate::arena::PackableKey for $name {
             #[inline]
@@ -129,14 +137,34 @@ macro_rules! dense_arena_key {
                 self.0 == u32::MAX
             }
         }
-    }
+        
+        dense_arena_key!($($rest)*);
+    };
+
+    () => {}
 }
 
 #[cfg(test)]
 mod tests {
+    use super::PackableKey;
     use crate::arena::*;
     use crate::{arena_key, dense_arena_key};
     use static_assertions::assert_eq_size;
+
+    #[test]
+    fn reserved_key_works() {
+        dense_arena_key! { struct K; }
+
+        let mut map = ArenaMap::<K, i32>::default();
+
+        let k1 = map.insert(15);
+        let k2 = map.insert(32);
+        let k3 = K::reserved();
+
+        assert!(k3.is_reserved());
+        assert!(!k2.is_reserved());
+        assert!(!k1.is_reserved());
+    }
 
     #[test]
     fn arena_key_default_is_usize() {

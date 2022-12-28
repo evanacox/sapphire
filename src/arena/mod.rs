@@ -38,7 +38,7 @@
 //! let e4 = arena.insert(AstNode::Mul(e2, e3)); // => (16 + 3) * 3
 //! ```
 
-pub(in crate::arena) fn write_map<'a, K, V>(
+pub(in crate::arena) fn debug_write_map<'a, K, V>(
     f: &mut Formatter<'_>,
     name: &'static str,
     it: impl Iterator<Item = (K, &'a V)>,
@@ -47,13 +47,9 @@ where
     K: ArenaKey,
     V: Debug + 'a,
 {
-    writeln!(f, "{name} {{")?;
+    write!(f, "{name} ")?;
 
-    for (k, v) in it {
-        writeln!(f, "  {:?} -> {:?}", k.index(), v)?;
-    }
-
-    writeln!(f, "}}")
+    f.debug_map().entries(it).finish()
 }
 
 mod iter;
