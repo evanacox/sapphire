@@ -51,6 +51,14 @@ jobs:
           command: clippy
           args: -- -D warnings
 
+      - name: Run cargo doc
+        uses: actions-rs/cargo@v1
+        env:
+          RUSTDOCFLAGS: --html-in-header ./docs/rustdoc/before.html --html-after-content ./docs/rustdoc/after.html
+        with:
+          command: doc
+          args: --no-deps --package sapphire
+
       - name: Run cargo tarpaulin
         uses: actions-rs/tarpaulin@v0.1
         with:

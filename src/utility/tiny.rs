@@ -115,7 +115,7 @@ impl<T, const N: usize> TinyArray<T, N> {
         }
     }
 
-    /// Creates an inline [`TinyArr`] from an array
+    /// Creates an inline [`TinyArray`] from an array
     ///
     /// ```
     /// # use sapphire::utility::TinyArray;

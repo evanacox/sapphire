@@ -24,10 +24,6 @@ dense_arena_key! {
     /// function-scoped values in SIR, this is effectively equivalent to a
     /// `llvm::Value*`.
     ///
-    /// All values are owned and stored as [`ValueDef`] objects,
-    /// but since those are large and expensive to move around these are
-    /// copied around instead.
-    ///
     /// These are completely useless without the associated [`DataFlowGraph`] they
     /// come from, as they are just keys into a giant table. The DFG contains all the
     /// information that actually makes these useful.
