@@ -35,6 +35,7 @@
 
 pub mod analysis;
 pub mod arena;
+pub mod cli;
 pub mod ir;
 pub mod passes;
 pub mod reader;

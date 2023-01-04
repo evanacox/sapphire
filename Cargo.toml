@@ -3,9 +3,14 @@ name = "sapphire"
 version = "0.1.0"
 edition = "2021"
 
+[[bin]]
+name = "sirc"
+path = "./tools/sirc/main.rs"
+
 [dependencies]
 ahash = "0.8.1"
 bitflags = "1.3.2"
+clap = { version = "4.0.32", features = ["derive"] }
 num-derive = "0.3.3"
 num-traits = "0.2.15"
 pest = "2.5.2"
