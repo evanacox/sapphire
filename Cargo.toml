@@ -8,6 +8,8 @@ ahash = "0.8.1"
 bitflags = "1.3.2"
 num-derive = "0.3.3"
 num-traits = "0.2.15"
+pest = "2.5.2"
+pest_derive = "2.5.2"
 serde = { version = "1.0.151", features = ["derive"], optional = true }
 serde_test = { version = "1.0.151", optional = true }
 smallbitvec = "2.5.1"

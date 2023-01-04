@@ -33,7 +33,9 @@
 //!
 //! These are the basic APIs for building, manipulating and emitting SIR.
 
+pub mod analysis;
 pub mod arena;
 pub mod ir;
 pub mod passes;
+pub mod reader;
 pub mod utility;
