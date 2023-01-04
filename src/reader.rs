@@ -875,7 +875,7 @@ impl SIRParser {
 
         builder
             .append()
-            .unreachable(pair_into_info(pair.clone(), self.filename, None));
+            .unreachable(pair_into_info(pair, self.filename, None));
 
         Ok(())
     }
@@ -1478,13 +1478,13 @@ impl SIRParser {
 
         match real.parse::<u32>() {
             Ok(num) => {
-                let info = pair_into_info(pair.clone(), self.filename, None);
+                let info = pair_into_info(pair, self.filename, None);
 
                 Ok((LocalIdent::Num(num), info))
             }
             Err(_) => {
                 let key = builder.string_pool_mut().insert(&real);
-                let info = pair_into_info(pair.clone(), self.filename, Some(key));
+                let info = pair_into_info(pair, self.filename, Some(key));
 
                 Ok((LocalIdent::Name(key), info))
             }

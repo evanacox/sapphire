@@ -694,11 +694,12 @@ where
     }
 }
 
+type FilterUninitKeys<V> = Enumerate<BitsetFilterIntoIter<std::vec::IntoIter<MaybeUninit<V>>>>;
+
+type MapToKV<K, V> = fn((usize, MaybeUninit<V>)) -> (K, V);
+
 pub struct SecondaryIntoIter<K: ArenaKey, V> {
-    inner: Map<
-        Enumerate<BitsetFilterIntoIter<std::vec::IntoIter<MaybeUninit<V>>>>,
-        fn((usize, MaybeUninit<V>)) -> (K, V),
-    >,
+    inner: Map<FilterUninitKeys<V>, MapToKV<K, V>>,
 }
 
 impl<K: ArenaKey, V> Drop for SecondaryIntoIter<K, V> {
