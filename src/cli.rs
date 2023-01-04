@@ -8,11 +8,12 @@
 //                                                                           //
 //======---------------------------------------------------------------======//
 
-//! Contains lots of utility code specifically for the CLI tools located in
-//! the `tools/` subdirectory of the repository. All of these tools have
-//! similar command-line arguments and they all should look/feel uniform, so
-//! most of the code is pulled into this module and then used in the drivers
-//! of the different tools.
+//! Contains utility code specifically for the CLI tools located in
+//! the `tools/` subdirectory.
+//!
+//! All of these tools have similar command-line arguments and they all
+//! should look/feel uniform, so most of the code is pulled into this
+//! module and then used in the drivers of the different tools.
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
 

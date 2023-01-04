@@ -102,7 +102,7 @@ macro_rules! arena_key {
 /// underlying data type. Acts just like [`arena_key`] but with [`u32`] being
 /// the default type instead of the unspecified default.
 ///
-/// Note that this also implements [`Packable`] with the highest value of `u32`
+/// Note that this also implements `Packable` with the highest value of `u32`
 /// being reserved.
 ///
 /// ```
@@ -114,8 +114,6 @@ macro_rules! arena_key {
 ///
 /// type DenseMapping = ArenaMap<DenseRef, String>;
 /// ```
-///
-/// [`Packable`]: crate::utility::Packable;
 #[macro_export(local_inner_macros)]
 macro_rules! dense_arena_key {
     ( $(#[$outer:meta])* $vis:vis struct $name:ident; $($rest:tt)* ) => {
