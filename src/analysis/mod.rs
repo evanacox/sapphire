@@ -9,10 +9,10 @@
 //======---------------------------------------------------------------======//
 
 //! Contains the various analysis passes defined in the Sapphire project.
-//! 
-//! These are basically all passes that model the [`FunctionAnalysisPass`] or 
+//!
+//! These are basically all passes that model the [`FunctionAnalysisPass`] or
 //! the [`ModuleAnalysisPass`] traits, and range from debug passes to analyses
-//! that are critical for correctness. 
+//! that are critical for correctness.
 //!
 //! [`FunctionAnalysisPass`]: crate::passes::FunctionAnalysisPass
 //! [`ModuleAnalysisPass`]: crate::passes::ModuleAnalysisPass
