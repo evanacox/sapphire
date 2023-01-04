@@ -233,6 +233,8 @@ impl Function {
 
     /// Gets a [`Func`] that refers to `self`. This can be used when a [`Module`]
     /// is not available to get [`Func`]s from.
+    ///
+    /// [`Module`]: crate::ir::Module
     #[inline]
     pub fn func(&self) -> Func {
         self.func

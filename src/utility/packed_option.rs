@@ -44,7 +44,7 @@ pub trait Packable {
     fn reserved() -> Self;
 
     /// Checks if the current object is equivalent to the constant
-    /// returned by [`Self::reserved_null`].
+    /// returned by [`Self::reserved`].
     fn is_reserved(&self) -> bool;
 }
 
