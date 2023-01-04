@@ -35,4 +35,5 @@
 
 pub mod arena;
 pub mod ir;
+pub mod passes;
 pub mod utility;
