@@ -771,10 +771,6 @@ mod tests {
         }
 
         assert_eq!(*counter.borrow(), 2);
-
-        use std::pin::Pin;
-
-        let a = TinyArray::from_arr([Pin::new(&1), Pin::new(&2)]);
     }
 
     #[test]
@@ -835,19 +831,5 @@ mod tests {
         {
             matches(&TinyArray::<i32, 1>::from_vec(vec![1, 2, 3, 4]));
         }
-    }
-
-    extern crate test;
-
-    use test::Bencher;
-
-    #[bench]
-    fn bench_tiny_inline(b: &mut Bencher) {
-        b.iter(|| TinyArray::<i32, 2>::from_arr([1, 2]))
-    }
-
-    #[bench]
-    fn bench_tiny_spilled(b: &mut Bencher) {
-        b.iter(|| TinyArray::<i32, 2>::from_vec(vec![1, 2, 3]))
     }
 }

@@ -212,10 +212,10 @@ impl<Traits: StorageTraits> AnalysisManager<Traits> {
     /// which will cause a re-run if they are later requested through [`Self::get`].
     fn invalidate(&mut self, ir: &Traits::IR, preserved: PreservedAnalyses) {
         for (key, pass) in self.passes.iter() {
-            let pass = pass.borrow();
-
             #[cfg(debug_assertions)]
             {
+                let pass = pass.borrow();
+
                 for p in pass.expects_preserved() {
                     debug_assert!(preserved.is_preserved(*p));
                 }

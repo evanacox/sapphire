@@ -221,6 +221,7 @@ impl<T: Packable> PackedOption<T> {
     /// # use sapphire::utility::*;
     /// # use sapphire::arena::*;
     /// # use sapphire::dense_arena_key;
+    /// # #[derive(Eq, PartialEq, Debug)]
     /// # struct NotZero(i32);
     /// # impl Packable for NotZero {
     /// #    fn reserved() -> Self {
@@ -239,7 +240,7 @@ impl<T: Packable> PackedOption<T> {
     ///     }
     /// };
     ///
-    /// assert_eq!(v.and_then_packed(f), None);
+    /// assert_eq!(v.and_then_packed(f), None.into());
     /// ```
     #[inline]
     pub fn and_then_packed<U, F>(self, f: F) -> PackedOption<U>

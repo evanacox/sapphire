@@ -694,12 +694,32 @@ where
     }
 }
 
-impl<K: ArenaKey, V> IntoIterator for SecondaryMap<K, V> {
-    type Item = (K, V);
-    type IntoIter = Map<
+pub struct SecondaryIntoIter<K: ArenaKey, V> {
+    inner: Map<
         Enumerate<BitsetFilterIntoIter<std::vec::IntoIter<MaybeUninit<V>>>>,
         fn((usize, MaybeUninit<V>)) -> (K, V),
-    >;
+    >,
+}
+
+impl<K: ArenaKey, V> Drop for SecondaryIntoIter<K, V> {
+    fn drop(&mut self) {
+        for (_, _) in self.inner.by_ref() {
+            // just need to drop them
+        }
+    }
+}
+
+impl<K: ArenaKey, V> Iterator for SecondaryIntoIter<K, V> {
+    type Item = (K, V);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.inner.next()
+    }
+}
+
+impl<K: ArenaKey, V> IntoIterator for SecondaryMap<K, V> {
+    type Item = (K, V);
+    type IntoIter = SecondaryIntoIter<K, V>;
 
     fn into_iter(mut self) -> Self::IntoIter {
         // we can steal the values, since we yield them as Ts we know that the caller
@@ -709,11 +729,13 @@ impl<K: ArenaKey, V> IntoIterator for SecondaryMap<K, V> {
         let slots = mem::take(&mut self.slots);
         let bits = mem::take(&mut self.initialized);
 
-        slots
-            .into_iter()
-            .filter_uninitialized_slots(bits.into_iter())
-            .enumerate()
-            .map(|(i, val)| (K::new(i), unsafe { val.assume_init() }))
+        SecondaryIntoIter {
+            inner: slots
+                .into_iter()
+                .filter_uninitialized_slots(bits.into_iter())
+                .enumerate()
+                .map(|(i, val)| (K::new(i), unsafe { val.assume_init() })),
+        }
     }
 }
 
