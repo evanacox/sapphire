@@ -82,7 +82,7 @@
 
         <nav id="sidebar" class="sidebar" aria-label="Table of contents">
             <div class="sidebar-scrollbox">
-                <ol class="chapter"><li class="chapter-item expanded affix "><a href="index.html" class="active">Preface</a></li><li class="chapter-item expanded "><a href="sir.html"><strong aria-hidden="true">1.</strong> Sapphire IR</a></li></ol>
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="index.html" class="active">Preface</a></li><li class="chapter-item expanded "><a href="sir.html"><strong aria-hidden="true">1.</strong> Sapphire IR</a></li><li class="chapter-item expanded "><a href="internals/index.html"><strong aria-hidden="true">2.</strong> Compiler Internals</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="internals/parser.html"><strong aria-hidden="true">2.1.</strong> SIR Parser</a></li><li class="chapter-item expanded "><a href="internals/sir-repr.html"><strong aria-hidden="true">2.2.</strong> SIR Representation</a></li></ol></li></ol>
             </div>
             <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
         </nav>
@@ -147,9 +147,43 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="preface"><a class="header" href="#preface">Preface</a></h1>
+<p>Sapphire is a toy compiler framework, heavily inspired by both <a href="https://www.llvm.org">LLVM</a> and the
+Cranelift compiler in <a href="https://wasmtime.dev/">Wasmtime</a>. </p>
+<p>Both of those are much better projects to look at for modern optimizing compilers than this is, you
+can find the actual source code at the following:</p>
+<ul>
+<li><a href="https://github.com/llvm/llvm-project/tree/main/llvm">LLVM Core</a>, in the <code>llvm/</code> subdir of the LLVM monorepo</li>
+<li><a href="https://github.com/bytecodealliance/wasmtime/tree/main/cranelift">Cranelift</a>, in the <code>cranelift/</code> subdir of Wasmtime</li>
+</ul>
 <h2 id="api-documentation"><a class="header" href="#api-documentation">API Documentation</a></h2>
 <p>This book does not contain any API documentation for the Sapphire library. If you want that,
 you need to go <a href="https://pages.evanacox.io/sapphire/api/sapphire">here</a>.</p>
+<h2 id="sir"><a class="header" href="#sir">SIR</a></h2>
+<p>SIR is the intermediary language that everything<sup class="footnote-reference"><a href="#1">1</a></sup> inside of Sapphire speaks in. All optimizing transformations
+are SIR -&gt; SIR, all analyses work on SIR, etc. SIR is your standard SSA-based IR with memory operations, the only
+remotely interesting thing is that it uses block parameters for φ functions instead of a <code>phi</code>-like instruction.</p>
+<pre><code class="language-llvm">fn i32 @loopFactorial(i32) fastcc {
+entry(i32 %n):
+  %0 = iconst i32 1
+  br loop.head(i32 %n, i32 %n)
+
+loop.head(i32 %x, i32 %y):
+  %1 = icmp eq i32 %x, %0
+  condbr bool %1, loop.body, exit(%y)
+  
+loop.body:
+  %2 = isub i32 %x, %0
+  %3 = imul i32 %y, %2
+  br loop.head(%2, %3)
+  
+exit(i32 %result):
+  ret i32 %result
+}
+</code></pre>
+<p>The details of the IR can be found <a href="sir.html">here</a>.</p>
+<p>[1]: Except the back-end, that deals in a machine-specific IR instead</p>
+<h2 id="compiler-internals"><a class="header" href="#compiler-internals">Compiler Internals</a></h2>
+<p>Details of the compiler's inner workings can be found in the Internals section.</p>
 
                     </main>
 

@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `src/ir/types.rs`."><meta name="keywords" content="rust, rustlang, rust-lang"><title>types.rs - source</title><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/SourceSerif4-Regular-1f7d512b176f0f72.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/FiraSans-Regular-018c141bf0843ffd.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/FiraSans-Medium-8f9a781e4970d388.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/SourceSerif4-Bold-124a1ca42af929b6.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2"><link rel="stylesheet" href="../../../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../../../static.files/rustdoc-b07ed6aaa412307b.css" id="mainThemeStyle"><link rel="stylesheet" id="themeStyle" href="../../../static.files/light-d695502c06d5afea.css"><link rel="stylesheet" disabled href="../../../static.files/dark-aa222ca57e08648b.css"><link rel="stylesheet" disabled href="../../../static.files/ayu-d5b7bae5e01694db.css"><script id="default-settings" ></script><script src="../../../static.files/storage-d43fa987303ecbbb.js"></script><script defer src="../../../static.files/source-script-ea63cb6500f71309.js"></script><script defer src="../../../source-files.js"></script><script defer src="../../../static.files/main-4a084badb5778746.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-13285aec31fa243e.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-16x16-8b506e7a72182f1c.png"><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-2c020d218678b618.svg"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.6.0/katex.min.css">
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `src/ir/types.rs`."><meta name="keywords" content="rust, rustlang, rust-lang"><title>types.rs - source</title><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/SourceSerif4-Regular-1f7d512b176f0f72.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/FiraSans-Regular-018c141bf0843ffd.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/FiraSans-Medium-8f9a781e4970d388.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/SourceSerif4-Bold-124a1ca42af929b6.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2"><link rel="stylesheet" href="../../../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../../../static.files/rustdoc-94f503864730768f.css" id="mainThemeStyle"><link rel="stylesheet" id="themeStyle" href="../../../static.files/light-4743e13df3dfe8c4.css"><link rel="stylesheet" disabled href="../../../static.files/dark-0e1b889528bd466b.css"><link rel="stylesheet" disabled href="../../../static.files/ayu-65289d5d067c7c66.css"><script id="default-settings" ></script><script src="../../../static.files/storage-d43fa987303ecbbb.js"></script><script defer src="../../../static.files/source-script-ea63cb6500f71309.js"></script><script defer src="../../../source-files.js"></script><script defer src="../../../static.files/main-4a084badb5778746.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-13285aec31fa243e.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-16x16-8b506e7a72182f1c.png"><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-2c020d218678b618.svg"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.6.0/katex.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.6.0/katex.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.6.0/contrib/auto-render.min.js"></script>
 </head><body class="rustdoc source"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"></nav><main><nav class="sub"><a class="sub-logo-container" href="../../../sapphire/index.html"><img class="rust-logo" src="../../../static.files/rust-logo-151179464ae7ed46.svg" alt="logo"></a><form class="search-form"><span></span><input class="search-input" name="search" aria-label="Run search in the documentation" autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"><div id="help-button" title="help" tabindex="-1"><a href="../../../help.html">?</a></div><div id="settings-menu" tabindex="-1"><a href="../../../settings.html" title="settings"><img width="22" height="22" alt="Change settings" src="../../../static.files/wheel-5ec35bf9ca753509.svg"></a></div></form></nav><section id="main-content" class="content"><div class="example-wrap"><pre class="src-line-numbers"><a href="#1" id="1">1</a>
@@ -920,6 +920,46 @@
 <a href="#917" id="917">917</a>
 <a href="#918" id="918">918</a>
 <a href="#919" id="919">919</a>
+<a href="#920" id="920">920</a>
+<a href="#921" id="921">921</a>
+<a href="#922" id="922">922</a>
+<a href="#923" id="923">923</a>
+<a href="#924" id="924">924</a>
+<a href="#925" id="925">925</a>
+<a href="#926" id="926">926</a>
+<a href="#927" id="927">927</a>
+<a href="#928" id="928">928</a>
+<a href="#929" id="929">929</a>
+<a href="#930" id="930">930</a>
+<a href="#931" id="931">931</a>
+<a href="#932" id="932">932</a>
+<a href="#933" id="933">933</a>
+<a href="#934" id="934">934</a>
+<a href="#935" id="935">935</a>
+<a href="#936" id="936">936</a>
+<a href="#937" id="937">937</a>
+<a href="#938" id="938">938</a>
+<a href="#939" id="939">939</a>
+<a href="#940" id="940">940</a>
+<a href="#941" id="941">941</a>
+<a href="#942" id="942">942</a>
+<a href="#943" id="943">943</a>
+<a href="#944" id="944">944</a>
+<a href="#945" id="945">945</a>
+<a href="#946" id="946">946</a>
+<a href="#947" id="947">947</a>
+<a href="#948" id="948">948</a>
+<a href="#949" id="949">949</a>
+<a href="#950" id="950">950</a>
+<a href="#951" id="951">951</a>
+<a href="#952" id="952">952</a>
+<a href="#953" id="953">953</a>
+<a href="#954" id="954">954</a>
+<a href="#955" id="955">955</a>
+<a href="#956" id="956">956</a>
+<a href="#957" id="957">957</a>
+<a href="#958" id="958">958</a>
+<a href="#959" id="959">959</a>
 </pre><pre class="rust"><code><span class="comment">//======---------------------------------------------------------------======//
 //                                                                           //
 // Copyright 2022 Evan Cox &lt;evanacox00@gmail.com&gt;. All rights reserved.      //
@@ -936,6 +976,7 @@
 <span class="kw">use </span>num_traits::FromPrimitive;
 <span class="kw">use </span>static_assertions::assert_eq_size;
 
+<span class="kw">use </span><span class="kw">crate</span>::utility::Packable;
 <span class="attr">#[cfg(feature = <span class="string">&quot;enable-serde&quot;</span>)]
 </span><span class="kw">use </span>serde::{Deserialize, Serialize};
 
@@ -951,7 +992,7 @@
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
 #[cfg_attr(feature = <span class="string">&quot;enable-serde&quot;</span>, derive(Serialize, Deserialize))]
 </span><span class="kw">enum </span>CompoundTypeData {
-    Array(Type, usize),
+    Array(Type, u64),
     Struct(Vec&lt;Type&gt;),
 }
 
@@ -966,12 +1007,12 @@
 /// refers into this context for those larger types.
 </span><span class="attr">#[derive(Debug, Clone)]
 #[cfg_attr(feature = <span class="string">&quot;enable-serde&quot;</span>, derive(Serialize, Deserialize))]
-</span><span class="kw">pub struct </span>TypeContext {
+</span><span class="kw">pub struct </span>TypePool {
     arena: UniqueArenaMap&lt;CompoundTypeRef, CompoundTypeData&gt;,
 }
 
-<span class="kw">impl </span>TypeContext {
-    <span class="doccomment">/// Constructs a new, empty [`TypeContext`].
+<span class="kw">impl </span>TypePool {
+    <span class="doccomment">/// Constructs a new, empty [`TypePool`].
     </span><span class="kw">pub fn </span>new() -&gt; <span class="self">Self </span>{
         <span class="self">Self </span>{
             arena: UniqueArenaMap::default(),
@@ -982,12 +1023,12 @@
     ///
     /// ```
     /// # use sapphire::ir::*;
-    /// let mut ctx = TypeContext::new();
+    /// let mut ctx = TypePool::new();
     /// let t1 = Type::ptr();
     /// let t2 = ctx.array(t1, 512); // [ptr; 512]
     /// assert_eq!(t2.is_array(), true);
     /// ```
-    </span><span class="kw">pub fn </span>array(<span class="kw-2">&amp;mut </span><span class="self">self</span>, inner: Type, len: usize) -&gt; Type {
+    </span><span class="kw">pub fn </span>array(<span class="kw-2">&amp;mut </span><span class="self">self</span>, inner: Type, len: u64) -&gt; Type {
         <span class="kw">let </span>data = CompoundTypeData::Array(inner, len);
         <span class="kw">let </span>key = <span class="self">self</span>.arena.insert(data);
 
@@ -998,7 +1039,7 @@
     ///
     /// ```
     /// # use sapphire::ir::*;
-    /// let mut ctx = TypeContext::new();
+    /// let mut ctx = TypePool::new();
     /// let ty = ctx.structure(&amp;[Type::ptr(), Type::i64(), Type::i64()]); // [ptr; 512]
     /// assert_eq!(ty.is_struct(), true);
     /// ```
@@ -1015,7 +1056,7 @@
     }
 }
 
-<span class="kw">impl </span>Default <span class="kw">for </span>TypeContext {
+<span class="kw">impl </span>Default <span class="kw">for </span>TypePool {
     <span class="kw">fn </span>default() -&gt; <span class="self">Self </span>{
         <span class="self">Self</span>::new()
     }
@@ -1217,7 +1258,7 @@
 }
 
 <span class="doccomment">/// Models an array type in the IR. Internally, contains a reference into
-/// the [`TypeContext`] that is being used for the module being operated on.
+/// the [`TypePool`] that is being used for the module being operated on.
 </span><span class="attr">#[repr(transparent)]
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
 #[cfg_attr(feature = <span class="string">&quot;enable-serde&quot;</span>, derive(Serialize, Deserialize))]
@@ -1230,13 +1271,13 @@
     ///
     /// ```
     /// # use sapphire::ir::*;
-    /// let mut ctx = TypeContext::new();
+    /// let mut ctx = TypePool::new();
     /// let t1 = Type::array(&amp;mut ctx, Type::i32(), 16);
     /// assert_eq!(t1.unwrap_array().len(&amp;ctx), 16);
     /// ```
     </span><span class="attr">#[inline]
     #[allow(clippy::len_without_is_empty)] </span><span class="comment">// broken check, freaks out over `is_empty` sig but not this one&#39;s sig
-    </span><span class="kw">pub fn </span>len(<span class="kw-2">&amp;</span><span class="self">self</span>, ctx: <span class="kw-2">&amp;</span>TypeContext) -&gt; usize {
+    </span><span class="kw">pub fn </span>len(<span class="kw-2">&amp;</span><span class="self">self</span>, ctx: <span class="kw-2">&amp;</span>TypePool) -&gt; u64 {
         <span class="self">self</span>.data(ctx).<span class="number">1
     </span>}
 
@@ -1244,12 +1285,12 @@
     ///
     /// ```
     /// # use sapphire::ir::*;
-    /// let mut ctx = TypeContext::new();
+    /// let mut ctx = TypePool::new();
     /// let t1 = Type::array(&amp;mut ctx, Type::i32(), 16);
     /// assert_eq!(t1.unwrap_array().is_empty(&amp;ctx), false);
     /// ```
     </span><span class="attr">#[inline]
-    </span><span class="kw">pub fn </span>is_empty(<span class="kw-2">&amp;</span><span class="self">self</span>, ctx: <span class="kw-2">&amp;</span>TypeContext) -&gt; bool {
+    </span><span class="kw">pub fn </span>is_empty(<span class="kw-2">&amp;</span><span class="self">self</span>, ctx: <span class="kw-2">&amp;</span>TypePool) -&gt; bool {
         <span class="self">self</span>.len(ctx) == <span class="number">0
     </span>}
 
@@ -1257,17 +1298,17 @@
     ///
     /// ```
     /// # use sapphire::ir::*;
-    /// let mut ctx = TypeContext::new();
+    /// let mut ctx = TypePool::new();
     /// let t1 = Type::array(&amp;mut ctx, Type::i32(), 16);
     /// assert_eq!(t1.unwrap_array().element(&amp;ctx), Type::i32());
     /// ```
     </span><span class="attr">#[inline]
-    </span><span class="kw">pub fn </span>element(<span class="kw-2">&amp;</span><span class="self">self</span>, ctx: <span class="kw-2">&amp;</span>TypeContext) -&gt; Type {
+    </span><span class="kw">pub fn </span>element(<span class="kw-2">&amp;</span><span class="self">self</span>, ctx: <span class="kw-2">&amp;</span>TypePool) -&gt; Type {
         <span class="self">self</span>.data(ctx).<span class="number">0
     </span>}
 
     <span class="attr">#[inline]
-    </span><span class="kw">fn </span>data(<span class="kw-2">&amp;</span><span class="self">self</span>, ctx: <span class="kw-2">&amp;</span>TypeContext) -&gt; (Type, usize) {
+    </span><span class="kw">fn </span>data(<span class="kw-2">&amp;</span><span class="self">self</span>, ctx: <span class="kw-2">&amp;</span>TypePool) -&gt; (Type, u64) {
         <span class="kw">match </span>ctx.data_of(<span class="self">self</span>.inner) {
             CompoundTypeData::Array(ty, len) =&gt; (<span class="kw-2">*</span>ty, <span class="kw-2">*</span>len),
             <span class="kw">_ </span>=&gt; <span class="macro">unreachable!</span>(),
@@ -1276,7 +1317,7 @@
 }
 
 <span class="doccomment">/// Models a structure type in the IR. Internally, contains a reference into
-/// the [`TypeContext`] that is being used for the module being operated on.
+/// the [`TypePool`] that is being used for the module being operated on.
 </span><span class="attr">#[repr(transparent)]
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
 #[cfg_attr(feature = <span class="string">&quot;enable-serde&quot;</span>, derive(Serialize, Deserialize))]
@@ -1290,13 +1331,13 @@
     ///
     /// ```
     /// # use sapphire::ir::*;
-    /// use sapphire::ir::TypeContext;
-    /// let mut ctx = TypeContext::new();
+    /// use sapphire::ir::TypePool;
+    /// let mut ctx = TypePool::new();
     /// let ty = Type::structure(&amp;mut ctx, &amp;[Type::ptr(), Type::i64(), Type::i64()]);
     /// assert_eq!(*ty.unwrap_struct().members(&amp;ctx), [Type::ptr(), Type::i64(), Type::i64()]);
     /// ```
     </span><span class="attr">#[inline]
-    </span><span class="kw">pub fn </span>members&lt;<span class="lifetime">&#39;a</span>&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, ctx: <span class="kw-2">&amp;</span><span class="lifetime">&#39;a </span>TypeContext) -&gt; <span class="kw-2">&amp;</span><span class="lifetime">&#39;a </span>[Type] {
+    </span><span class="kw">pub fn </span>members&lt;<span class="lifetime">&#39;a</span>&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, ctx: <span class="kw-2">&amp;</span><span class="lifetime">&#39;a </span>TypePool) -&gt; <span class="kw-2">&amp;</span><span class="lifetime">&#39;a </span>[Type] {
         <span class="kw">match </span>ctx.data_of(<span class="self">self</span>.inner) {
             CompoundTypeData::Struct(v) =&gt; v,
             <span class="kw">_ </span>=&gt; <span class="kw-2">&amp;</span>[],
@@ -1308,7 +1349,7 @@
 /// types in the IR.
 ///
 /// This type either contains all the information about the type (in the case of
-/// fundamental types), or contains a reference into a [`TypeContext`] that holds
+/// fundamental types), or contains a reference into a [`TypePool`] that holds
 /// the information about the type (only for arrays and structures).
 ///
 /// ```
@@ -1353,17 +1394,20 @@
 }
 
 <span class="kw">impl </span>Type {
-    <span class="kw">const </span>BOOL: u32 = <span class="number">0b000</span>;
+    <span class="comment">// magic key for `Packable` so that we can use `PackedOption&lt;Type&gt;`
+    </span><span class="kw">const </span>NULL: u32 = <span class="number">0b000</span>;
 
-    <span class="kw">const </span>PTR: u32 = <span class="number">0b001</span>;
+    <span class="kw">const </span>BOOL: u32 = <span class="number">0b001</span>;
 
-    <span class="kw">const </span>INT: u32 = <span class="number">0b010</span>;
+    <span class="kw">const </span>PTR: u32 = <span class="number">0b010</span>;
 
-    <span class="kw">const </span>FLOAT: u32 = <span class="number">0b011</span>;
+    <span class="kw">const </span>INT: u32 = <span class="number">0b011</span>;
 
-    <span class="kw">const </span>ARRAY: u32 = <span class="number">0b100</span>;
+    <span class="kw">const </span>FLOAT: u32 = <span class="number">0b100</span>;
 
-    <span class="kw">const </span>STRUCT: u32 = <span class="number">0b101</span>;
+    <span class="kw">const </span>ARRAY: u32 = <span class="number">0b101</span>;
+
+    <span class="kw">const </span>STRUCT: u32 = <span class="number">0b110</span>;
 
     <span class="kw">const </span>DATA_SHIFT: u32 = <span class="number">3</span>;
 
@@ -1372,11 +1416,13 @@
     <span class="kw">const </span>DISCRIMINATOR_MASK: u32 = <span class="number">0b111</span>;
 
     <span class="doccomment">/// Creates a boolean type (the `bool` type in the IR).
+    </span><span class="attr">#[inline]
     </span><span class="kw">pub const fn </span>bool() -&gt; <span class="self">Self </span>{
         <span class="self">Self </span>{ raw: <span class="self">Self</span>::BOOL }
     }
 
     <span class="doccomment">/// Creates a pointer type (the `ptr` type in the IR).
+    </span><span class="attr">#[inline]
     </span><span class="kw">pub const fn </span>ptr() -&gt; <span class="self">Self </span>{
         <span class="self">Self </span>{ raw: <span class="self">Self</span>::PTR }
     }
@@ -1390,6 +1436,7 @@
     /// let t2 = Type::int(64);
     /// assert_ne!(t1, t2);
     /// ```
+    </span><span class="attr">#[inline]
     </span><span class="kw">pub const fn </span>int(width: u32) -&gt; <span class="self">Self </span>{
         <span class="macro">debug_assert!</span>(width.is_power_of_two(), <span class="string">&quot;width must be a power of two&quot;</span>);
         <span class="macro">debug_assert!</span>(
@@ -1415,6 +1462,7 @@
     /// let t2 = Type::float(FloatFormat::Single);
     /// assert_ne!(t1, t2);
     /// ```
+    </span><span class="attr">#[inline]
     </span><span class="kw">pub const fn </span>float(format: FloatFormat) -&gt; <span class="self">Self </span>{
         <span class="self">Self </span>{
             raw: ((format <span class="kw">as </span>u32) &lt;&lt; <span class="self">Self</span>::DATA_SHIFT) | <span class="self">Self</span>::FLOAT,
@@ -1430,6 +1478,7 @@
     /// let t2 = Type::float(FloatFormat::Single);
     /// assert_eq!(t1, t2);
     /// ```
+    </span><span class="attr">#[inline]
     </span><span class="kw">pub const fn </span>f32() -&gt; <span class="self">Self </span>{
         <span class="self">Self</span>::float(FloatFormat::Single)
     }
@@ -1443,6 +1492,7 @@
     /// let t2 = Type::float(FloatFormat::Double);
     /// assert_eq!(t1, t2);
     /// ```
+    </span><span class="attr">#[inline]
     </span><span class="kw">pub const fn </span>f64() -&gt; <span class="self">Self </span>{
         <span class="self">Self</span>::float(FloatFormat::Double)
     }
@@ -1451,10 +1501,10 @@
     ///
     /// ```
     /// # use sapphire::ir::*;
-    /// let mut ctx = TypeContext::new();
+    /// let mut ctx = TypePool::new();
     /// let ty = Type::array(&amp;mut ctx, Type::i32(), 16); // =&gt; [i32; 16]
     /// ```
-    </span><span class="kw">pub fn </span>array(ctx: <span class="kw-2">&amp;mut </span>TypeContext, inner: Type, length: usize) -&gt; <span class="self">Self </span>{
+    </span><span class="kw">pub fn </span>array(ctx: <span class="kw-2">&amp;mut </span>TypePool, inner: Type, length: u64) -&gt; <span class="self">Self </span>{
         ctx.array(inner, length)
     }
 
@@ -1462,10 +1512,10 @@
     ///
     /// ```
     /// # use sapphire::ir::*;
-    /// let mut ctx = TypeContext::new();
+    /// let mut ctx = TypePool::new();
     /// let ty = Type::structure(&amp;mut ctx, &amp;[Type::i32(), Type::i32()]); // =&gt; { i32, i32 }
     /// ```
-    </span><span class="kw">pub fn </span>structure(ctx: <span class="kw-2">&amp;mut </span>TypeContext, fields: <span class="kw-2">&amp;</span>[Type]) -&gt; <span class="self">Self </span>{
+    </span><span class="kw">pub fn </span>structure(ctx: <span class="kw-2">&amp;mut </span>TypePool, fields: <span class="kw-2">&amp;</span>[Type]) -&gt; <span class="self">Self </span>{
         ctx.structure(fields)
     }
 
@@ -1476,6 +1526,7 @@
     /// let t1 = Type::bool();
     /// assert_eq!(t1.is_bool(), true);
     /// ```
+    </span><span class="attr">#[inline]
     </span><span class="kw">pub const fn </span>is_bool(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
         <span class="self">self</span>.discriminator() == <span class="self">Self</span>::BOOL
     }
@@ -1487,6 +1538,7 @@
     /// let t1 = Type::ptr();
     /// assert_eq!(t1.is_ptr(), true);
     /// ```
+    </span><span class="attr">#[inline]
     </span><span class="kw">pub const fn </span>is_ptr(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
         <span class="self">self</span>.discriminator() == <span class="self">Self</span>::PTR
     }
@@ -1498,6 +1550,7 @@
     /// let t1 = Type::int(32);
     /// assert_eq!(t1.is_int(), true);
     /// ```
+    </span><span class="attr">#[inline]
     </span><span class="kw">pub const fn </span>is_int(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
         <span class="self">self</span>.discriminator() == <span class="self">Self</span>::INT
     }
@@ -1509,11 +1562,24 @@
     /// let t1 = Type::int(64);
     /// assert_eq!(t1.is_int_of_width(64), true);
     /// ```
+    </span><span class="attr">#[inline]
     </span><span class="kw">pub const fn </span>is_int_of_width(<span class="kw-2">&amp;</span><span class="self">self</span>, width: u32) -&gt; bool {
         <span class="kw">match </span>(<span class="self">self</span>.discriminator(), <span class="self">self</span>.data()) {
             (<span class="self">Self</span>::INT, w) =&gt; w == width,
             <span class="kw">_ </span>=&gt; <span class="bool-val">false</span>,
         }
+    }
+
+    <span class="doccomment">/// Checks if a type is a `bool` or an `iN`.
+    ///
+    /// ```
+    /// # use sapphire::ir::*;
+    /// let t1 = Type::int(64);
+    /// assert_eq!(t1.is_bool_or_int(), true);
+    /// ```
+    </span><span class="attr">#[inline]
+    </span><span class="kw">pub const fn </span>is_bool_or_int(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
+        <span class="self">self</span>.is_bool() || <span class="self">self</span>.is_int()
     }
 
     <span class="doccomment">/// Checks if the type is an [`Int`] with a width of 8.
@@ -1583,6 +1649,7 @@
     /// let t1 = Type::bool();
     /// assert_eq!(t1.is_bool(), true);
     /// ```
+    </span><span class="attr">#[inline]
     </span><span class="kw">pub const fn </span>is_float(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
         <span class="self">self</span>.discriminator() == <span class="self">Self</span>::FLOAT
     }
@@ -1594,6 +1661,7 @@
     /// let t1 = Type::float(FloatFormat::Double);
     /// assert_eq!(t1.is_float_of_format(FloatFormat::Double), true);
     /// ```
+    </span><span class="attr">#[inline]
     </span><span class="kw">pub const fn </span>is_float_of_format(<span class="kw-2">&amp;</span><span class="self">self</span>, format: FloatFormat) -&gt; bool {
         <span class="kw">match </span>(<span class="self">self</span>.discriminator(), <span class="self">self</span>.data()) {
             (<span class="self">Self</span>::FLOAT, w) =&gt; w == format <span class="kw">as </span>u32,
@@ -1638,6 +1706,7 @@
     /// let t1 = Type::bool();
     /// assert_eq!(t1.is_array(), false);
     /// ```
+    </span><span class="attr">#[inline]
     </span><span class="kw">pub const fn </span>is_array(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
         <span class="self">self</span>.discriminator() == <span class="self">Self</span>::ARRAY
     }
@@ -1649,6 +1718,7 @@
     /// let t1 = Type::bool();
     /// assert_eq!(t1.is_struct(), false);
     /// ```
+    </span><span class="attr">#[inline]
     </span><span class="kw">pub const fn </span>is_struct(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
         <span class="self">self</span>.discriminator() == <span class="self">Self</span>::STRUCT
     }
@@ -1795,6 +1865,16 @@
     }
 }
 
+<span class="kw">impl </span>Packable <span class="kw">for </span>Type {
+    <span class="kw">fn </span>reserved() -&gt; <span class="self">Self </span>{
+        <span class="self">Self </span>{ raw: <span class="self">Self</span>::NULL }
+    }
+
+    <span class="kw">fn </span>is_reserved(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
+        <span class="self">self</span>.raw == <span class="self">Self</span>::NULL
+    }
+}
+
 <span class="doccomment">/// An unpacked representation of a [`Type`] that takes up twice as
 /// much space, but also has Rust native `enum` semantics.
 ///
@@ -1850,4 +1930,4 @@ renderMathInElement(document.body, {
     ]
 });
 </script>
-<div id="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="sapphire" data-themes="" data-resource-suffix="" data-rustdoc-version="1.68.0-nightly (92c1937a9 2022-12-27)" data-search-js="search-181581080540673f.js" data-settings-js="settings-bebeae96e00e4617.js" data-settings-css="settings-58836c674e2f7bd2.css" ></div></body></html>
+<div id="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="sapphire" data-themes="" data-resource-suffix="" data-rustdoc-version="1.68.0-nightly (c7572670a 2023-01-03)" data-search-js="search-181581080540673f.js" data-settings-js="settings-bebeae96e00e4617.js" data-settings-css="settings-58836c674e2f7bd2.css" ></div></body></html>

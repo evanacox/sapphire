@@ -82,7 +82,7 @@
 
         <nav id="sidebar" class="sidebar" aria-label="Table of contents">
             <div class="sidebar-scrollbox">
-                <ol class="chapter"><li class="chapter-item expanded affix "><a href="index.html">Preface</a></li><li class="chapter-item expanded "><a href="sir.html" class="active"><strong aria-hidden="true">1.</strong> Sapphire IR</a></li></ol>
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="index.html">Preface</a></li><li class="chapter-item expanded "><a href="sir.html" class="active"><strong aria-hidden="true">1.</strong> Sapphire IR</a></li><li class="chapter-item expanded "><a href="internals/index.html"><strong aria-hidden="true">2.</strong> Compiler Internals</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="internals/parser.html"><strong aria-hidden="true">2.1.</strong> SIR Parser</a></li><li class="chapter-item expanded "><a href="internals/sir-repr.html"><strong aria-hidden="true">2.2.</strong> SIR Representation</a></li></ol></li></ol>
             </div>
             <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
         </nav>
@@ -159,7 +159,7 @@ entry:
     %5 = load i32, ptr %3  
     %6 = iadd i32, %4, %5  
     %7 = iconst i64, 4  
-    %8 = call ptr @boxed.allocate(i64 %7)  
+    %8 = call @boxed.allocate(i64 %7)  
     store i32 %6, ptr %8  
     ret ptr %8  
 }
@@ -183,6 +183,8 @@ entry:
 <p>A given section of memory can be used as the <em>storage</em> of an object, however SIR does not enforce any restrictions to what can be stored in a given section based on type alone (other than that the size of the object must be \( \le \) the size of the section).</p>
 <p>Storage is simply considered to be a set of bytes that happen to store a given set of values.</p>
 <h2 id="types"><a class="header" href="#types">Types</a></h2>
+<h3 id="function-signatures"><a class="header" href="#function-signatures">Function Signatures</a></h3>
+<p>These are not quite &quot;types&quot;</p>
 <h3 id="aggregates-v-primitives"><a class="header" href="#aggregates-v-primitives">Aggregates v. Primitives</a></h3>
 <p><em>Primitive</em> types are the atomic values of the IR, e.g. integers, booleans, floats and the like. <em>Aggregates</em> are complex types that are made up of one or more primitives (or other aggregates). Each value that is contained in an aggregate is said to be a <em>member</em> the aggregate, with each member being identified by an index (starting at zero).</p>
 <h3 id="bool-booleans"><a class="header" href="#bool-booleans"><code>bool</code>: Booleans</a></h3>
@@ -300,13 +302,13 @@ return x;
 </code></pre>
 <h1 id="instructions"><a class="header" href="#instructions">Instructions</a></h1>
 <h2 id="miscellaneous"><a class="header" href="#miscellaneous">Miscellaneous</a></h2>
-<h4 id="call---call-function"><a class="header" href="#call---call-function">'<code>call</code>‘ - Call Function</a></h4>
+<h3 id="call---call-function"><a class="header" href="#call---call-function">'<code>call</code>‘ - Call Function</a></h3>
 <p>Calls a function, passing zero or more arguments to that function and eventually returning when the called function returns.</p>
-<pre><code class="language-other">decl i32 @add(i32, i32)
+<pre><code class="language-other">fn i32 @add(i32, i32)
 
-decl void @do_something()
+fn void @do_something()
 
-func i32 @something_else() {
+fn i32 @something_else() {
 %entry:
   %0 = call i32 @add(i32 0, i32 1)
   call void @do_something()
@@ -315,7 +317,18 @@ func i32 @something_else() {
 </code></pre>
 <p>Calls to <code>void</code> functions cannot be bound to a name, as they do not really have a 'value’.</p>
 <p>Syntax:</p>
-<pre><code class="language-other">(&lt;val&gt; =)? call &lt;ty&gt; &lt;fn-name&gt;((&lt;ty&gt; &lt;val&gt;)*)
+<pre><code class="language-other">(&lt;val&gt; =)? call &lt;ty&gt; &lt;fn-name&gt;((&lt;ty&gt; &lt;val&gt;) (, &lt;ty&gt; &lt;val&gt;)*)
+</code></pre>
+<h3 id="indirectcall---indirect-call"><a class="header" href="#indirectcall---indirect-call">'<code>indirectcall</code>' - Indirect Call</a></h3>
+<p>Calls a function pointer. Otherwise, equivalent to <code>call</code> but taking a function type and a pointer 
+instead of taking the name of a (declared) function.</p>
+<pre><code class="language-other">%0 = globaladdr @printf
+%1 = globaladdr @some_string
+%2 = iconst i32 42
+%1 = indirectcall i32 (ptr, ...), ptr %0(ptr %1, i32 %2)
+</code></pre>
+<p>Syntax:</p>
+<pre><code class="language-other">(&lt;val&gt; =)? call &lt;fn-sig&gt;, &lt;ty&gt; &lt;val&gt;((&lt;ty&gt; &lt;val&gt;) (, &lt;ty&gt; &lt;val&gt;)*)
 </code></pre>
 <h3 id="icmp---integer-compare"><a class="header" href="#icmp---integer-compare">'<code>icmp</code>‘ - Integer Compare</a></h3>
 <p>Compares two given integer or boolean values using a given comparison operation, and returns a <code>bool</code> representing the result of the comparison.</p>
@@ -640,21 +653,18 @@ store i32 %x, ptr %0
 <p>Extracts a value from an aggregate value at a given index.</p>
 <pre><code class="language-other">%0 = extract i64, { i64, i64, i64 } %obj, 0
 </code></pre>
-<p>For structures, the index has the additional constraint that it must be a constant.</p>
-<blockquote>
-<blockquote>
-<p>It is undefined behavior if the index goes beyond the bounds of the aggregate. Formally, the behavior is undefined if \( I \geq |A| \), where \( I \) is the index and \( A \) is the set containing all members of the aggregate.</p>
-</blockquote>
-</blockquote>
+<p>The index is always a constant, even for arrays. If runtime indexing is required, the array/structure must
+be stored in memory and the <code>offset</code> instruction should be used. </p>
 <p>Syntax:</p>
-<pre><code class="language-other">&lt;val&gt; = extract &lt;ty&gt;, &lt;ty&gt; &lt;val&gt;, &lt;val&gt;
+<pre><code class="language-other">&lt;val&gt; = extract &lt;ty&gt;, &lt;ty&gt; &lt;val&gt;, &lt;index&gt;
 </code></pre>
 <h4 id="insert---insert-value-into-aggregate"><a class="header" href="#insert---insert-value-into-aggregate">‘<code>insert</code>’ - Insert Value into Aggregate</a></h4>
 <p>Inserts a value into an aggregate at a given index.</p>
 <pre><code class="language-other">%0 = undef { ptr, i8, f64 } 
 %1 = insert { ptr, i8, f64 } %0, f64 %x, 2
 </code></pre>
-<p>The index must be of the native</p>
+<p>The index is always a constant, even for arrays. If runtime indexing is required, the array/structure must
+be stored in memory and the <code>offset</code> instruction should be used.</p>
 <h4 id="elemptr---get-pointer-to-element"><a class="header" href="#elemptr---get-pointer-to-element">‘<code>elemptr</code>’ - Get Pointer to Element</a></h4>
 <p>This is the way of getting pointers to the members of in-memory aggregates.</p>
 <pre><code class="language-other">%0 = alloca { i64, i32, ptr, i8 }
@@ -783,6 +793,9 @@ Reading the same <code>undef</code> value multiple times will yield the same val
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
+                            <a rel="next" href="internals/index.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
 
                         <div style="clear: both"></div>
                     </nav>
@@ -794,6 +807,9 @@ Reading the same <code>undef</code> value multiple times will yield the same val
                         <i class="fa fa-angle-left"></i>
                     </a>
 
+                    <a rel="next" href="internals/index.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
             </nav>
 
         </div>

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":[["inputs","Gets the input files specified on the CLI."],["output","Gets the output file specified on the CLI, if one exists."],["tool","Returns a [`clap::Command`] preconfigured with the standard Sapphire options, version, etc."]]};

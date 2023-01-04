@@ -83,7 +83,7 @@
 
         <nav id="sidebar" class="sidebar" aria-label="Table of contents">
             <div class="sidebar-scrollbox">
-                <ol class="chapter"><li class="chapter-item expanded affix "><a href="index.html">Preface</a></li><li class="chapter-item expanded "><a href="sir.html"><strong aria-hidden="true">1.</strong> Sapphire IR</a></li></ol>
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="index.html">Preface</a></li><li class="chapter-item expanded "><a href="sir.html"><strong aria-hidden="true">1.</strong> Sapphire IR</a></li><li class="chapter-item expanded "><a href="internals/index.html"><strong aria-hidden="true">2.</strong> Compiler Internals</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="internals/parser.html"><strong aria-hidden="true">2.1.</strong> SIR Parser</a></li><li class="chapter-item expanded "><a href="internals/sir-repr.html"><strong aria-hidden="true">2.2.</strong> SIR Representation</a></li></ol></li></ol>
             </div>
             <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
         </nav>
@@ -148,9 +148,43 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="preface"><a class="header" href="#preface">Preface</a></h1>
+<p>Sapphire is a toy compiler framework, heavily inspired by both <a href="https://www.llvm.org">LLVM</a> and the
+Cranelift compiler in <a href="https://wasmtime.dev/">Wasmtime</a>. </p>
+<p>Both of those are much better projects to look at for modern optimizing compilers than this is, you
+can find the actual source code at the following:</p>
+<ul>
+<li><a href="https://github.com/llvm/llvm-project/tree/main/llvm">LLVM Core</a>, in the <code>llvm/</code> subdir of the LLVM monorepo</li>
+<li><a href="https://github.com/bytecodealliance/wasmtime/tree/main/cranelift">Cranelift</a>, in the <code>cranelift/</code> subdir of Wasmtime</li>
+</ul>
 <h2 id="api-documentation"><a class="header" href="#api-documentation">API Documentation</a></h2>
 <p>This book does not contain any API documentation for the Sapphire library. If you want that,
 you need to go <a href="https://pages.evanacox.io/sapphire/api/sapphire">here</a>.</p>
+<h2 id="sir"><a class="header" href="#sir">SIR</a></h2>
+<p>SIR is the intermediary language that everything<sup class="footnote-reference"><a href="#1">1</a></sup> inside of Sapphire speaks in. All optimizing transformations
+are SIR -&gt; SIR, all analyses work on SIR, etc. SIR is your standard SSA-based IR with memory operations, the only
+remotely interesting thing is that it uses block parameters for φ functions instead of a <code>phi</code>-like instruction.</p>
+<pre><code class="language-llvm">fn i32 @loopFactorial(i32) fastcc {
+entry(i32 %n):
+  %0 = iconst i32 1
+  br loop.head(i32 %n, i32 %n)
+
+loop.head(i32 %x, i32 %y):
+  %1 = icmp eq i32 %x, %0
+  condbr bool %1, loop.body, exit(%y)
+  
+loop.body:
+  %2 = isub i32 %x, %0
+  %3 = imul i32 %y, %2
+  br loop.head(%2, %3)
+  
+exit(i32 %result):
+  ret i32 %result
+}
+</code></pre>
+<p>The details of the IR can be found <a href="sir.html">here</a>.</p>
+<p>[1]: Except the back-end, that deals in a machine-specific IR instead</p>
+<h2 id="compiler-internals"><a class="header" href="#compiler-internals">Compiler Internals</a></h2>
+<p>Details of the compiler's inner workings can be found in the Internals section.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="sapphire-ir-sir-reference"><a class="header" href="#sapphire-ir-sir-reference">Sapphire IR (SIR) Reference</a></h1>
 <pre><code class="language-other">type %boxed.i32 = { ptr }  
   
@@ -164,7 +198,7 @@ entry:
     %5 = load i32, ptr %3  
     %6 = iadd i32, %4, %5  
     %7 = iconst i64, 4  
-    %8 = call ptr @boxed.allocate(i64 %7)  
+    %8 = call @boxed.allocate(i64 %7)  
     store i32 %6, ptr %8  
     ret ptr %8  
 }
@@ -188,6 +222,8 @@ entry:
 <p>A given section of memory can be used as the <em>storage</em> of an object, however SIR does not enforce any restrictions to what can be stored in a given section based on type alone (other than that the size of the object must be \( \le \) the size of the section).</p>
 <p>Storage is simply considered to be a set of bytes that happen to store a given set of values.</p>
 <h2 id="types"><a class="header" href="#types">Types</a></h2>
+<h3 id="function-signatures"><a class="header" href="#function-signatures">Function Signatures</a></h3>
+<p>These are not quite &quot;types&quot;</p>
 <h3 id="aggregates-v-primitives"><a class="header" href="#aggregates-v-primitives">Aggregates v. Primitives</a></h3>
 <p><em>Primitive</em> types are the atomic values of the IR, e.g. integers, booleans, floats and the like. <em>Aggregates</em> are complex types that are made up of one or more primitives (or other aggregates). Each value that is contained in an aggregate is said to be a <em>member</em> the aggregate, with each member being identified by an index (starting at zero).</p>
 <h3 id="bool-booleans"><a class="header" href="#bool-booleans"><code>bool</code>: Booleans</a></h3>
@@ -305,13 +341,13 @@ return x;
 </code></pre>
 <h1 id="instructions"><a class="header" href="#instructions">Instructions</a></h1>
 <h2 id="miscellaneous"><a class="header" href="#miscellaneous">Miscellaneous</a></h2>
-<h4 id="call---call-function"><a class="header" href="#call---call-function">'<code>call</code>‘ - Call Function</a></h4>
+<h3 id="call---call-function"><a class="header" href="#call---call-function">'<code>call</code>‘ - Call Function</a></h3>
 <p>Calls a function, passing zero or more arguments to that function and eventually returning when the called function returns.</p>
-<pre><code class="language-other">decl i32 @add(i32, i32)
+<pre><code class="language-other">fn i32 @add(i32, i32)
 
-decl void @do_something()
+fn void @do_something()
 
-func i32 @something_else() {
+fn i32 @something_else() {
 %entry:
   %0 = call i32 @add(i32 0, i32 1)
   call void @do_something()
@@ -320,7 +356,18 @@ func i32 @something_else() {
 </code></pre>
 <p>Calls to <code>void</code> functions cannot be bound to a name, as they do not really have a 'value’.</p>
 <p>Syntax:</p>
-<pre><code class="language-other">(&lt;val&gt; =)? call &lt;ty&gt; &lt;fn-name&gt;((&lt;ty&gt; &lt;val&gt;)*)
+<pre><code class="language-other">(&lt;val&gt; =)? call &lt;ty&gt; &lt;fn-name&gt;((&lt;ty&gt; &lt;val&gt;) (, &lt;ty&gt; &lt;val&gt;)*)
+</code></pre>
+<h3 id="indirectcall---indirect-call"><a class="header" href="#indirectcall---indirect-call">'<code>indirectcall</code>' - Indirect Call</a></h3>
+<p>Calls a function pointer. Otherwise, equivalent to <code>call</code> but taking a function type and a pointer 
+instead of taking the name of a (declared) function.</p>
+<pre><code class="language-other">%0 = globaladdr @printf
+%1 = globaladdr @some_string
+%2 = iconst i32 42
+%1 = indirectcall i32 (ptr, ...), ptr %0(ptr %1, i32 %2)
+</code></pre>
+<p>Syntax:</p>
+<pre><code class="language-other">(&lt;val&gt; =)? call &lt;fn-sig&gt;, &lt;ty&gt; &lt;val&gt;((&lt;ty&gt; &lt;val&gt;) (, &lt;ty&gt; &lt;val&gt;)*)
 </code></pre>
 <h3 id="icmp---integer-compare"><a class="header" href="#icmp---integer-compare">'<code>icmp</code>‘ - Integer Compare</a></h3>
 <p>Compares two given integer or boolean values using a given comparison operation, and returns a <code>bool</code> representing the result of the comparison.</p>
@@ -645,21 +692,18 @@ store i32 %x, ptr %0
 <p>Extracts a value from an aggregate value at a given index.</p>
 <pre><code class="language-other">%0 = extract i64, { i64, i64, i64 } %obj, 0
 </code></pre>
-<p>For structures, the index has the additional constraint that it must be a constant.</p>
-<blockquote>
-<blockquote>
-<p>It is undefined behavior if the index goes beyond the bounds of the aggregate. Formally, the behavior is undefined if \( I \geq |A| \), where \( I \) is the index and \( A \) is the set containing all members of the aggregate.</p>
-</blockquote>
-</blockquote>
+<p>The index is always a constant, even for arrays. If runtime indexing is required, the array/structure must
+be stored in memory and the <code>offset</code> instruction should be used. </p>
 <p>Syntax:</p>
-<pre><code class="language-other">&lt;val&gt; = extract &lt;ty&gt;, &lt;ty&gt; &lt;val&gt;, &lt;val&gt;
+<pre><code class="language-other">&lt;val&gt; = extract &lt;ty&gt;, &lt;ty&gt; &lt;val&gt;, &lt;index&gt;
 </code></pre>
 <h4 id="insert---insert-value-into-aggregate"><a class="header" href="#insert---insert-value-into-aggregate">‘<code>insert</code>’ - Insert Value into Aggregate</a></h4>
 <p>Inserts a value into an aggregate at a given index.</p>
 <pre><code class="language-other">%0 = undef { ptr, i8, f64 } 
 %1 = insert { ptr, i8, f64 } %0, f64 %x, 2
 </code></pre>
-<p>The index must be of the native</p>
+<p>The index is always a constant, even for arrays. If runtime indexing is required, the array/structure must
+be stored in memory and the <code>offset</code> instruction should be used.</p>
 <h4 id="elemptr---get-pointer-to-element"><a class="header" href="#elemptr---get-pointer-to-element">‘<code>elemptr</code>’ - Get Pointer to Element</a></h4>
 <p>This is the way of getting pointers to the members of in-memory aggregates.</p>
 <pre><code class="language-other">%0 = alloca { i64, i32, ptr, i8 }
@@ -779,6 +823,47 @@ Reading the same <code>undef</code> value multiple times will yield the same val
 %1 = null i32
 %2 = null { ptr, i64, i64 }
 </code></pre>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="compiler-internals-1"><a class="header" href="#compiler-internals-1">Compiler Internals</a></h1>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="sir-parser"><a class="header" href="#sir-parser">SIR Parser</a></h1>
+<p>Parsing SIR from input text is a effectively divided into two stages:</p>
+<ol>
+<li>Running a <a href="https://pest.rs/">Pest</a>-generated parser to get the input text into a parse tree</li>
+<li>Running a dual type-checker/parser on the parse tree to generate SIR from it</li>
+</ol>
+<p>The second part is the part actually implemented in the compiler.</p>
+<h2 id="preprocessing"><a class="header" href="#preprocessing">Preprocessing</a></h2>
+<p>The parser effectively runs multiple stages of pre-processing instead of walking the
+parse tree a single time. This pre-processing enables use-before-definition at both the
+function and the block level. </p>
+<p>Each time a function subtree is found, the function is <em>declared</em> and the function's body is put
+onto a work list, and once every function in the file is declared the parser goes through the list
+and actually parses the bodies (and properly defines the functions). </p>
+<p>The same is done at the basic-block level inside function bodies to make it possible to
+branch to blocks that are defined after the branch instruction that targets them. This also
+makes it easier to preserve the block order that was parsed, even though technically this is
+irrelevant (as long as the entry block is in the right place).</p>
+<p>What this actually means for the instruction parsing code is that all valid block/function names
+are known by the time they execute, so the names not existing can only mean that the input is invalid.</p>
+<h2 id="names---values"><a class="header" href="#names---values">Names -&gt; Values</a></h2>
+<p>The parser relies on the SSA property of the program to map names (e.g. <code>%x</code>) back to
+the actual values that it has generated for those names. While this property is checked (when 
+new values are introduced it's checked to make sure they did not exist before), it is checked
+while instructions are being parsed. </p>
+<p>When an instruction or block parameter is parsed, its name (referred to by a <code>LocalIdent</code>) is
+put into the <code>resolver</code> map inside of <code>SIRParser</code>. That entry is then mapped to the value referred
+to by the name, so that later that value can be found. </p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="sir-in-memory-representation"><a class="header" href="#sir-in-memory-representation">SIR In-Memory Representation</a></h1>
+<p>SIR is represented as a (relatively obscured) graph in-memory. Representation
+for a given SIR function is divided between two different types:</p>
+<ul>
+<li><code>DataFlowGraph</code>: owns all the &quot;things&quot; in a function, and models data-flow between values</li>
+<li><code>Layout</code>: orders the entities in a data-flow graph into lists of blocks, and lists of instructions in those blocks. </li>
+</ul>
+<h2 id="dataflowgraph-the-dfg"><a class="header" href="#dataflowgraph-the-dfg"><code>DataFlowGraph</code>: The DFG</a></h2>
+<p>This is basically a massive overly-complicated lookup table. It stores lots of arenas that store everything
+in a function that matters, whether it be instructions, blocks, referenced function signatures, etc. Everything
+is stored inside of arenas, and 'references' to those entities is passed around by indices into those arenas. </p>
+<h2 id="layout-the-layout"><a class="header" href="#layout-the-layout"><code>Layout</code>: The Layout</a></h2>
 
                     </main>
 
