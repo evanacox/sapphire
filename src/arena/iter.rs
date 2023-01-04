@@ -9,7 +9,7 @@
 //======---------------------------------------------------------------======//
 
 use crate::arena::ArenaKey;
-use std::iter::Enumerate;
+use std::iter::{Enumerate, FusedIterator};
 use std::marker::PhantomData;
 
 macro_rules! pair_iter_impl {
@@ -66,6 +66,13 @@ macro_rules! pair_iter_impl {
                 self.inner.len()
             }
         }
+
+        impl<$($lt, )* Inner, K, V> FusedIterator for $name<$($lt, )* Inner, K, V>
+        where
+            Inner: Iterator<Item = $t> + FusedIterator,
+            K: ArenaKey,
+            $(V: $lt)*
+        {}
     }
 }
 
@@ -173,3 +180,5 @@ impl<K: ArenaKey> DoubleEndedIterator for Keys<K> {
 }
 
 impl<K: ArenaKey> ExactSizeIterator for Keys<K> {}
+
+impl<K: ArenaKey> FusedIterator for Keys<K> {}

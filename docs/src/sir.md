@@ -13,7 +13,7 @@ entry:
     %5 = load i32, ptr %3  
     %6 = iadd i32, %4, %5  
     %7 = iconst i64, 4  
-    %8 = call ptr @boxed.allocate(i64 %7)  
+    %8 = call @boxed.allocate(i64 %7)  
     store i32 %6, ptr %8  
     ret ptr %8  
 }
@@ -50,6 +50,10 @@ A given section of memory can be used as the *storage* of an object, however SIR
 Storage is simply considered to be a set of bytes that happen to store a given set of values.
 
 ## Types
+
+### Function Signatures
+
+These are not quite "types"
 
 ### Aggregates v. Primitives
 
@@ -222,16 +226,16 @@ return x;
 
 ## Miscellaneous
 
-#### '`call`‘ - Call Function
+### '`call`‘ - Call Function
 
 Calls a function, passing zero or more arguments to that function and eventually returning when the called function returns.
 
 ```other
-decl i32 @add(i32, i32)
+fn i32 @add(i32, i32)
 
-decl void @do_something()
+fn void @do_something()
 
-func i32 @something_else() {
+fn i32 @something_else() {
 %entry:
   %0 = call i32 @add(i32 0, i32 1)
   call void @do_something()
@@ -244,7 +248,25 @@ Calls to `void` functions cannot be bound to a name, as they do not really have 
 Syntax:
 
 ```other
-(<val> =)? call <ty> <fn-name>((<ty> <val>)*)
+(<val> =)? call <ty> <fn-name>((<ty> <val>) (, <ty> <val>)*)
+```
+
+### '`indirectcall`' - Indirect Call
+
+Calls a function pointer. Otherwise, equivalent to `call` but taking a function type and a pointer 
+instead of taking the name of a (declared) function.
+
+```other
+%0 = globaladdr @printf
+%1 = globaladdr @some_string
+%2 = iconst i32 42
+%1 = indirectcall i32 (ptr, ...), ptr %0(ptr %1, i32 %2)
+```
+
+Syntax:
+
+```other
+(<val> =)? call <fn-sig>, <ty> <val>((<ty> <val>) (, <ty> <val>)*)
 ```
 
 ### '`icmp`‘ - Integer Compare
@@ -746,14 +768,13 @@ Extracts a value from an aggregate value at a given index.
 %0 = extract i64, { i64, i64, i64 } %obj, 0
 ```
 
-For structures, the index has the additional constraint that it must be a constant.
-
-> > It is undefined behavior if the index goes beyond the bounds of the aggregate. Formally, the behavior is undefined if \\( I \geq |A| \\), where \\( I \\) is the index and \\( A \\) is the set containing all members of the aggregate.
+The index is always a constant, even for arrays. If runtime indexing is required, the array/structure must
+be stored in memory and the `offset` instruction should be used. 
 
 Syntax:
 
 ```other
-<val> = extract <ty>, <ty> <val>, <val>
+<val> = extract <ty>, <ty> <val>, <index>
 ```
 
 #### ‘`insert`’ - Insert Value into Aggregate
@@ -765,7 +786,8 @@ Inserts a value into an aggregate at a given index.
 %1 = insert { ptr, i8, f64 } %0, f64 %x, 2
 ```
 
-The index must be of the native
+The index is always a constant, even for arrays. If runtime indexing is required, the array/structure must
+be stored in memory and the `offset` instruction should be used.
 
 #### ‘`elemptr`’ - Get Pointer to Element
 

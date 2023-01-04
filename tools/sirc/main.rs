@@ -8,16 +8,24 @@
 //                                                                           //
 //======---------------------------------------------------------------======//
 
-//! Provides several utility APIs that are used inside of various modules
-//! inside of the compiler.
-//!
-//! This is the general catch-all for random utility code.
+use sapphire::analysis;
+use sapphire::cli;
+use sapphire::reader;
+use std::fs;
 
-mod graph;
-mod packed_option;
-mod string_pool;
-mod tiny;
+fn main() {
+    let matches = cli::tool("sirc", "Sapphire IR Static Compiler").get_matches();
 
-pub use packed_option::{Packable, PackedOption};
-pub use string_pool::*;
-pub use tiny::*;
+    for file in cli::inputs(&matches) {
+        let source = fs::read_to_string(&file).expect("file did not exist");
+
+        match reader::parse_sir(&file, &source) {
+            Ok(module) => {
+                analysis::print_module(&module);
+            }
+            Err(e) => {
+                eprintln!("failed to parse: {e}");
+            }
+        }
+    }
+}

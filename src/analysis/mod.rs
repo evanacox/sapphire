@@ -8,16 +8,15 @@
 //                                                                           //
 //======---------------------------------------------------------------======//
 
-//! Provides several utility APIs that are used inside of various modules
-//! inside of the compiler.
+//! Contains the various analysis passes defined in the Sapphire project.
 //!
-//! This is the general catch-all for random utility code.
+//! These are basically all passes that model the [`FunctionAnalysisPass`] or
+//! the [`ModuleAnalysisPass`] traits, and range from debug passes to analyses
+//! that are critical for correctness.
+//!
+//! [`FunctionAnalysisPass`]: crate::passes::FunctionAnalysisPass
+//! [`ModuleAnalysisPass`]: crate::passes::ModuleAnalysisPass
 
-mod graph;
-mod packed_option;
-mod string_pool;
-mod tiny;
+mod writer;
 
-pub use packed_option::{Packable, PackedOption};
-pub use string_pool::*;
-pub use tiny::*;
+pub use writer::*;

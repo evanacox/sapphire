@@ -8,6 +8,7 @@
 //                                                                           //
 //======---------------------------------------------------------------======//
 
+use crate::utility::Packable;
 use ahash::AHashMap;
 use std::fmt;
 use std::ops::Index;
@@ -32,7 +33,17 @@ use serde::{de::SeqAccess, de::Visitor, Deserialize, Deserializer, Serialize, Se
 /// ```
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
 #[cfg_attr(feature = "enable-serde", derive(Serialize, Deserialize))]
-pub struct Str(u32);
+pub struct Str(pub(crate) u32); // `pub` specifically for shoving `Str`s into `Value`s, see block.rs
+
+impl Packable for Str {
+    fn reserved() -> Self {
+        Self(u32::MAX)
+    }
+
+    fn is_reserved(&self) -> bool {
+        self.0 == u32::MAX
+    }
+}
 
 /// Contains a number of heap-allocated strings, and provides an API to
 /// map [`Str`]s to those heap-allocated strings. All strings are automatically

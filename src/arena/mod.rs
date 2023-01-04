@@ -8,13 +8,16 @@
 //                                                                           //
 //======---------------------------------------------------------------======//
 
-//! A simple typed arena module that does not allow deletion, and allows
-//! configurable index sizes for maximum flexibility and performance. It is
-//! used extensively for forming graphs and other complex data structures
+//! A simple typed arena module.
+//!
+//! These arenas mostly do not allow deletion (besides [`SecondaryMap`]) and
+//! provide configurable index sizes for extra flexibility and performance.
+//! It is used extensively for forming graphs and other complex data structures
 //! needed inside the compiler for representing different IRs.
 //!
 //! Very similar to `id_arena` and other simple typed arena crates, except this
-//! one ties in better with the specific needs of this compiler.
+//! one ties in better with the specific needs of this compiler (and does
+//! less safety checks in exchange for significantly reduced overhead per slot).
 //!
 //! ```
 //! # use sapphire::arena_key;
@@ -58,7 +61,7 @@ mod map;
 mod secondary;
 mod unique;
 
-pub use key::{ArenaKey, PackableKey};
+pub use key::ArenaKey;
 pub use map::ArenaMap;
 pub use secondary::SecondaryMap;
 use std::fmt;

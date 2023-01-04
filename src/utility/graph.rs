@@ -7,17 +7,3 @@
 // following link: https://opensource.org/licenses/BSD-3-Clause              //
 //                                                                           //
 //======---------------------------------------------------------------======//
-
-//! Provides several utility APIs that are used inside of various modules
-//! inside of the compiler.
-//!
-//! This is the general catch-all for random utility code.
-
-mod graph;
-mod packed_option;
-mod string_pool;
-mod tiny;
-
-pub use packed_option::{Packable, PackedOption};
-pub use string_pool::*;
-pub use tiny::*;
