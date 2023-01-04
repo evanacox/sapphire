@@ -37,6 +37,9 @@ use serde::{
 /// using a combination of [`map_all_keys`](SecondaryMap::map_all_keys) and
 /// [`map_some_keys`](SecondaryMap::map_some_keys).
 ///
+/// This type of map does allow deletion of keys since the valid keys are not necessarily
+/// contiguous.
+///
 /// ```
 /// # use sapphire::arena_key;
 /// # use sapphire::arena::*;
@@ -82,11 +85,34 @@ impl<K: ArenaKey, V> SecondaryMap<K, V> {
     /// arena_key! { struct Key; }
     /// let map = SecondaryMap::<Key, i32>::new();
     /// ```
-    #[inline]
     pub fn new() -> Self {
         Self {
             slots: Vec::default(),
             initialized: SmallBitVec::default(),
+            len: 0,
+            _unused: PhantomData::default(),
+        }
+    }
+
+    /// Creates an empty map that is pre-allocated for a specific number of keys.
+    ///
+    /// See [`Self::reserve`] for details on how capacity works in a [`SecondaryMap`].
+    ///
+    /// ```
+    /// # use sapphire::arena_key;
+    /// # use sapphire::arena::*;
+    /// arena_key! { struct Key; }
+    /// let primary = ArenaMap::<Key, usize>::new();
+    /// let map = SecondaryMap::<Key, i32>::with_capacity(primary.len());
+    /// ```
+    pub fn with_capacity(cap: usize) -> Self {
+        // we don't require V to implement Copy, so we can't use the clone variant of `vec!`.
+        // MaybeUninit only implements Clone if T implements Copy
+        let it = iter::repeat_with(|| MaybeUninit::uninit()).take(cap);
+
+        Self {
+            slots: Vec::from_iter(it),
+            initialized: sbvec![false; cap],
             len: 0,
             _unused: PhantomData::default(),
         }
@@ -104,16 +130,9 @@ impl<K: ArenaKey, V> SecondaryMap<K, V> {
     /// let primary = ArenaMap::<Key, usize>::new();
     /// let map = SecondaryMap::<Key, i32>::with_primary(&primary);
     /// ```
+    #[inline]
     pub fn with_primary<T>(primary: &ArenaMap<K, T>) -> Self {
-        // we don't require V to implement Copy, so we can't use the clone variant of `vec!`
-        let it = iter::repeat_with(|| MaybeUninit::uninit()).take(primary.len());
-
-        Self {
-            slots: Vec::from_iter(it),
-            initialized: sbvec![false; primary.len()],
-            len: 0,
-            _unused: PhantomData::default(),
-        }
+        Self::with_capacity(primary.len())
     }
 
     /// Efficiently creates a [`SecondaryMap`] by applying a function to each key
@@ -177,7 +196,7 @@ impl<K: ArenaKey, V> SecondaryMap<K, V> {
     /// });
     ///
     /// assert_eq!(map[k2], 10);
-    /// assert_eq!(map.contains(k1), false);
+    /// assert!(!map.contains(k1));
     /// ```
     pub fn map_some_keys<T, F>(primary: &ArenaMap<K, T>, mut f: F) -> Self
     where
@@ -222,8 +241,9 @@ impl<K: ArenaKey, V> SecondaryMap<K, V> {
     /// let k1: Key = primary.insert("Hello!");
     /// secondary.insert(k1, 16);
     ///
-    /// assert_eq!(secondary.contains(k1), true);
+    /// assert!(secondary.contains(k1));
     /// ```
+    #[inline]
     pub fn contains(&self, key: K) -> bool {
         self.is_initialized(key)
     }
@@ -352,6 +372,25 @@ impl<K: ArenaKey, V> SecondaryMap<K, V> {
         }
     }
 
+    /// Removes a key from the table if it exists. Returns whether or not
+    /// anything was actually removed.
+    ///
+    /// ```
+    /// # use sapphire::arena_key;
+    /// # use sapphire::arena::*;
+    /// arena_key! { struct Key; }
+    /// let mut primary = ArenaMap::new();
+    /// let mut secondary = SecondaryMap::new();
+    /// let k1: Key = primary.insert("Hello!");
+    /// secondary.insert(k1, 13);
+    ///
+    /// assert_eq!(secondary.remove(k1), true);
+    /// assert_eq!(secondary.contains(k1), false);
+    /// ```
+    pub fn remove(&mut self, key: K) -> bool {
+        self.take(key).is_some()
+    }
+
     /// Informs the map of how big the primary arena is.
     ///
     /// Unlike a [`Vec`], the capacity is not quite the number of *elements* that can be
@@ -422,7 +461,7 @@ impl<K: ArenaKey, V> SecondaryMap<K, V> {
     /// # use sapphire::arena::*;
     /// arena_key! { struct Key; }
     /// let mut map = SecondaryMap::<Key, i32>::new();
-    /// assert_eq!(map.is_empty(), true);
+    /// assert!(map.is_empty());
     /// ```
     #[inline]
     pub fn is_empty(&self) -> bool {
@@ -855,7 +894,7 @@ mod tests {
 
         assert_eq!(m2.len(), 0);
         assert_eq!(m2.capacity(), 0);
-        assert_eq!(m2.is_empty(), true);
+        assert!(m2.is_empty());
     }
 
     #[test]
@@ -869,7 +908,7 @@ mod tests {
 
         assert_eq!(m2.capacity(), 0);
         assert_eq!(m2.len(), 0);
-        assert_eq!(m2.is_empty(), true);
+        assert!(m2.is_empty());
 
         m2.insert(k1, 13);
         m2.insert(k2, 14);
@@ -898,15 +937,15 @@ mod tests {
         m2.insert(k1, -6);
 
         assert_eq!(m2[k1], -6);
-        assert_eq!(m2.contains(k1), true);
+        assert!(m2.contains(k1));
 
         assert_eq!(m2.len(), 1);
         assert_eq!(m2.capacity(), 1001);
-        assert_eq!(m2.is_empty(), false);
+        assert!(!m2.is_empty());
 
         // other keys should remain invalid
         for key in m1.keys().filter(|k| *k != k1) {
-            assert_eq!(m2.contains(key), false);
+            assert!(!m2.contains(key));
         }
     }
 
@@ -1013,6 +1052,53 @@ mod tests {
             };
 
             secondary.insert(key, CountsDrops(&counter));
+        }
+
+        assert_eq!(*counter.borrow(), 1);
+    }
+
+    #[test]
+    fn into_iter_drop() {
+        let counter = RefCell::new(0usize);
+
+        // sequential
+        {
+            let mut map = ArenaMap::new();
+            let mut secondary = SecondaryMap::new();
+
+            let k1: E = map.insert(5);
+            let k2 = map.insert(6);
+            let k3 = map.insert(7);
+            let k4 = map.insert(8);
+
+            secondary.insert(k1, CountsDrops(&counter));
+            secondary.insert(k2, CountsDrops(&counter));
+            secondary.insert(k3, CountsDrops(&counter));
+            secondary.insert(k4, CountsDrops(&counter));
+
+            let _ = secondary.into_iter();
+        }
+
+        assert_eq!(*counter.borrow(), 4);
+
+        *counter.borrow_mut() = 0;
+
+        // random
+        {
+            let mut map = ArenaMap::new();
+            let mut secondary = SecondaryMap::new();
+
+            let key = loop {
+                let k: E = map.insert(1);
+
+                if k.index() == 100 {
+                    break k;
+                }
+            };
+
+            secondary.insert(key, CountsDrops(&counter));
+
+            let _ = secondary.into_iter();
         }
 
         assert_eq!(*counter.borrow(), 1);

@@ -58,7 +58,7 @@ mod map;
 mod secondary;
 mod unique;
 
-pub use key::{ArenaKey, PackableKey};
+pub use key::ArenaKey;
 pub use map::ArenaMap;
 pub use secondary::SecondaryMap;
 use std::fmt;

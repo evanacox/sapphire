@@ -11,7 +11,7 @@
 use crate::arena;
 use crate::arena::iter::IntoIter;
 use crate::arena::{ArenaKey, ArenaMap};
-use ahash::{AHashMap, RandomState};
+use ahash::AHashMap;
 use std::collections::HashMap;
 use std::fmt;
 use std::fmt::{Debug, Formatter};
@@ -40,7 +40,7 @@ where
     V: Eq + Hash,
 {
     slots: ArenaMap<K, Rc<V>>,
-    dedup: HashMap<Rc<V>, K, RandomState>,
+    dedup: HashMap<Rc<V>, K, ahash::RandomState>,
 }
 
 impl<K, V> UniqueArenaMap<K, V>
@@ -96,18 +96,35 @@ where
     /// assert_eq!(Rc::strong_count(&rc), 2); // only 2 refs, `rc` and 1x copy inside the map
     /// ```
     pub fn insert(&mut self, value: V) -> K {
-        if let Some(k) = self.dedup.get(&value) {
-            return *k;
+        match self.dedup.get(&value) {
+            Some(k) => *k,
+            None => self.insert_internal(value),
         }
+    }
 
+    /// Equivalent to [`Self::insert`] but will only make a copy
+    /// of the value if the value does not exist in the map. This
+    /// requires that `V` implements [`Clone`](std::clone::Clone).
+    pub fn insert_clone_if(&mut self, value: &V) -> K
+    where
+        V: Clone,
+    {
+        match self.dedup.get(value) {
+            Some(k) => *k,
+            None => self.insert_internal(value.clone()),
+        }
+    }
+
+    fn insert_internal(&mut self, value: V) -> K {
         let rc = Rc::new(value);
         let new_key = self.slots.insert(rc.clone());
 
-        if self.dedup.insert(rc, new_key).is_some() {
-            panic!("re-inserted existing value without being able to find it by lookup")
+        match self.dedup.insert(rc, new_key) {
+            Some(_) => {
+                unreachable!("re-inserted existing value without being able to find it by lookup")
+            }
+            None => new_key,
         }
-
-        new_key
     }
 
     /// Checks if the arena contains a given key, i.e. whether a given key

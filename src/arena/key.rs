@@ -19,6 +19,9 @@ use std::fmt::Debug;
 /// prefer to use the [`arena_key`](crate::arena_key) or [`dense_arena_key`](crate::dense_arena_key)
 /// macros that provide the implementation for you.
 pub trait ArenaKey: Copy + Eq + Debug {
+    /// The underlying data type of the key.
+    type Item;
+
     /// Creates a new key from a given arena index. This should do any necessary
     /// conversions to convert a `usize` index into the internal storage type,
     /// ideally the conversion should be lossless.
@@ -33,18 +36,6 @@ pub trait ArenaKey: Copy + Eq + Debug {
     ///
     /// This conversion should be lossless.
     fn index(self) -> usize;
-}
-
-/// Models a key type that can be used in packed data structures
-/// that require a "null" value (such as [`PackedOption<T>`](crate::utility::PackedOption)).
-pub trait PackableKey: ArenaKey {
-    /// Gets the reserved "null" key for a given key type
-    fn reserved() -> Self;
-
-    /// Checks if the key is the reserved value of the type.
-    fn is_reserved(&self) -> bool {
-        *self == Self::reserved()
-    }
 }
 
 /// Creates a type-safe key for a [`ArenaMap`](crate::arena::ArenaMap) and associated data structures.
@@ -76,6 +67,8 @@ macro_rules! arena_key {
         $vis struct $name($ty);
 
         impl $crate::arena::ArenaKey for $name {
+            type Item = $ty;
+
             #[inline]
             fn new(index: usize) -> Self {
                 use std::convert::TryInto;
@@ -126,7 +119,7 @@ macro_rules! dense_arena_key {
     ( $(#[$outer:meta])* $vis:vis struct $name:ident; $($rest:tt)* ) => {
         arena_key! { $(#[$outer])* $vis struct $name(u32); }
 
-        impl $crate::arena::PackableKey for $name {
+        impl $crate::utility::Packable for $name {
             #[inline]
             fn reserved() -> Self {
                 Self(u32::MAX)
@@ -146,8 +139,8 @@ macro_rules! dense_arena_key {
 
 #[cfg(test)]
 mod tests {
-    use super::PackableKey;
     use crate::arena::*;
+    use crate::utility::Packable;
     use crate::{arena_key, dense_arena_key};
     use static_assertions::assert_eq_size;
 
