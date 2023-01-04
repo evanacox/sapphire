@@ -126,6 +126,24 @@ impl<T, const N: usize> TinyArray<T, N> {
         Self::from_inline_buffer(array)
     }
 
+    /// Creates a [`TinyArray`] by cloning elements from a slice.
+    ///
+    /// ```
+    /// # use sapphire::utility::TinyArray;
+    /// let v = vec![1, 2, 3];
+    /// let arr = TinyArray::<i32, 2>::from_slice(&v);
+    /// assert_eq!(arr.as_slice(), &[1, 2, 3]);
+    /// ```
+    pub fn from_slice<'a>(slice: &'a [T]) -> Self
+    where
+        T: Clone,
+    {
+        match <&'a [T; N] as TryFrom<&'a [T]>>::try_from(slice) {
+            Ok(array) => Self::from_inline_buffer(array.clone()),
+            Err(_) => Self::from_large_buffer(slice.to_vec()),
+        }
+    }
+
     /// Checks if `self` is in the inline state.
     ///
     /// ```
@@ -759,6 +777,35 @@ mod tests {
         let a = TinyArray::from_arr([Pin::new(&1), Pin::new(&2)]);
     }
 
+    #[test]
+    fn from_slice() {
+        // inline
+        {
+            let v = vec![1, 2, 3, 4];
+            let a = [1, 2, 3, 4];
+
+            let t1 = TinyArray::<i32, 4>::from_slice(&v);
+            let t2 = TinyArray::<i32, 4>::from_slice(&a);
+
+            assert_eq!(v, a);
+            assert!(t1.is_inline());
+            assert!(t2.is_inline());
+        }
+
+        // spilled
+        {
+            let v = vec![1, 2, 3, 4, 5];
+            let a = [1, 2, 3, 4, 5];
+
+            let t1 = TinyArray::<i32, 2>::from_slice(&v);
+            let t2 = TinyArray::<i32, 2>::from_slice(&a);
+
+            assert_eq!(v, a);
+            assert!(t1.is_spilled());
+            assert!(t2.is_spilled());
+        }
+    }
+
     #[cfg(feature = "enable-serde")]
     use serde_test::{assert_tokens, Token};
 
@@ -788,5 +835,19 @@ mod tests {
         {
             matches(&TinyArray::<i32, 1>::from_vec(vec![1, 2, 3, 4]));
         }
+    }
+
+    extern crate test;
+
+    use test::Bencher;
+
+    #[bench]
+    fn bench_tiny_inline(b: &mut Bencher) {
+        b.iter(|| TinyArray::<i32, 2>::from_arr([1, 2]))
+    }
+
+    #[bench]
+    fn bench_tiny_spilled(b: &mut Bencher) {
+        b.iter(|| TinyArray::<i32, 2>::from_vec(vec![1, 2, 3]))
     }
 }

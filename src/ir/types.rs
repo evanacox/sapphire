@@ -14,6 +14,7 @@ use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
 use static_assertions::assert_eq_size;
 
+use crate::utility::Packable;
 #[cfg(feature = "enable-serde")]
 use serde::{Deserialize, Serialize};
 
@@ -29,7 +30,7 @@ arena_key! {
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
 #[cfg_attr(feature = "enable-serde", derive(Serialize, Deserialize))]
 enum CompoundTypeData {
-    Array(Type, usize),
+    Array(Type, u64),
     Struct(Vec<Type>),
 }
 
@@ -44,12 +45,12 @@ assert_eq_size!(CompoundTypeData, [usize; 4]);
 /// refers into this context for those larger types.
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "enable-serde", derive(Serialize, Deserialize))]
-pub struct TypeContext {
+pub struct TypePool {
     arena: UniqueArenaMap<CompoundTypeRef, CompoundTypeData>,
 }
 
-impl TypeContext {
-    /// Constructs a new, empty [`TypeContext`].
+impl TypePool {
+    /// Constructs a new, empty [`TypePool`].
     pub fn new() -> Self {
         Self {
             arena: UniqueArenaMap::default(),
@@ -60,12 +61,12 @@ impl TypeContext {
     ///
     /// ```
     /// # use sapphire::ir::*;
-    /// let mut ctx = TypeContext::new();
+    /// let mut ctx = TypePool::new();
     /// let t1 = Type::ptr();
     /// let t2 = ctx.array(t1, 512); // [ptr; 512]
     /// assert_eq!(t2.is_array(), true);
     /// ```
-    pub fn array(&mut self, inner: Type, len: usize) -> Type {
+    pub fn array(&mut self, inner: Type, len: u64) -> Type {
         let data = CompoundTypeData::Array(inner, len);
         let key = self.arena.insert(data);
 
@@ -76,7 +77,7 @@ impl TypeContext {
     ///
     /// ```
     /// # use sapphire::ir::*;
-    /// let mut ctx = TypeContext::new();
+    /// let mut ctx = TypePool::new();
     /// let ty = ctx.structure(&[Type::ptr(), Type::i64(), Type::i64()]); // [ptr; 512]
     /// assert_eq!(ty.is_struct(), true);
     /// ```
@@ -93,7 +94,7 @@ impl TypeContext {
     }
 }
 
-impl Default for TypeContext {
+impl Default for TypePool {
     fn default() -> Self {
         Self::new()
     }
@@ -295,7 +296,7 @@ impl Float {
 }
 
 /// Models an array type in the IR. Internally, contains a reference into
-/// the [`TypeContext`] that is being used for the module being operated on.
+/// the [`TypePool`] that is being used for the module being operated on.
 #[repr(transparent)]
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
 #[cfg_attr(feature = "enable-serde", derive(Serialize, Deserialize))]
@@ -308,13 +309,13 @@ impl Array {
     ///
     /// ```
     /// # use sapphire::ir::*;
-    /// let mut ctx = TypeContext::new();
+    /// let mut ctx = TypePool::new();
     /// let t1 = Type::array(&mut ctx, Type::i32(), 16);
     /// assert_eq!(t1.unwrap_array().len(&ctx), 16);
     /// ```
     #[inline]
     #[allow(clippy::len_without_is_empty)] // broken check, freaks out over `is_empty` sig but not this one's sig
-    pub fn len(&self, ctx: &TypeContext) -> usize {
+    pub fn len(&self, ctx: &TypePool) -> u64 {
         self.data(ctx).1
     }
 
@@ -322,12 +323,12 @@ impl Array {
     ///
     /// ```
     /// # use sapphire::ir::*;
-    /// let mut ctx = TypeContext::new();
+    /// let mut ctx = TypePool::new();
     /// let t1 = Type::array(&mut ctx, Type::i32(), 16);
     /// assert_eq!(t1.unwrap_array().is_empty(&ctx), false);
     /// ```
     #[inline]
-    pub fn is_empty(&self, ctx: &TypeContext) -> bool {
+    pub fn is_empty(&self, ctx: &TypePool) -> bool {
         self.len(ctx) == 0
     }
 
@@ -335,17 +336,17 @@ impl Array {
     ///
     /// ```
     /// # use sapphire::ir::*;
-    /// let mut ctx = TypeContext::new();
+    /// let mut ctx = TypePool::new();
     /// let t1 = Type::array(&mut ctx, Type::i32(), 16);
     /// assert_eq!(t1.unwrap_array().element(&ctx), Type::i32());
     /// ```
     #[inline]
-    pub fn element(&self, ctx: &TypeContext) -> Type {
+    pub fn element(&self, ctx: &TypePool) -> Type {
         self.data(ctx).0
     }
 
     #[inline]
-    fn data(&self, ctx: &TypeContext) -> (Type, usize) {
+    fn data(&self, ctx: &TypePool) -> (Type, u64) {
         match ctx.data_of(self.inner) {
             CompoundTypeData::Array(ty, len) => (*ty, *len),
             _ => unreachable!(),
@@ -354,7 +355,7 @@ impl Array {
 }
 
 /// Models a structure type in the IR. Internally, contains a reference into
-/// the [`TypeContext`] that is being used for the module being operated on.
+/// the [`TypePool`] that is being used for the module being operated on.
 #[repr(transparent)]
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
 #[cfg_attr(feature = "enable-serde", derive(Serialize, Deserialize))]
@@ -368,13 +369,13 @@ impl Struct {
     ///
     /// ```
     /// # use sapphire::ir::*;
-    /// use sapphire::ir::TypeContext;
-    /// let mut ctx = TypeContext::new();
+    /// use sapphire::ir::TypePool;
+    /// let mut ctx = TypePool::new();
     /// let ty = Type::structure(&mut ctx, &[Type::ptr(), Type::i64(), Type::i64()]);
     /// assert_eq!(*ty.unwrap_struct().members(&ctx), [Type::ptr(), Type::i64(), Type::i64()]);
     /// ```
     #[inline]
-    pub fn members<'a>(&self, ctx: &'a TypeContext) -> &'a [Type] {
+    pub fn members<'a>(&self, ctx: &'a TypePool) -> &'a [Type] {
         match ctx.data_of(self.inner) {
             CompoundTypeData::Struct(v) => v,
             _ => &[],
@@ -386,7 +387,7 @@ impl Struct {
 /// types in the IR.
 ///
 /// This type either contains all the information about the type (in the case of
-/// fundamental types), or contains a reference into a [`TypeContext`] that holds
+/// fundamental types), or contains a reference into a [`TypePool`] that holds
 /// the information about the type (only for arrays and structures).
 ///
 /// ```
@@ -431,17 +432,20 @@ macro_rules! int_shorthand {
 }
 
 impl Type {
-    const BOOL: u32 = 0b000;
+    // magic key for `Packable` so that we can use `PackedOption<Type>`
+    const NULL: u32 = 0b000;
 
-    const PTR: u32 = 0b001;
+    const BOOL: u32 = 0b001;
 
-    const INT: u32 = 0b010;
+    const PTR: u32 = 0b010;
 
-    const FLOAT: u32 = 0b011;
+    const INT: u32 = 0b011;
 
-    const ARRAY: u32 = 0b100;
+    const FLOAT: u32 = 0b100;
 
-    const STRUCT: u32 = 0b101;
+    const ARRAY: u32 = 0b101;
+
+    const STRUCT: u32 = 0b110;
 
     const DATA_SHIFT: u32 = 3;
 
@@ -450,11 +454,13 @@ impl Type {
     const DISCRIMINATOR_MASK: u32 = 0b111;
 
     /// Creates a boolean type (the `bool` type in the IR).
+    #[inline]
     pub const fn bool() -> Self {
         Self { raw: Self::BOOL }
     }
 
     /// Creates a pointer type (the `ptr` type in the IR).
+    #[inline]
     pub const fn ptr() -> Self {
         Self { raw: Self::PTR }
     }
@@ -468,6 +474,7 @@ impl Type {
     /// let t2 = Type::int(64);
     /// assert_ne!(t1, t2);
     /// ```
+    #[inline]
     pub const fn int(width: u32) -> Self {
         debug_assert!(width.is_power_of_two(), "width must be a power of two");
         debug_assert!(
@@ -493,6 +500,7 @@ impl Type {
     /// let t2 = Type::float(FloatFormat::Single);
     /// assert_ne!(t1, t2);
     /// ```
+    #[inline]
     pub const fn float(format: FloatFormat) -> Self {
         Self {
             raw: ((format as u32) << Self::DATA_SHIFT) | Self::FLOAT,
@@ -508,6 +516,7 @@ impl Type {
     /// let t2 = Type::float(FloatFormat::Single);
     /// assert_eq!(t1, t2);
     /// ```
+    #[inline]
     pub const fn f32() -> Self {
         Self::float(FloatFormat::Single)
     }
@@ -521,6 +530,7 @@ impl Type {
     /// let t2 = Type::float(FloatFormat::Double);
     /// assert_eq!(t1, t2);
     /// ```
+    #[inline]
     pub const fn f64() -> Self {
         Self::float(FloatFormat::Double)
     }
@@ -529,10 +539,10 @@ impl Type {
     ///
     /// ```
     /// # use sapphire::ir::*;
-    /// let mut ctx = TypeContext::new();
+    /// let mut ctx = TypePool::new();
     /// let ty = Type::array(&mut ctx, Type::i32(), 16); // => [i32; 16]
     /// ```
-    pub fn array(ctx: &mut TypeContext, inner: Type, length: usize) -> Self {
+    pub fn array(ctx: &mut TypePool, inner: Type, length: u64) -> Self {
         ctx.array(inner, length)
     }
 
@@ -540,10 +550,10 @@ impl Type {
     ///
     /// ```
     /// # use sapphire::ir::*;
-    /// let mut ctx = TypeContext::new();
+    /// let mut ctx = TypePool::new();
     /// let ty = Type::structure(&mut ctx, &[Type::i32(), Type::i32()]); // => { i32, i32 }
     /// ```
-    pub fn structure(ctx: &mut TypeContext, fields: &[Type]) -> Self {
+    pub fn structure(ctx: &mut TypePool, fields: &[Type]) -> Self {
         ctx.structure(fields)
     }
 
@@ -554,6 +564,7 @@ impl Type {
     /// let t1 = Type::bool();
     /// assert_eq!(t1.is_bool(), true);
     /// ```
+    #[inline]
     pub const fn is_bool(&self) -> bool {
         self.discriminator() == Self::BOOL
     }
@@ -565,6 +576,7 @@ impl Type {
     /// let t1 = Type::ptr();
     /// assert_eq!(t1.is_ptr(), true);
     /// ```
+    #[inline]
     pub const fn is_ptr(&self) -> bool {
         self.discriminator() == Self::PTR
     }
@@ -576,6 +588,7 @@ impl Type {
     /// let t1 = Type::int(32);
     /// assert_eq!(t1.is_int(), true);
     /// ```
+    #[inline]
     pub const fn is_int(&self) -> bool {
         self.discriminator() == Self::INT
     }
@@ -587,11 +600,24 @@ impl Type {
     /// let t1 = Type::int(64);
     /// assert_eq!(t1.is_int_of_width(64), true);
     /// ```
+    #[inline]
     pub const fn is_int_of_width(&self, width: u32) -> bool {
         match (self.discriminator(), self.data()) {
             (Self::INT, w) => w == width,
             _ => false,
         }
+    }
+
+    /// Checks if a type is a `bool` or an `iN`.
+    ///
+    /// ```
+    /// # use sapphire::ir::*;
+    /// let t1 = Type::int(64);
+    /// assert_eq!(t1.is_bool_or_int(), true);
+    /// ```
+    #[inline]
+    pub const fn is_bool_or_int(&self) -> bool {
+        self.is_bool() || self.is_int()
     }
 
     /// Checks if the type is an [`Int`] with a width of 8.
@@ -661,6 +687,7 @@ impl Type {
     /// let t1 = Type::bool();
     /// assert_eq!(t1.is_bool(), true);
     /// ```
+    #[inline]
     pub const fn is_float(&self) -> bool {
         self.discriminator() == Self::FLOAT
     }
@@ -672,6 +699,7 @@ impl Type {
     /// let t1 = Type::float(FloatFormat::Double);
     /// assert_eq!(t1.is_float_of_format(FloatFormat::Double), true);
     /// ```
+    #[inline]
     pub const fn is_float_of_format(&self, format: FloatFormat) -> bool {
         match (self.discriminator(), self.data()) {
             (Self::FLOAT, w) => w == format as u32,
@@ -716,6 +744,7 @@ impl Type {
     /// let t1 = Type::bool();
     /// assert_eq!(t1.is_array(), false);
     /// ```
+    #[inline]
     pub const fn is_array(&self) -> bool {
         self.discriminator() == Self::ARRAY
     }
@@ -727,6 +756,7 @@ impl Type {
     /// let t1 = Type::bool();
     /// assert_eq!(t1.is_struct(), false);
     /// ```
+    #[inline]
     pub const fn is_struct(&self) -> bool {
         self.discriminator() == Self::STRUCT
     }
@@ -870,6 +900,16 @@ impl From<Type> for UType {
 impl From<UType> for Type {
     fn from(value: UType) -> Self {
         value.pack()
+    }
+}
+
+impl Packable for Type {
+    fn reserved() -> Self {
+        Self { raw: Self::NULL }
+    }
+
+    fn is_reserved(&self) -> bool {
+        self.raw == Self::NULL
     }
 }
 

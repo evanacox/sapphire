@@ -8,9 +8,11 @@
 //                                                                           //
 //======---------------------------------------------------------------======//
 
+use crate::arena::ArenaKey;
 use crate::dense_arena_key;
-use crate::ir::{Inst, Value};
-use smallvec::SmallVec;
+use crate::ir::Value;
+use crate::utility::Str;
+use smallvec::{smallvec, SmallVec};
 
 #[cfg(feature = "enable-serde")]
 use serde::{Deserialize, Serialize};
@@ -30,9 +32,38 @@ dense_arena_key! {
 ///   1. A linear sequence of instructions, ending in a terminator.
 ///   2. Zero or more basic-block parameters modeling the φs that the block has as input.
 ///
+/// ```other
+/// something(i32 %x):
+///   %0 = iconst i32 42
+///   %1 = imul i32 %x, %0
+///   %2 = iconst i32 21862829
+///   %3 = xor i32 %1, %2
+///   br next(i32 %3)
+/// ```
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
 #[cfg_attr(feature = "enable-serde", derive(Serialize, Deserialize))]
 pub struct BasicBlock {
-    body: SmallVec<[Inst; 2]>,
-    params: SmallVec<[Value; 2]>,
+    data: SmallVec<[Value; 4]>,
+}
+
+impl BasicBlock {
+    pub(in crate::ir) fn new(name: Str) -> Self {
+        Self {
+            data: smallvec![Value::new(name.0 as usize)],
+        }
+    }
+
+    /// Gets the name of the block.
+    pub fn name(&self) -> Str {
+        Str(self.data[0].index() as u32)
+    }
+
+    /// Gets the parameters of the block.
+    pub fn params(&self) -> &[Value] {
+        &self.data[1..]
+    }
+
+    pub(in crate::ir) fn append_param(&mut self, val: Value) {
+        self.data.push(val);
+    }
 }

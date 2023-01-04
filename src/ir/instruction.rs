@@ -8,10 +8,12 @@
 //                                                                           //
 //======---------------------------------------------------------------======//
 
+use crate::arena::ArenaKey;
 use crate::ir::{Block, FloatFormat, Func, Sig, Type, Value};
-use crate::utility::TinyArray;
+use crate::utility::{PackedOption, TinyArray};
+use smallvec::SmallVec;
 use static_assertions::assert_eq_size;
-use std::slice;
+use std::{iter, slice};
 
 #[cfg(feature = "enable-serde")]
 use serde::{Deserialize, Serialize};
@@ -34,7 +36,7 @@ pub enum InstData {
     /// `fcmp op T %a, %b`, models a floating-point comparison
     FCmp(FCmpInst),
     /// `sel bool %cond, T %a, T %b`, models a ternary-like instruction
-    Sel(CondBrInst),
+    Sel(SelInst),
     /// `br block`, models an unconditional branch
     Br(BrInst),
     /// `condbr bool %cond, if block1, else block2`, models a conditional branch between two blocks
@@ -94,7 +96,7 @@ pub enum InstData {
     /// `insert T %s, U %a, N`, inserts a value into an aggregate
     Insert(InsertInst),
     /// `elemptr T, ptr %p, N`, gets a pointer into an aggregate
-    Elemptr(ElemPtrInst),
+    ElemPtr(ElemPtrInst),
     /// `sext T, U %b`, performs sign-extension
     Sext(CastInst),
     /// `zext T, U %b`, performs zero-extension
@@ -172,7 +174,7 @@ impl Instruction for InstData {
             InstData::Offset(e) => e.operands(),
             InstData::Extract(e) => e.operands(),
             InstData::Insert(e) => e.operands(),
-            InstData::Elemptr(e) => e.operands(),
+            InstData::ElemPtr(e) => e.operands(),
             InstData::Sext(e) => e.operands(),
             InstData::Zext(e) => e.operands(),
             InstData::Trunc(e) => e.operands(),
@@ -231,7 +233,7 @@ impl Instruction for InstData {
             InstData::Offset(e) => e.result_ty(),
             InstData::Extract(e) => e.result_ty(),
             InstData::Insert(e) => e.result_ty(),
-            InstData::Elemptr(e) => e.result_ty(),
+            InstData::ElemPtr(e) => e.result_ty(),
             InstData::Sext(e) => e.result_ty(),
             InstData::Zext(e) => e.result_ty(),
             InstData::Trunc(e) => e.result_ty(),
@@ -320,6 +322,61 @@ pub trait UnaryInst: Instruction {
     }
 }
 
+/// Models a branch target, along with any arguments being passed into that block.
+///
+/// The argument info is just as important as the branch target itself, and the two are
+/// tied together at any given usage. Thus, both are always stored.
+#[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
+#[cfg_attr(feature = "enable-serde", derive(Serialize, Deserialize))]
+pub struct BlockWithParams {
+    // stores both the block and any params, params is usually length 0 so this works
+    // fine without needing a heap allocation
+    data: TinyArray<Value, 2>,
+}
+
+impl BlockWithParams {
+    /// Creates a branch target that includes an optional list of arguments.
+    ///
+    /// An empty `params` list signifies no arguments being passed.  
+    pub fn new(target: Block, params: &[Value]) -> Self {
+        let mut vals = SmallVec::<[Value; 2]>::new();
+
+        vals.push(Value::raw_from(target));
+        vals.extend_from_slice(params);
+
+        Self {
+            data: TinyArray::from_small_vec(vals),
+        }
+    }
+
+    /// Same as [`Self::new`] but specifically when there's a pre-existing vec
+    /// of parameters.
+    ///
+    /// An empty `params` list signifies no arguments being passed.  
+    pub fn from_vec(target: Block, mut params: Vec<Value>) -> Self {
+        params.insert(0, Value::raw_from(target));
+
+        Self {
+            data: TinyArray::from_vec(params),
+        }
+    }
+
+    /// Gets the block target by itself.
+    #[inline]
+    pub fn block(&self) -> Block {
+        Block::new(self.data[0].index())
+    }
+
+    /// Gets the block arguments being passed, if any
+    #[inline]
+    pub fn args(&self) -> &[Value] {
+        match self.data.get(1..) {
+            Some(vals) => vals,
+            None => &[],
+        }
+    }
+}
+
 /// Models a terminator, i.e. the only instructions that are allowed at the end
 /// of a basic block.
 ///
@@ -330,7 +387,7 @@ pub trait Terminator: Instruction {
     /// once this instruction is executed.
     ///
     /// Note that this might be empty, see `unreachable` or `ret`.
-    fn targets(&self) -> &[Block];
+    fn targets(&self) -> &[BlockWithParams];
 
     #[doc(hidden)]
     fn __operands(&self) -> &[Value];
@@ -383,9 +440,9 @@ pub struct ICmpInst {
 }
 
 impl ICmpInst {
-    pub(in crate::ir) fn new(comp: ICmpOp, lhs: Value, rhs: Value) -> Self {
+    pub(in crate::ir) fn new(cmp: ICmpOp, lhs: Value, rhs: Value) -> Self {
         Self {
-            comparison: comp,
+            comparison: cmp,
             operands: [lhs, rhs],
         }
     }
@@ -547,30 +604,30 @@ impl Instruction for SelInst {
 /// ```raw
 /// br block
 /// ```
-#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
 #[cfg_attr(feature = "enable-serde", derive(Serialize, Deserialize))]
 pub struct BrInst {
-    target: Block,
+    target: BlockWithParams,
 }
 
 impl BrInst {
-    pub(in crate::ir) fn new(target: Block) -> Self {
+    pub(in crate::ir) fn new(target: BlockWithParams) -> Self {
         Self { target }
     }
 
     /// Gets the target branch being jumped to
-    pub fn target(&self) -> Block {
-        self.target
+    pub fn target(&self) -> &BlockWithParams {
+        &self.target
     }
 }
 
 impl Terminator for BrInst {
-    fn targets(&self) -> &[Block] {
+    fn targets(&self) -> &[BlockWithParams] {
         slice::from_ref(&self.target)
     }
 
     fn __operands(&self) -> &[Value] {
-        &[]
+        self.target.args()
     }
 }
 
@@ -579,44 +636,48 @@ impl Terminator for BrInst {
 /// ```raw
 /// condbr bool %0, block1, block2
 /// ```
-#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
 #[cfg_attr(feature = "enable-serde", derive(Serialize, Deserialize))]
 pub struct CondBrInst {
-    operand: Value,
-    targets: [Block; 2],
+    condition: Value,
+    targets: [BlockWithParams; 2],
 }
 
 impl CondBrInst {
-    pub(in crate::ir) fn new(cond: Value, if_true: Block, otherwise: Block) -> Self {
+    pub(in crate::ir) fn new(
+        cond: Value,
+        if_true: BlockWithParams,
+        otherwise: BlockWithParams,
+    ) -> Self {
         Self {
-            operand: cond,
+            condition: cond,
             targets: [if_true, otherwise],
         }
     }
 
     /// Gets the condition being checked in the `condbr`
     pub fn condition(&self) -> Value {
-        self.operand
+        self.condition
     }
 
     /// Gets the branch being jumped to if the condition is `true`
-    pub fn true_branch(&self) -> Block {
-        self.targets[0]
+    pub fn true_branch(&self) -> &BlockWithParams {
+        &self.targets[0]
     }
 
     /// Gets the branch being jumped to if the condition is `false`
-    pub fn false_branch(&self) -> Block {
-        self.targets[1]
+    pub fn false_branch(&self) -> &BlockWithParams {
+        &self.targets[1]
     }
 }
 
 impl Terminator for CondBrInst {
-    fn targets(&self) -> &[Block] {
+    fn targets(&self) -> &[BlockWithParams] {
         &self.targets
     }
 
     fn __operands(&self) -> &[Value] {
-        slice::from_ref(&self.operand)
+        slice::from_ref(&self.condition)
     }
 }
 
@@ -636,7 +697,7 @@ impl UnreachableInst {
 }
 
 impl Terminator for UnreachableInst {
-    fn targets(&self) -> &[Block] {
+    fn targets(&self) -> &[BlockWithParams] {
         &[]
     }
 
@@ -653,16 +714,12 @@ impl Terminator for UnreachableInst {
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
 #[cfg_attr(feature = "enable-serde", derive(Serialize, Deserialize))]
 pub struct RetInst {
-    returning: Type,
     value: Option<Value>,
 }
 
 impl RetInst {
-    pub(in crate::ir) fn new(output: Type, val: Option<Value>) -> Self {
-        Self {
-            value: val,
-            returning: output,
-        }
+    pub(in crate::ir) fn new(val: Option<Value>) -> Self {
+        Self { value: val }
     }
 
     /// Gets the value being returned, if any.
@@ -672,7 +729,7 @@ impl RetInst {
 }
 
 impl Terminator for RetInst {
-    fn targets(&self) -> &[Block] {
+    fn targets(&self) -> &[BlockWithParams] {
         &[]
     }
 
@@ -783,44 +840,42 @@ impl UnaryInst for FloatUnaryInst {}
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
 #[cfg_attr(feature = "enable-serde", derive(Serialize, Deserialize))]
 pub struct CallInst {
-    output: Option<Type>,
+    output: PackedOption<Type>,
     operands: TinyArray<Value, 2>,
 }
 
-assert_eq_size!(TinyArray<Value, 2>, [u64; 2]);
+assert_eq_size!(CallInst, [u64; 3]);
 
 impl CallInst {
-    pub(in crate::ir) fn new(
-        output: Option<Type>,
-        signature: Sig,
-        callee: Func,
-        args: &[Value],
-    ) -> Self {
-        let mut vec = vec![Value::raw_from(callee), Value::raw_from(signature)];
-
-        vec.extend_from_slice(args);
+    pub(in crate::ir) fn new(output: Option<Type>, sig: Sig, callee: Func, args: &[Value]) -> Self {
+        let sig = iter::once(Value::raw_from(sig));
+        let callee = iter::once(Value::raw_from(callee));
+        let args = args.iter().copied();
 
         Self {
-            output,
-            operands: TinyArray::from_vec(vec),
+            output: output.into(),
+            operands: TinyArray::from_iter(sig.chain(callee).chain(args)),
         }
+    }
+
+    /// Gets the function signature
+    pub fn sig(&self) -> Sig {
+        self.operands[0].raw_into()
     }
 
     /// Gets the function being called
     pub fn callee(&self) -> Func {
         // we take the underlying data of the first key and convert it
         // into a function key instead, since that's what it actually is
-        self.operands[0].raw_into()
+        self.operands[1].raw_into()
     }
 
     /// Gets the arguments being passed into the function
     pub fn args(&self) -> &[Value] {
-        &self.operands[2..]
-    }
-
-    /// Gets the function signature
-    pub fn sig(&self) -> Sig {
-        self.operands[1].raw_into()
+        match self.operands.get(2..) {
+            Some(args) => args,
+            None => &[],
+        }
     }
 }
 
@@ -830,19 +885,19 @@ impl Instruction for CallInst {
     }
 
     fn result_ty(&self) -> Option<Type> {
-        self.output
+        self.output.expand()
     }
 }
 
 /// Models an indirect call to a function stored in a pointer.
 ///
 /// ```raw
-/// %2 = indirectcall void %0(i32 %1)
+/// %2 = indirectcall void (i32), ptr %0(i32 %1)
 /// ```
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
 #[cfg_attr(feature = "enable-serde", derive(Serialize, Deserialize))]
 pub struct IndirectCallInst {
-    output: Option<Type>, // compiler is combining the combining of `Option` and `Type` here
+    output: PackedOption<Type>,
     operands: TinyArray<Value, 2>,
 }
 
@@ -853,14 +908,19 @@ impl IndirectCallInst {
         callee: Value,
         args: &[Value],
     ) -> Self {
-        let mut vec = vec![Value::raw_from(signature), callee];
-
-        vec.extend_from_slice(args);
+        let sig = iter::once(Value::raw_from(signature));
+        let callee = iter::once(callee);
+        let args = args.iter().copied();
 
         Self {
-            operands: TinyArray::from_vec(vec),
-            output,
+            output: output.into(),
+            operands: TinyArray::from_iter(sig.chain(callee).chain(args)),
         }
+    }
+
+    /// Gets the function signature
+    pub fn sig(&self) -> Sig {
+        self.operands[0].raw_into()
     }
 
     /// Gets the function pointer being called
@@ -870,12 +930,10 @@ impl IndirectCallInst {
 
     /// Gets the arguments being passed to the call
     pub fn args(&self) -> &[Value] {
-        &self.operands[2..]
-    }
-
-    /// Gets the function signature
-    pub fn sig(&self) -> Sig {
-        self.operands[0].raw_into()
+        match self.operands.get(2..) {
+            Some(args) => args,
+            None => &[],
+        }
     }
 }
 
@@ -885,7 +943,7 @@ impl Instruction for IndirectCallInst {
     }
 
     fn result_ty(&self) -> Option<Type> {
-        self.output
+        self.output.expand()
     }
 }
 

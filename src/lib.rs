@@ -18,7 +18,6 @@
 #![deny(
     unreachable_pub,
     missing_docs,
-    missing_debug_implementations,
     missing_abi,
     rust_2018_idioms,
     rustdoc::broken_intra_doc_links,
@@ -28,6 +27,7 @@
 #![feature(is_some_and)]
 #![feature(fn_traits)]
 #![feature(vec_into_raw_parts)]
+#![feature(map_try_insert)]
 
 //! # Sapphire
 //!
