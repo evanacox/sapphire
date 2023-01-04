@@ -16,8 +16,8 @@ int factorial(int x) {
 }
 ```
 
-```
-def i32 @factorial(i32) {
+```llvm
+fn i32 @factorial(i32) {
 entry(i32 %x):
   %0 = iconst i32 2
   %1 = icmp lt i32 %x, %0
@@ -57,7 +57,7 @@ int fibonacci(int x) {
 ```
 
 ```llvm
-def i32 @fibonacci(i32) {
+fn i32 @fibonacci(i32) {
 entry(i32 %0):
   %1 = iconst i32 0
   %2 = iconst i32 1
