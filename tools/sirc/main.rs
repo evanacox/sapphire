@@ -14,18 +14,23 @@ use sapphire::reader;
 use std::fs;
 
 fn main() {
-    let matches = cli::tool("sirc", "Sapphire IR Static Compiler").get_matches();
+    let (_, base) = cli::tool(
+        "static compiler for Sapphire IR",
+        "Usage: sirc [options] <input ir> ",
+        cli::emit_machine_format(),
+    )
+    .run();
 
-    for file in cli::inputs(&matches) {
-        let source = fs::read_to_string(&file).expect("file did not exist");
+    // for now, non-utf8 path names aren't real
+    let source = fs::read_to_string(&base.input).expect("file did not exist");
+    let filename = base.input.into_os_string().into_string().unwrap();
 
-        match reader::parse_sir(&file, &source) {
-            Ok(module) => {
-                analysis::print_module(&module);
-            }
-            Err(e) => {
-                eprintln!("failed to parse: {e}");
-            }
+    match reader::parse_sir(&filename, &source) {
+        Ok(module) => {
+            analysis::print_module(&module);
+        }
+        Err(e) => {
+            eprintln!("failed to parse: {e}");
         }
     }
 }
