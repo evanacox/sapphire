@@ -1359,7 +1359,7 @@ pub struct NullConstInst {
 }
 
 impl NullConstInst {
-    fn new(ty: Type) -> Self {
+    pub(in crate::ir) fn new(ty: Type) -> Self {
         Self { ty }
     }
 }

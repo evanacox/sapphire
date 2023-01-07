@@ -181,15 +181,15 @@ impl SIRParser {
         &mut self,
         module: &mut Module,
         pair: Pair<'a, Rule>,
-    ) -> ParseResult<(Func, Option<Pairs<'a, Rule>>)> {
+    ) -> ParseResult<(Func, Option<Pair<'a, Rule>>)> {
         debug_assert!(matches!(pair.as_rule(), Rule::function));
 
         let mut pairs = pair.into_inner();
         let proto = pairs.next_or("expected a function prototype");
         let (name, sig) = self.parse_func_proto(proto, module.type_pool_mut())?;
-        let key = module.declare_function(name, sig);
+        let key = module.declare_function(&name, sig);
 
-        Ok((key, pairs.peek().map(|_| pairs)))
+        Ok((key, pairs.next()))
     }
 
     // parses the function prototype (the `fn T @name(...) abi` part) and returns the name/signature
@@ -203,30 +203,23 @@ impl SIRParser {
         let mut proto = pair.into_inner();
 
         let ty_or_void = proto.next_or("expected a type or `void`");
-        let return_ty = self.parse_ty_or_void(ty_or_void, pool)?;
 
         let global_ident = proto.next_or("expected a global name");
         let name = self.parse_global(global_ident)?;
 
+        let return_ty = self.parse_ty_or_void(ty_or_void, pool)?;
         let param_list = proto.next_or("expected a parameter list");
         let (params, variadic) = self.parse_param_list(param_list, pool)?;
-
         let abi = self.parse_abi(proto.next())?;
 
-        let with_attributes: SmallVec<[(Type, ParamAttributes); 2]> = params
-            .into_iter()
-            .map(|param| (param, ParamAttributes::empty()))
-            .collect();
+        let sig = SigBuilder::new()
+            .ret(return_ty)
+            .params(&params)
+            .vararg(variadic)
+            .abi(abi)
+            .build();
 
-        Ok((
-            name,
-            Signature::new(
-                with_attributes,
-                (return_ty, RetAttributes::empty()),
-                abi,
-                variadic,
-            ),
-        ))
+        Ok((name, sig))
     }
 
     // parses a function's abi if it has one
@@ -280,9 +273,11 @@ impl SIRParser {
 
     fn parse_func_body(
         &mut self,
-        rest: Pairs<'_, Rule>,
+        pair: Pair<'_, Rule>,
         mut builder: FuncBuilder<'_>,
     ) -> ParseResult<()> {
+        debug_assert!(matches!(pair.as_rule(), Rule::function_body));
+
         self.next = 0;
         self.resolver.clear();
 
@@ -291,17 +286,19 @@ impl SIRParser {
         // inside of the function before we parse code that may potentially
         // jump between them.
         let mut delayed = Vec::default();
+        let rest = pair.into_inner();
 
         for block in rest {
             delayed.push(self.preprocess_block(block, &mut builder)?);
         }
 
-        for (block, body) in delayed
+        for (block, label, body) in delayed
             .into_iter()
-            .filter(|(_, body)| body.is_some())
-            .map(|(block, body)| (block, body.unwrap()))
+            .filter(|(_, _, body)| body.is_some())
+            .map(|(block, label, body)| (block, label, body.unwrap()))
         {
             builder.switch_to(block);
+            self.verify_block_label(label, &mut builder)?;
             self.parse_block_body(body, &mut builder)?;
         }
 
@@ -314,12 +311,29 @@ impl SIRParser {
         &mut self,
         block: Pair<'a, Rule>,
         builder: &mut FuncBuilder<'_>,
-    ) -> ParseResult<(Block, Option<Pairs<'a, Rule>>)> {
+    ) -> ParseResult<(Block, Pair<'a, Rule>, Option<Pairs<'a, Rule>>)> {
         let mut pairs = block.into_inner();
         let label = pairs.next_or("expected block label");
-        let block = self.parse_block_label(label, builder)?;
+        let label_copy = label.clone();
+        let span = label.as_span();
+        let block = self.preprocess_block_label(label, builder)?;
 
-        Ok((block, pairs.peek().map(|_| pairs)))
+        if builder.is_entry_block(block) {
+            let sig = builder.current_signature();
+            let block_params = builder.block_params(block);
+
+            let param_tys = sig.params().iter().map(|(ty, _)| *ty);
+            let block_param_tys = block_params.iter().map(|val| builder.ty(*val));
+
+            if !param_tys.eq(block_param_tys) {
+                return Err(message_into_err(
+                    span,
+                    "function parameters do not match parameters of entry block",
+                ));
+            }
+        }
+
+        Ok((block, label_copy, pairs.peek().map(|_| pairs)))
     }
 
     fn parse_block_body(
@@ -334,7 +348,7 @@ impl SIRParser {
         Ok(())
     }
 
-    fn parse_block_label(
+    fn preprocess_block_label(
         &mut self,
         pair: Pair<'_, Rule>,
         builder: &mut FuncBuilder<'_>,
@@ -352,7 +366,7 @@ impl SIRParser {
             // we take a pair for the name here instead of a LocalIdent, because we need
             // the debuginfo just as much as we need the actual name.
             for (ty, ident) in self.parse_operand_list(params, builder.type_pool_mut())? {
-                let (ident, debug) = self.parse_new_local(ident, builder)?;
+                let (ident, debug) = self.preprocess_block_param_local(ident, builder)?;
                 let param = builder.append_block_param(block, ty, debug);
 
                 self.resolver.insert(ident, param);
@@ -360,6 +374,30 @@ impl SIRParser {
         }
 
         Ok(block)
+    }
+
+    //
+    fn verify_block_label(
+        &mut self,
+        pair: Pair<'_, Rule>,
+        builder: &mut FuncBuilder<'_>,
+    ) -> ParseResult<()> {
+        debug_assert!(matches!(pair.as_rule(), Rule::block_label));
+
+        let mut pairs = pair.into_inner();
+        let ident = pairs.next_or("expected ident");
+
+        debug_assert!(matches!(ident.as_rule(), Rule::ident));
+
+        if let Some(params) = pairs.next() {
+            // we take a pair for the name here instead of a LocalIdent, because we need
+            // the debuginfo just as much as we need the actual name.
+            for (_, ident) in self.parse_operand_list(params, builder.type_pool_mut())? {
+                self.verify_block_param_local(ident, builder)?;
+            }
+        }
+
+        Ok(())
     }
 
     fn parse_operand_list<'a>(
@@ -467,7 +505,7 @@ impl SIRParser {
 
         let args = self.parse_arg_with_types(
             &signature,
-            pairs.next_or("expected cal arguments"),
+            pairs.next_or("expected call arguments"),
             builder,
         )?;
 
@@ -528,8 +566,10 @@ impl SIRParser {
         }
     }
 
+    // lol
+    #[allow(clippy::too_many_arguments)]
     #[inline]
-    fn parse_generic_arg_with_types<'a, I, F1, F2>(
+    fn parse_generic_arg_with_types<'a, I, F1, F2, F3>(
         &mut self,
         pair: Pair<'a, Rule>,
         builder: &mut FuncBuilder<'_>,
@@ -537,17 +577,21 @@ impl SIRParser {
         vararg: bool,
         mismatch: F1,
         unexpected: F2,
+        missing: F3,
     ) -> ParseResult<Vec<Value>>
     where
-        I: Iterator<Item = Type>,
+        I: Iterator<Item = Type> + ExactSizeIterator,
         F1: FnOnce(&'a str, Type, Type, &FuncBuilder<'_>) -> ParseResult<Vec<Value>>,
         F2: FnOnce(&'a str, &FuncBuilder<'_>) -> ParseResult<Vec<Value>>,
+        F3: FnOnce(usize, usize, &FuncBuilder<'_>) -> ParseResult<Vec<Value>>,
     {
         debug_assert!(matches!(pair.as_rule(), Rule::args_with_types));
 
+        let expected = param_tys.len();
         let clone = pair.clone();
         let inner = pair.into_inner();
         let mut vec = Vec::default();
+        let mut count = 0;
 
         for operand in inner {
             let val = self.parse_operand(operand, builder)?;
@@ -562,10 +606,16 @@ impl SIRParser {
                     return unexpected(clone.as_str(), builder);
                 }
                 // no issues
-                _ => {}
+                _ => {
+                    count += 1;
+                }
             }
 
             vec.push(val);
+        }
+
+        if count != expected && !vararg {
+            return missing(count, expected, builder);
         }
 
         Ok(vec)
@@ -588,27 +638,31 @@ impl SIRParser {
         let span = pair.as_span();
 
         let mismatch = |val, t1, t2, builder: &FuncBuilder<'_>| {
-            let msg = format!(
-                        "while parsing args for block '{}', mismatched types for value '{}', expected '{}' but got '{}'",
-                        builder.block_name(block),
-                        val,
-                        stringify_ty(builder.type_pool(), t1),
-                        stringify_ty(builder.type_pool(), t2)
-                    );
-
-            let err = string_into_err(span, msg);
+            let name = builder.block_name(block);
+            let ty1 = stringify_ty(builder.type_pool(), t1);
+            let ty2 = stringify_ty(builder.type_pool(), t2);
+            let err = string_into_err(span, format!(
+                "while parsing args for block '{name}', mismatched types for value '{val}', expected '{ty1}' but got '{ty2}'",
+            ));
 
             Err(err)
         };
 
         let unexpected = |val, builder: &FuncBuilder<'_>| {
-            let msg = format!(
-                "while parsing args for block '{}', unexpected parameter '{}'",
-                builder.block_name(block),
-                val,
+            let name = builder.block_name(block);
+            let err = string_into_err(
+                span,
+                format!("while parsing args for block '{name}', unexpected parameter '{val}'",),
             );
 
-            let err = string_into_err(span, msg);
+            Err(err)
+        };
+
+        let missing = |count, expected, builder: &FuncBuilder<'_>| {
+            let name = builder.block_name(block);
+            let err = string_into_err(span, format!(
+                "not enough arguments given for block '{name}', got {count} args but expected {expected}"
+            ));
 
             Err(err)
         };
@@ -620,6 +674,7 @@ impl SIRParser {
             false,
             mismatch,
             unexpected,
+            missing,
         )
     }
 
@@ -660,7 +715,27 @@ impl SIRParser {
             Err(err)
         };
 
-        self.parse_generic_arg_with_types(pair, builder, params, sig.vararg(), mismatch, unexpected)
+        let missing = |count, expected, builder: &FuncBuilder<'_>| {
+            let sig = stringify_signature(builder.type_pool(), sig);
+            let msg = format!(
+                "while parsing args for function with signature '{sig}', \
+expected {expected} arguments but got {count}"
+            );
+
+            let err = string_into_err(span, msg);
+
+            Err(err)
+        };
+
+        self.parse_generic_arg_with_types(
+            pair,
+            builder,
+            params,
+            sig.vararg(),
+            mismatch,
+            unexpected,
+            missing,
+        )
     }
 
     fn parse_indirect_call(
@@ -675,18 +750,7 @@ impl SIRParser {
         let result = self.parse_optional_result(&mut inner, builder)?;
         let sig = self.parse_signature(inner.next_or("expected signature"), builder)?;
 
-        let ptr_ty = inner.next_or("expected ptr_ty");
-        let ptr_span = ptr_ty.as_span();
-
-        if self.parse_ty(ptr_ty, builder.type_pool_mut())? != Type::ptr() {
-            return Err(string_into_err(
-                ptr_span,
-                format!(
-                    "expected type 'ptr' but got '{}'",
-                    stringify_ty(builder.type_pool(), Type::ptr())
-                ),
-            ));
-        }
+        let _ = inner.next_or("expected ptr_ty");
 
         let callee = self.parse_existing_local_of_ty(
             inner.next_or("expected operand"),
@@ -888,15 +952,31 @@ impl SIRParser {
         debug_assert!(matches!(pair.as_rule(), Rule::ret));
 
         let info = pair_into_info(pair.clone(), self.filename, None);
+        let as_span = pair.as_span();
         let mut inner = pair.into_inner();
 
         match inner.next() {
             Some(operand) => {
+                let operand_span = operand.as_span();
                 let val = self.parse_operand(operand, builder)?;
+
+                if builder.current_signature().is_void() {
+                    return Err(message_into_err(
+                        operand_span,
+                        "cannot return value from 'void' function",
+                    ));
+                }
 
                 builder.append().ret_val(val, info);
             }
             None => {
+                if !builder.current_signature().is_void() {
+                    return Err(message_into_err(
+                        as_span,
+                        "must return value from non-'void' function",
+                    ));
+                }
+
                 builder.append().ret_void(info);
             }
         }
@@ -1023,9 +1103,16 @@ impl SIRParser {
     ) -> ParseResult<()> {
         debug_assert!(matches!(pair.as_rule(), Rule::alloca));
 
-        let _ = builder;
+        let mut inner = pair.into_inner();
+        let result = inner.next_or("expected result");
+        let ty_pair = inner.next_or("expected type");
 
-        todo!()
+        let (name, info) = self.parse_result(result, builder)?;
+        let ty = self.parse_ty(ty_pair, builder.type_pool_mut())?;
+
+        self.append_val(builder, name).alloca(ty, info);
+
+        Ok(())
     }
 
     fn parse_load(
@@ -1035,9 +1122,19 @@ impl SIRParser {
     ) -> ParseResult<()> {
         debug_assert!(matches!(pair.as_rule(), Rule::load));
 
-        let _ = builder;
+        let mut inner = pair.into_inner();
+        let result = inner.next_or("expected result");
+        let ty_pair = inner.next_or("expected type");
+        let _ = inner.next_or("expected ptr");
+        let val_pair = inner.next_or("expected value");
 
-        todo!()
+        let (name, info) = self.parse_result(result, builder)?;
+        let ty = self.parse_ty(ty_pair, builder.type_pool_mut())?;
+        let operand = self.parse_existing_local_of_ty(val_pair, Type::ptr(), builder)?;
+
+        self.append_val(builder, name).load(ty, operand, info);
+
+        Ok(())
     }
 
     fn parse_store(
@@ -1047,9 +1144,19 @@ impl SIRParser {
     ) -> ParseResult<()> {
         debug_assert!(matches!(pair.as_rule(), Rule::store));
 
-        let _ = builder;
+        let mut inner = pair.into_inner();
+        let result = inner.next_or("expected result");
+        let operand = inner.next_or("expected operand");
+        let _ = inner.next_or("expected ptr");
+        let val_pair = inner.next_or("expected value");
 
-        todo!()
+        let (name, info) = self.parse_result(result, builder)?;
+        let operand = self.parse_operand(operand, builder)?;
+        let ptr = self.parse_existing_local_of_ty(val_pair, Type::ptr(), builder)?;
+
+        self.append_val(builder, name).store(operand, ptr, info);
+
+        Ok(())
     }
 
     fn parse_offset(
@@ -1059,9 +1166,87 @@ impl SIRParser {
     ) -> ParseResult<()> {
         debug_assert!(matches!(pair.as_rule(), Rule::offset));
 
-        let _ = builder;
+        let mut inner = pair.into_inner();
+        let result = inner.next_or("expected result");
+        let ty_pair = inner.next_or("expected ty");
+        let _ = inner.next_or("expected ptr");
+        let base_pair = inner.next_or("expected value");
+        let int_ty = inner.next_or("expected int_ty");
+        let offset_pair = inner.next_or("expected local");
 
-        todo!()
+        let (name, info) = self.parse_result(result, builder)?;
+        let ty = self.parse_ty(ty_pair, builder.type_pool_mut())?;
+        let offset_ty = self.parse_int_ty(int_ty)?;
+        let base = self.parse_existing_local_of_ty(base_pair, Type::ptr(), builder)?;
+        let offset = self.parse_existing_local_of_ty(offset_pair, offset_ty, builder)?;
+
+        self.append_val(builder, name)
+            .offset(ty, base, offset, info);
+
+        Ok(())
+    }
+
+    fn agg_ty_properties(agg: Type, idx: u64, pool: &TypePool) -> (bool, Type) {
+        match agg.unpack() {
+            UType::Struct(ty) => {
+                let members = ty.members(pool);
+                let expected = members.get(idx as usize).copied();
+
+                (expected.is_some(), expected.unwrap_or_else(Type::reserved))
+            }
+            UType::Array(ty) => {
+                let element = ty.element(pool);
+                let len = ty.len(pool);
+
+                (idx < len, element)
+            }
+            _ => unreachable!(),
+        }
+    }
+
+    fn check_agg_within_bounds(in_bounds: bool, idx_span: Span<'_>) -> ParseResult<()> {
+        if !in_bounds {
+            return Err(message_into_err(
+                idx_span,
+                "index out of bounds for aggregate",
+            ));
+        }
+
+        Ok(())
+    }
+
+    fn check_agg_correct_ty(
+        expected: Type,
+        got: Type,
+        idx_span: Span<'_>,
+        pool: &TypePool,
+    ) -> ParseResult<()> {
+        if expected != got {
+            let expected = stringify_ty(pool, expected);
+            let got = stringify_ty(pool, got);
+
+            return Err(string_into_err(
+                idx_span,
+                format!("incorrect extract ty, expected '{expected}' but got '{got}'"),
+            ));
+        }
+
+        Ok(())
+    }
+
+    fn check_agg_operation_types(
+        agg: Type,
+        got: Type,
+        idx: u64,
+        idx_span: Span<'_>,
+        builder: &FuncBuilder<'_>,
+    ) -> ParseResult<()> {
+        let (in_bounds, expected) = Self::agg_ty_properties(agg, idx, builder.type_pool());
+
+        Self::check_agg_within_bounds(in_bounds, idx_span)?;
+        Self::check_agg_correct_ty(expected, got, idx_span, builder.type_pool())?;
+
+        Ok(())
     }
 
     fn parse_extract(
@@ -1071,9 +1256,26 @@ impl SIRParser {
     ) -> ParseResult<()> {
         debug_assert!(matches!(pair.as_rule(), Rule::extract));
 
-        let _ = builder;
+        let mut inner = pair.into_inner();
+        let result = inner.next_or("expected result");
+        let out_ty_pair = inner.next_or("expected ty");
+        let agg_ty_pair = inner.next_or("expected struct_ty or array_ty");
+        let agg_pair = inner.next_or("expected local");
+        let idx_pair = inner.next_or("expected int constant");
+        let idx_span = idx_pair.as_span();
 
-        todo!()
+        let (name, info) = self.parse_result(result, builder)?;
+        let out_ty = self.parse_ty(out_ty_pair, builder.type_pool_mut())?;
+        let agg_ty = self.parse_array_or_struct_ty(agg_ty_pair, builder.type_pool_mut())?;
+        let agg = self.parse_existing_local_of_ty(agg_pair, agg_ty, builder)?;
+        let idx = self.parse_int_lit(64, idx_pair)?;
+
+        Self::check_agg_operation_types(agg_ty, out_ty, idx, idx_span, builder)?;
+
+        self.append_val(builder, name)
+            .extract(out_ty, agg, idx, info);
+
+        Ok(())
     }
 
     fn parse_insert(
@@ -1083,9 +1285,26 @@ impl SIRParser {
     ) -> ParseResult<()> {
         debug_assert!(matches!(pair.as_rule(), Rule::insert));
 
-        let _ = builder;
+        let mut inner = pair.into_inner();
+        let result = inner.next_or("expected result");
+        let agg_ty_pair = inner.next_or("expected struct_ty or array_ty");
+        let agg_pair = inner.next_or("expected local");
+        let operand_pair = inner.next_or("expected operand");
+        let idx_pair = inner.next_or("expected int constant");
+        let idx_span = idx_pair.as_span();
 
-        todo!()
+        let (name, info) = self.parse_result(result, builder)?;
+        let agg_ty = self.parse_array_or_struct_ty(agg_ty_pair, builder.type_pool_mut())?;
+        let agg = self.parse_existing_local_of_ty(agg_pair, agg_ty, builder)?;
+        let to_insert = self.parse_operand(operand_pair, builder)?;
+        let idx = self.parse_int_lit(64, idx_pair)?;
+
+        Self::check_agg_operation_types(agg_ty, builder.ty(to_insert), idx, idx_span, builder)?;
+
+        self.append_val(builder, name)
+            .insert(agg, to_insert, idx, info);
+
+        Ok(())
     }
 
     fn parse_elemptr(
@@ -1095,9 +1314,27 @@ impl SIRParser {
     ) -> ParseResult<()> {
         debug_assert!(matches!(pair.as_rule(), Rule::elemptr));
 
-        let _ = builder;
+        let mut inner = pair.into_inner();
+        let result = inner.next_or("expected result");
+        let agg_ty_pair = inner.next_or("expected struct_ty or array_ty");
+        let _ = inner.next_or("expected ptr_ty");
+        let base_pair = inner.next_or("expected local");
+        let idx_pair = inner.next_or("expected int constant");
+        let idx_span = idx_pair.as_span();
 
-        todo!()
+        let (name, info) = self.parse_result(result, builder)?;
+        let agg_ty = self.parse_array_or_struct_ty(agg_ty_pair, builder.type_pool_mut())?;
+        let base = self.parse_existing_local_of_ty(base_pair, Type::ptr(), builder)?;
+        let idx = self.parse_int_lit(64, idx_pair)?;
+
+        let (in_bounds, _) = Self::agg_ty_properties(agg_ty, idx, builder.type_pool());
+
+        Self::check_agg_within_bounds(in_bounds, idx_span)?;
+
+        self.append_val(builder, name)
+            .elemptr(agg_ty, base, idx, info);
+
+        Ok(())
     }
 
     fn parse_int_conv(
@@ -1107,9 +1344,55 @@ impl SIRParser {
     ) -> ParseResult<()> {
         debug_assert!(matches!(pair.as_rule(), Rule::int_conv));
 
-        let _ = builder;
+        let mut inner = pair.into_inner();
+        let result_pair = inner.next_or("expected result");
+        let opcode = inner.next_or("expected opcode");
+        let into_int_ty_pair = inner.next_or("expected int_ty");
+        let from_int_ty_pair = inner.next_or("expected int_ty");
+        let from_local = inner.next_or("expected local");
 
-        todo!()
+        let (name, info) = self.parse_result(result_pair, builder)?;
+        let into = self.parse_int_ty(into_int_ty_pair.clone())?;
+        let from = self.parse_int_ty(from_int_ty_pair)?;
+        let from_val = self.parse_existing_local_of_ty(from_local, from, builder)?;
+
+        let builder = self.append_val(builder, name);
+
+        match opcode.as_str() {
+            "sext" => {
+                if into.unwrap_int().width() <= from.unwrap_int().width() {
+                    return Err(message_into_err(
+                        into_int_ty_pair.as_span(),
+                        "'sext' result type must be larger than input type",
+                    ));
+                }
+
+                builder.sext(into, from_val, info);
+            }
+            "zext" => {
+                if into.unwrap_int().width() <= from.unwrap_int().width() {
+                    return Err(message_into_err(
+                        into_int_ty_pair.as_span(),
+                        "'zext' result type must be larger than input type",
+                    ));
+                }
+
+                builder.zext(into, from_val, info);
+            }
+            "trunc" => {
+                if into.unwrap_int().width() >= from.unwrap_int().width() {
+                    return Err(message_into_err(
+                        into_int_ty_pair.as_span(),
+                        "'trunc' result type must be smaller than input type",
+                    ));
+                }
+
+                builder.trunc(into, from_val, info);
+            }
+            _ => unreachable!(),
+        }
+
+        Ok(())
     }
 
     fn parse_itob(
@@ -1119,9 +1402,19 @@ impl SIRParser {
     ) -> ParseResult<()> {
         debug_assert!(matches!(pair.as_rule(), Rule::itob));
 
-        let _ = builder;
+        let mut inner = pair.into_inner();
+        let result_pair = inner.next_or("expected result");
+        let _ = inner.next_or("expected bool ty");
+        let from_int_ty_pair = inner.next_or("expected int_ty");
+        let from_local = inner.next_or("expected local");
 
-        todo!()
+        let (name, info) = self.parse_result(result_pair, builder)?;
+        let from = self.parse_int_ty(from_int_ty_pair)?;
+        let from_val = self.parse_existing_local_of_ty(from_local, from, builder)?;
+
+        self.append_val(builder, name).itob(from_val, info);
+
+        Ok(())
     }
 
     fn parse_btoi(
@@ -1131,9 +1424,19 @@ impl SIRParser {
     ) -> ParseResult<()> {
         debug_assert!(matches!(pair.as_rule(), Rule::btoi));
 
-        let _ = builder;
+        let mut inner = pair.into_inner();
+        let result_pair = inner.next_or("expected result");
+        let into_int_ty_pair = inner.next_or("expected bool ty");
+        let _ = inner.next_or("expected bool_ty");
+        let from_local = inner.next_or("expected local");
 
-        todo!()
+        let (name, info) = self.parse_result(result_pair, builder)?;
+        let into = self.parse_int_ty(into_int_ty_pair)?;
+        let from_val = self.parse_existing_local_of_ty(from_local, Type::bool(), builder)?;
+
+        self.append_val(builder, name).btoi(into, from_val, info);
+
+        Ok(())
     }
 
     fn parse_int_to_float(
@@ -1143,9 +1446,27 @@ impl SIRParser {
     ) -> ParseResult<()> {
         debug_assert!(matches!(pair.as_rule(), Rule::int_to_float));
 
-        let _ = builder;
+        let mut inner = pair.into_inner();
+        let result_pair = inner.next_or("expected result");
+        let opcode = inner.next_or("expected opcode");
+        let into_float_ty_pair = inner.next_or("expected float_ty");
+        let from_int_ty_pair = inner.next_or("expected int_ty");
+        let from_local = inner.next_or("expected local");
 
-        todo!()
+        let (name, info) = self.parse_result(result_pair, builder)?;
+        let into = self.parse_float_ty(into_float_ty_pair)?;
+        let from = self.parse_int_ty(from_int_ty_pair)?;
+        let from_val = self.parse_existing_local_of_ty(from_local, from, builder)?;
+
+        let builder = self.append_val(builder, name);
+
+        match opcode.as_str() {
+            "sitof" => builder.sitof(into, from_val, info),
+            "uitof" => builder.uitof(into, from_val, info),
+            _ => unreachable!(),
+        };
+
+        Ok(())
     }
 
     fn parse_float_to_int(
@@ -1155,9 +1476,27 @@ impl SIRParser {
     ) -> ParseResult<()> {
         debug_assert!(matches!(pair.as_rule(), Rule::float_to_int));
 
-        let _ = builder;
+        let mut inner = pair.into_inner();
+        let result_pair = inner.next_or("expected result");
+        let opcode = inner.next_or("expected opcode");
+        let into_int_ty_pair = inner.next_or("expected int_ty");
+        let from_float_ty_pair = inner.next_or("expected float_ty");
+        let from_local = inner.next_or("expected local");
 
-        todo!()
+        let (name, info) = self.parse_result(result_pair, builder)?;
+        let into = self.parse_int_ty(into_int_ty_pair)?;
+        let from = self.parse_float_ty(from_float_ty_pair)?;
+        let from_val = self.parse_existing_local_of_ty(from_local, from, builder)?;
+
+        let builder = self.append_val(builder, name);
+
+        match opcode.as_str() {
+            "ftosi" => builder.ftosi(into, from_val, info),
+            "ftoui" => builder.ftoui(into, from_val, info),
+            _ => unreachable!(),
+        };
+
+        Ok(())
     }
 
     fn parse_float_conv(
@@ -1167,9 +1506,45 @@ impl SIRParser {
     ) -> ParseResult<()> {
         debug_assert!(matches!(pair.as_rule(), Rule::float_conv));
 
-        let _ = builder;
+        let mut inner = pair.into_inner();
+        let result_pair = inner.next_or("expected result");
+        let opcode = inner.next_or("expected opcode");
+        let into_ty_pair = inner.next_or("expected float_ty");
+        let from_ty_pair = inner.next_or("expected float_ty");
+        let from_local = inner.next_or("expected local");
 
-        todo!()
+        let (name, info) = self.parse_result(result_pair, builder)?;
+        let into = self.parse_float_ty(into_ty_pair.clone())?;
+        let from = self.parse_float_ty(from_ty_pair)?;
+        let from_val = self.parse_existing_local_of_ty(from_local, from, builder)?;
+
+        let builder = self.append_val(builder, name);
+
+        match opcode.as_str() {
+            "fext" => {
+                if into.unwrap_float().format() as u32 <= from.unwrap_int().width() {
+                    return Err(message_into_err(
+                        into_ty_pair.as_span(),
+                        "'fext' result type must be larger than input type",
+                    ));
+                }
+
+                builder.sext(into, from_val, info);
+            }
+            "ftrunc" => {
+                if into.unwrap_float().format() as u32 >= from.unwrap_int().width() {
+                    return Err(message_into_err(
+                        into_ty_pair.as_span(),
+                        "'ftrunc' result type must be smaller than input type",
+                    ));
+                }
+
+                builder.zext(into, from_val, info);
+            }
+            _ => unreachable!(),
+        }
+
+        Ok(())
     }
 
     fn parse_itop(
@@ -1179,9 +1554,19 @@ impl SIRParser {
     ) -> ParseResult<()> {
         debug_assert!(matches!(pair.as_rule(), Rule::itop));
 
-        let _ = builder;
+        let mut inner = pair.into_inner();
+        let result_pair = inner.next_or("expected result");
+        let _ = inner.next_or("expected ptr_ty");
+        let from_int_ty_pair = inner.next_or("expected int_ty");
+        let from_local = inner.next_or("expected local");
 
-        todo!()
+        let (name, info) = self.parse_result(result_pair, builder)?;
+        let from = self.parse_int_ty(from_int_ty_pair)?;
+        let from_val = self.parse_existing_local_of_ty(from_local, from, builder)?;
+
+        self.append_val(builder, name).itop(from_val, info);
+
+        Ok(())
     }
 
     fn parse_ptoi(
@@ -1191,9 +1576,19 @@ impl SIRParser {
     ) -> ParseResult<()> {
         debug_assert!(matches!(pair.as_rule(), Rule::ptoi));
 
-        let _ = builder;
+        let mut inner = pair.into_inner();
+        let result_pair = inner.next_or("expected result");
+        let into_int_ty_pair = inner.next_or("expected bool ty");
+        let _ = inner.next_or("expected ptr_ty");
+        let from_local = inner.next_or("expected local");
 
-        todo!()
+        let (name, info) = self.parse_result(result_pair, builder)?;
+        let into = self.parse_int_ty(into_int_ty_pair)?;
+        let from_val = self.parse_existing_local_of_ty(from_local, Type::ptr(), builder)?;
+
+        self.append_val(builder, name).ptoi(into, from_val, info);
+
+        Ok(())
     }
 
     fn parse_iconst(
@@ -1203,9 +1598,18 @@ impl SIRParser {
     ) -> ParseResult<()> {
         debug_assert!(matches!(pair.as_rule(), Rule::iconst));
 
-        let _ = builder;
+        let mut inner = pair.into_inner();
+        let result_pair = inner.next_or("expected result");
+        let ty_pair = inner.next_or("expected int_ty");
+        let literal = inner.next_or("expected int_literal");
 
-        todo!()
+        let (name, info) = self.parse_result(result_pair, builder)?;
+        let into = self.parse_int_ty(ty_pair)?;
+        let val = self.parse_int_lit(into.unwrap_int().width(), literal)?;
+
+        self.append_val(builder, name).iconst(into, val, info);
+
+        Ok(())
     }
 
     fn parse_fconst(
@@ -1215,9 +1619,18 @@ impl SIRParser {
     ) -> ParseResult<()> {
         debug_assert!(matches!(pair.as_rule(), Rule::fconst));
 
-        let _ = builder;
+        let mut inner = pair.into_inner();
+        let result_pair = inner.next_or("expected result");
+        let ty_pair = inner.next_or("expected float_ty");
+        let literal = inner.next_or("expected float_literal");
 
-        todo!()
+        let (name, info) = self.parse_result(result_pair, builder)?;
+        let into = self.parse_float_ty(ty_pair)?;
+        let val = self.parse_float_lit(into.unwrap_float().format(), literal)?;
+
+        self.append_val(builder, name).fconst_raw(into, val, info);
+
+        Ok(())
     }
 
     fn parse_bconst(
@@ -1227,9 +1640,17 @@ impl SIRParser {
     ) -> ParseResult<()> {
         debug_assert!(matches!(pair.as_rule(), Rule::bconst));
 
-        let _ = builder;
+        let mut inner = pair.into_inner();
+        let result_pair = inner.next_or("expected result");
+        let _ = inner.next_or("expected bool_ty");
+        let literal = inner.next_or("expected bool_literal");
 
-        todo!()
+        let (name, info) = self.parse_result(result_pair, builder)?;
+        let val = self.parse_bool_lit(literal)?;
+
+        self.append_val(builder, name).bconst(val, info);
+
+        Ok(())
     }
 
     fn parse_undef(
@@ -1239,9 +1660,16 @@ impl SIRParser {
     ) -> ParseResult<()> {
         debug_assert!(matches!(pair.as_rule(), Rule::undef));
 
-        let _ = builder;
+        let mut inner = pair.into_inner();
+        let result_pair = inner.next_or("expected result");
+        let ty_pair = inner.next_or("expected ty");
 
-        todo!()
+        let (name, info) = self.parse_result(result_pair, builder)?;
+        let ty = self.parse_ty(ty_pair, builder.type_pool_mut())?;
+
+        self.append_val(builder, name).undef(ty, info);
+
+        Ok(())
     }
 
     fn parse_null(
@@ -1251,9 +1679,16 @@ impl SIRParser {
     ) -> ParseResult<()> {
         debug_assert!(matches!(pair.as_rule(), Rule::null));
 
-        let _ = builder;
+        let mut inner = pair.into_inner();
+        let result_pair = inner.next_or("expected result");
+        let ty_pair = inner.next_or("expected ty");
 
-        todo!()
+        let (name, info) = self.parse_result(result_pair, builder)?;
+        let ty = self.parse_ty(ty_pair, builder.type_pool_mut())?;
+
+        self.append_val(builder, name).null(ty, info);
+
+        Ok(())
     }
 
     fn parse_globaladdr(
@@ -1491,6 +1926,54 @@ impl SIRParser {
         }
     }
 
+    // preprocesses block param idents so that we can just get them registered for now
+    // (so that other code can't use them too), but we dont check that the number is actually
+    // in order yet. we do that when we come back to the block after pre-processing
+    fn preprocess_block_param_local(
+        &mut self,
+        pair: Pair<'_, Rule>,
+        builder: &mut FuncBuilder<'_>,
+    ) -> ParseResult<(LocalIdent, DebugInfo)> {
+        let span = pair.as_span();
+        let (local, debug) = self.parse_raw_local(pair, builder)?;
+
+        // we intentionally skip the numbering, but we also return the pair so
+        // that it can be properly verified for numbering later.
+        if self.resolver.contains_key(&local) {
+            return Err(string_into_err(
+                span,
+                format!("duplicate value '{}'", span.as_str()),
+            ));
+        }
+
+        Ok((local, debug))
+    }
+
+    fn verify_block_param_local(
+        &mut self,
+        pair: Pair<'_, Rule>,
+        builder: &mut FuncBuilder<'_>,
+    ) -> ParseResult<()> {
+        let span = pair.as_span();
+        let (local, _) = self.parse_raw_local(pair, builder)?;
+
+        if let LocalIdent::Num(num) = local {
+            if num != self.next {
+                let msg = format!(
+                    "block param should be numbered '%{}' but got '%{num}'",
+                    self.next
+                );
+                let err = string_into_err(span, msg);
+
+                return Err(err);
+            }
+
+            self.next += 1;
+        }
+
+        Ok(())
+    }
+
     // parses a local that shouldn't have been seen before in the current function. this is for
     // result names, block parma names, etc
     fn parse_new_local(
@@ -1546,6 +2029,18 @@ impl SIRParser {
         Ok(pair.as_str().chars().skip(1).collect())
     }
 
+    fn parse_array_or_struct_ty(
+        &mut self,
+        pair: Pair<'_, Rule>,
+        pool: &mut TypePool,
+    ) -> ParseResult<Type> {
+        match pair.as_rule() {
+            Rule::array_ty => self.parse_array_ty(pair, pool),
+            Rule::struct_ty => self.parse_struct_ty(pair, pool),
+            _ => unreachable!(),
+        }
+    }
+
     fn parse_ty_or_void(
         &mut self,
         pair: Pair<'_, Rule>,
@@ -1596,6 +2091,28 @@ impl SIRParser {
         }
     }
 
+    fn parse_array_ty(&mut self, pair: Pair<'_, Rule>, pool: &mut TypePool) -> ParseResult<Type> {
+        debug_assert!(matches!(pair.as_rule(), Rule::array_ty));
+
+        let mut pairs = pair.into_inner();
+        let ty = pairs.next_or("expected ty for array");
+        let lit = pairs.next_or("expected int literal for array");
+        let elem_ty = self.parse_ty(ty, pool)?;
+        let len = self.parse_int_lit(64, lit)?;
+
+        Ok(Type::array(pool, elem_ty, len))
+    }
+
+    fn parse_struct_ty(&mut self, pair: Pair<'_, Rule>, pool: &mut TypePool) -> ParseResult<Type> {
+        debug_assert!(matches!(pair.as_rule(), Rule::struct_ty));
+
+        let mut pairs = pair.into_inner();
+        let list = pairs.next_or("expected ty list for struct");
+        let tys = self.parse_ty_list(list, pool)?;
+
+        Ok(Type::structure(pool, &tys))
+    }
+
     fn parse_ty(&mut self, pair: Pair<'_, Rule>, pool: &mut TypePool) -> ParseResult<Type> {
         debug_assert!(matches!(pair.as_rule(), Rule::ty));
 
@@ -1606,43 +2123,98 @@ impl SIRParser {
             Rule::float_ty => self.parse_float_ty(inner),
             Rule::bool_ty => Ok(Type::bool()),
             Rule::ptr_ty => Ok(Type::ptr()),
-            Rule::array_ty => {
-                let mut pairs = inner.into_inner();
-                let ty = pairs.next_or("expected ty for array");
-                let lit = pairs.next_or("expected int literal for array");
-                let elem_ty = self.parse_ty(ty, pool)?;
-                let len = self.parse_int_lit(lit)?;
-
-                Ok(Type::array(pool, elem_ty, len))
-            }
-            Rule::struct_ty => {
-                let mut pairs = inner.into_inner();
-                let list = pairs.next_or("expected ty list for struct");
-                let tys = self.parse_ty_list(list, pool)?;
-
-                Ok(Type::structure(pool, &tys))
-            }
+            Rule::array_ty => self.parse_array_ty(inner, pool),
+            Rule::struct_ty => self.parse_struct_ty(inner, pool),
             _ => unreachable!(),
         }
     }
 
-    fn parse_int_lit(&mut self, lit: Pair<'_, Rule>) -> ParseResult<u64> {
+    fn parse_int_lit(&mut self, width: u32, lit: Pair<'_, Rule>) -> ParseResult<u64> {
         debug_assert!(matches!(lit.as_rule(), Rule::int_literal));
 
         let s = lit.as_str();
 
         if s.starts_with('-') {
-            Ok(i64::from_str(s)? as u64)
+            match width {
+                8 => Ok(i8::from_str(s)? as u8 as u64),
+                16 => Ok(i16::from_str(s)? as u16 as u64),
+                32 => Ok(i32::from_str(s)? as u32 as u64),
+                64 => Ok(i64::from_str(s)? as u64),
+                _ => unreachable!(),
+            }
         } else if s.starts_with("0b") {
-            Ok(u64::from_str_radix(s, 2)?)
+            match width {
+                8 => Ok(u8::from_str_radix(s, 2)? as u64),
+                16 => Ok(u16::from_str_radix(s, 2)? as u64),
+                32 => Ok(u32::from_str_radix(s, 2)? as u64),
+                64 => Ok(u64::from_str_radix(s, 2)?),
+                _ => unreachable!(),
+            }
         } else if s.starts_with("0o") {
-            Ok(u64::from_str_radix(s, 8)?)
+            match width {
+                8 => Ok(u8::from_str_radix(s, 8)? as u64),
+                16 => Ok(u16::from_str_radix(s, 8)? as u64),
+                32 => Ok(u32::from_str_radix(s, 8)? as u64),
+                64 => Ok(u64::from_str_radix(s, 8)?),
+                _ => unreachable!(),
+            }
         } else if s.starts_with("0x") {
-            Ok(u64::from_str_radix(s, 16)?)
+            match width {
+                8 => Ok(u8::from_str_radix(s, 16)? as u64),
+                16 => Ok(u16::from_str_radix(s, 16)? as u64),
+                32 => Ok(u32::from_str_radix(s, 16)? as u64),
+                64 => Ok(u64::from_str_radix(s, 16)?),
+                _ => unreachable!(),
+            }
         } else {
             debug_assert!(s.chars().all(|c| c.is_ascii_digit()));
 
-            Ok(u64::from_str(s)?)
+            match width {
+                8 => Ok(u8::from_str(s)? as u64),
+                16 => Ok(u16::from_str(s)? as u64),
+                32 => Ok(u32::from_str(s)? as u64),
+                64 => Ok(u64::from_str(s)?),
+                _ => unreachable!(),
+            }
+        }
+    }
+
+    fn parse_float_lit(&mut self, format: FloatFormat, lit: Pair<'_, Rule>) -> ParseResult<u64> {
+        debug_assert!(matches!(lit.as_rule(), Rule::float_literal));
+
+        match lit.as_str() {
+            "NaN" => match format {
+                FloatFormat::Single => Ok(f32::NAN.to_bits() as u64),
+                FloatFormat::Double => Ok(f64::NAN.to_bits()),
+            },
+            s if s.starts_with("0xfp") => match format {
+                FloatFormat::Single => {
+                    Ok(u32::from_str_radix(s.strip_prefix("0xfp").unwrap(), 16)? as u64)
+                }
+                FloatFormat::Double => {
+                    Ok(u64::from_str_radix(s.strip_prefix("0xfp").unwrap(), 16)?)
+                }
+            },
+            s => {
+                let raw = match format {
+                    FloatFormat::Single => f32::from_str(s).map(|f| f.to_bits() as u64),
+                    FloatFormat::Double => f64::from_str(s).map(|f| f.to_bits()),
+                };
+
+                raw.map_err(|err| {
+                    string_into_err(lit.as_span(), format!("unable to parse float: '{err}'"))
+                })
+            }
+        }
+    }
+
+    fn parse_bool_lit(&mut self, lit: Pair<'_, Rule>) -> ParseResult<bool> {
+        debug_assert!(matches!(lit.as_rule(), Rule::bool_literal));
+
+        match lit.as_str() {
+            "true" => Ok(true),
+            "false" => Ok(false),
+            _ => unreachable!(),
         }
     }
 

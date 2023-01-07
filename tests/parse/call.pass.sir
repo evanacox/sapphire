@@ -1,0 +1,9 @@
+fn i32 @printf(ptr, ...)
+
+fn void @test() {
+entry:
+  %0 = undef ptr
+  %1 = undef i32
+  %2 = call i32 @printf(ptr %0, i32 %1)
+  ret void
+}

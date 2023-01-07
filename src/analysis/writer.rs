@@ -91,6 +91,11 @@ pub fn print_module(module: &Module) {
     println!("{}", ModuleWriter::from(module).module());
 }
 
+/// Writes an entire module to a [`String`].
+pub fn stringify_module(module: &Module) -> String {
+    ModuleWriter::from(module).module().to_owned()
+}
+
 /// This is an analysis that provides a [`ModuleWriter`] to any code that wants it.
 ///
 /// This analysis needs to be run in the standard way for a correct [`ModuleWriter`]
@@ -149,7 +154,7 @@ impl ModuleAnalysisPass for ModuleWriterAnalysis {
 pub(crate) fn stringify_ty(ctx: &TypePool, ty: Type) -> String {
     match ty.unpack() {
         UType::Bool(_) => "bool".to_owned(),
-        UType::Ptr(_) => "bool".to_owned(),
+        UType::Ptr(_) => "ptr".to_owned(),
         UType::Int(i) => format!("i{}", i.width()),
         UType::Float(f) => {
             let real = if f.format() == FloatFormat::Single {
@@ -168,6 +173,12 @@ pub(crate) fn stringify_ty(ctx: &TypePool, ty: Type) -> String {
             )
         }
         UType::Struct(structure) => {
+            let members = structure.members(ctx);
+
+            if members.is_empty() {
+                return "{}".to_owned();
+            }
+
             let mut result = "{ ".to_owned();
 
             for field in structure.members(ctx) {
@@ -175,7 +186,7 @@ pub(crate) fn stringify_ty(ctx: &TypePool, ty: Type) -> String {
             }
 
             if result.ends_with(", ") {
-                result.truncate(", ".len() - ", ".len());
+                result.truncate(result.len() - ", ".len());
             }
 
             result + " }"
@@ -201,7 +212,7 @@ fn write_sig_params(buf: &mut String, ctx: &TypePool, sig: &Signature) {
         if it.peek().is_some() {
             *buf += ", ";
         } else if sig.vararg() {
-            *buf += "...";
+            *buf += ", ...";
         }
     }
 
@@ -351,7 +362,7 @@ impl<'m> WriterImpl<'m> {
         } else {
             let args = self.args(block.args(), def);
 
-            format!("{name}{args}")
+            format!("{name}({args})")
         }
     }
 
@@ -392,14 +403,14 @@ impl<'m> SIRVisitor<'m> for WriterImpl<'m> {
     }
 
     fn walk(&mut self) {
-        let mut it = self.module().functions();
+        let mut it = self.module().functions().peekable();
 
         // if we have any functions at all, print first one without leading \n
         if let Some(func) = it.next() {
             self.visit_func(func);
         }
 
-        // for any remaining functions, print a newline to split them up
+        // for any remaining functions, print newlines to split them up
         // then print the function
         for func in it {
             self.state.whole += "\n";
@@ -418,8 +429,8 @@ impl<'m> SIRVisitor<'m> for WriterImpl<'m> {
             let name = self.func_name(func);
             let params = self.param_tys(sig);
 
-            // 'fn T @name(...) '
-            self.state.whole += &format!("fn {ty} {name}{params} ");
+            // 'fn T @name(tys) '
+            self.state.whole += &format!("fn {ty} {name}{params}");
 
             // '{fastcc|sysv|win64|ccc} '
             match sig.calling_conv() {
@@ -429,13 +440,25 @@ impl<'m> SIRVisitor<'m> for WriterImpl<'m> {
 
             // body
             if let Some(def) = f.definition() {
-                self.state.whole += "{\n";
+                self.state.whole += " {\n";
 
-                self.dispatch_blocks(def);
+                for block in def.layout.blocks() {
+                    self.visit_block(block, def);
+
+                    // add a gap to make it easier to read
+                    self.state.whole += "\n";
+                }
+
+                // remove last gap so the } is immediately after
+                self.state
+                    .whole
+                    .truncate(self.state.whole.len() - "\n".len());
 
                 // blocks print a newline after every inst, including last one
-                self.state.whole += "}\n";
+                self.state.whole += "}";
             }
+
+            self.state.whole += "\n";
         }
 
         let end = self.state.whole.len();
@@ -824,8 +847,22 @@ impl<'m> SIRVisitor<'m> for WriterImpl<'m> {
     fn visit_iconst(&mut self, inst: Inst, data: &IConstInst, def: &FunctionDefinition) {
         self.result(inst, def);
 
+        let int_type = data.result_ty().unwrap();
+        let int_ty = int_type.unwrap_int();
         let ty = self.ty(data.result_ty().unwrap());
-        let value = data.value();
+
+        // if the sign bit is set, format it as a negative
+        let value = if data.value() != (!int_ty.sign_bit() & data.value() & int_ty.mask()) {
+            match int_ty.width() {
+                8 => format!("{}", data.value() as i8),
+                16 => format!("{}", data.value() as i16),
+                32 => format!("{}", data.value() as i32),
+                64 => format!("{}", data.value() as i64),
+                _ => unreachable!(),
+            }
+        } else {
+            format!("{}", data.value())
+        };
 
         self.state.whole += &format!("iconst {ty} {value}");
     }
@@ -835,8 +872,18 @@ impl<'m> SIRVisitor<'m> for WriterImpl<'m> {
 
         let ty = self.ty(data.result_ty().unwrap());
         let value = data.value();
+        let is_nan = match data.result_ty().unwrap().unwrap_float().format() {
+            FloatFormat::Single => f32::from_bits(value as u32).is_nan(),
+            FloatFormat::Double => f64::from_bits(value).is_nan(),
+        };
 
-        self.state.whole += &format!("fconst {ty} 0xfp{value:020X}");
+        let result = if is_nan {
+            format!("fconst {ty} NaN")
+        } else {
+            format!("fconst {ty} 0xfp{value:020X}")
+        };
+
+        self.state.whole += &result;
     }
 
     fn visit_bconst(&mut self, inst: Inst, data: &BConstInst, def: &FunctionDefinition) {
@@ -870,5 +917,540 @@ impl<'m> SIRVisitor<'m> for WriterImpl<'m> {
         let name = data.name();
 
         self.state.whole += &format!("globaladdr @{name}");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_write_type() {
+        let mut module = Module::new("test");
+        let writer = ModuleWriter::from(&module);
+
+        {
+            let pool = module.type_pool();
+
+            assert_eq!(writer.ty(pool, Type::bool()), "bool");
+            assert_eq!(writer.ty(pool, Type::ptr()), "ptr");
+            assert_eq!(writer.ty(pool, Type::i8()), "i8");
+            assert_eq!(writer.ty(pool, Type::i16()), "i16");
+            assert_eq!(writer.ty(pool, Type::i32()), "i32");
+            assert_eq!(writer.ty(pool, Type::i64()), "i64");
+            assert_eq!(writer.ty(pool, Type::f32()), "f32");
+            assert_eq!(writer.ty(pool, Type::f64()), "f64");
+        }
+
+        {
+            let i8_512 = Type::array(module.type_pool_mut(), Type::i8(), 512);
+            assert_eq!(writer.ty(module.type_pool(), i8_512), "[i8; 512]");
+
+            let i8_512_16 = Type::array(module.type_pool_mut(), i8_512, 16);
+            assert_eq!(writer.ty(module.type_pool(), i8_512_16), "[[i8; 512]; 16]");
+
+            let ptr_0 = Type::array(module.type_pool_mut(), Type::ptr(), 0);
+            assert_eq!(writer.ty(module.type_pool(), ptr_0), "[ptr; 0]");
+
+            let unit = Type::structure(module.type_pool_mut(), &[]);
+            let unit_42 = Type::array(module.type_pool_mut(), unit, 42);
+            assert_eq!(writer.ty(module.type_pool(), unit_42), "[{}; 42]");
+
+            let slice = Type::structure(module.type_pool_mut(), &[Type::ptr(), Type::i64()]);
+            let slice_64 = Type::array(module.type_pool_mut(), slice, 64);
+            let struct_slice_64 = Type::structure(module.type_pool_mut(), &[slice_64]);
+            let struct_slice_64_732 = Type::array(module.type_pool_mut(), struct_slice_64, 732);
+            assert_eq!(
+                writer.ty(module.type_pool(), struct_slice_64_732),
+                "[{ [{ ptr, i64 }; 64] }; 732]"
+            );
+        }
+
+        {
+            let unit = Type::structure(module.type_pool_mut(), &[]);
+            assert_eq!(writer.ty(module.type_pool(), unit), "{}");
+
+            let single = Type::structure(module.type_pool_mut(), &[Type::bool()]);
+            assert_eq!(writer.ty(module.type_pool(), single), "{ bool }");
+
+            let double = Type::structure(module.type_pool_mut(), &[Type::f32(), Type::f64()]);
+            assert_eq!(writer.ty(module.type_pool(), double), "{ f32, f64 }");
+
+            let quadruple = Type::structure(
+                module.type_pool_mut(),
+                &[Type::i16(), Type::i64(), Type::i32(), Type::i8()],
+            );
+            assert_eq!(
+                writer.ty(module.type_pool(), quadruple),
+                "{ i16, i64, i32, i8 }"
+            );
+
+            let triple2 = Type::structure(
+                module.type_pool_mut(),
+                &[Type::f64(), Type::f64(), Type::f64()],
+            );
+            assert_eq!(writer.ty(module.type_pool(), triple2), "{ f64, f64, f64 }");
+        }
+    }
+
+    #[test]
+    fn test_write_none() {
+        let module = Module::new("test");
+
+        assert_eq!(ModuleWriter::from(&module).module(), "");
+    }
+
+    #[test]
+    fn test_write_declarations() {
+        let mut module = Module::new("test");
+        let sig = SigBuilder::new()
+            .ret(Some(Type::i32()))
+            .param(Type::ptr())
+            .build();
+        let _ = module.declare_function("puts", sig);
+
+        assert_eq!(ModuleWriter::from(&module).module(), "fn i32 @puts(ptr)\n");
+
+        let sig2 = SigBuilder::new()
+            .params(&[Type::i64(), Type::i32()])
+            .vararg(true)
+            .build();
+        let _ = module.declare_function("frobnicator", sig2);
+
+        let expected = r#"fn i32 @puts(ptr)
+
+fn void @frobnicator(i64, i32, ...)
+"#;
+
+        assert_eq!(ModuleWriter::from(&module).module(), expected);
+    }
+
+    #[test]
+    fn test_write_single_block_invalid_empty() {
+        let mut module = Module::new("test");
+        let sig = SigBuilder::new()
+            .ret(Some(Type::i32()))
+            .params(&[Type::i32(), Type::ptr()])
+            .build();
+
+        {
+            // fn i32 @main(i32, ptr) {
+            let mut builder = module.define_function("main", sig);
+
+            // entry(i32 %0, ptr %1):
+            let entry = builder.create_block("entry");
+            builder.append_entry_params(entry, DebugInfo::fake());
+            builder.switch_to(entry);
+
+            // }
+            let _ = builder.define();
+        }
+
+        let expected = r#"fn i32 @main(i32, ptr) {
+entry(i32 %0, ptr %1):
+}
+"#;
+
+        assert_eq!(ModuleWriter::from(&module).module(), expected);
+    }
+
+    #[test]
+    fn test_write_single_block_invalid_block_params() {
+        let mut module = Module::new("test");
+        let sig = SigBuilder::new()
+            .ret(Some(Type::i32()))
+            .param(Type::ptr())
+            .vararg(true)
+            .build();
+
+        {
+            // fn i32 @printf(ptr, ...) {
+            let mut builder = module.define_function("printf", sig);
+
+            // entry:
+            let entry = builder.create_block("entry");
+            builder.switch_to(entry);
+
+            //
+            let zero = builder.append().null(Type::i32(), DebugInfo::fake());
+            builder.append().ret_val(zero, DebugInfo::fake());
+
+            // }
+            let _ = builder.define();
+        }
+
+        let expected = r#"fn i32 @printf(ptr, ...) {
+entry:
+  %0 = null i32
+  ret i32 %0
+}
+"#;
+
+        assert_eq!(ModuleWriter::from(&module).module(), expected);
+    }
+
+    #[test]
+    fn test_write_single_block_valid() {
+        let mut module = Module::new("test");
+        let sig = {
+            let pool = module.type_pool_mut();
+
+            SigBuilder::new()
+                .ret(Some(Type::f64()))
+                .params(&[Type::structure(
+                    pool,
+                    &[Type::f64(), Type::f64(), Type::f64()],
+                )])
+                .build()
+        };
+
+        {
+            // fn f64 @y({ f64, f64, f64 }) {
+            let mut builder = module.define_function("x_coord", sig);
+
+            // entry({ f64, f64, f64} %0):
+            let entry = builder.create_block("entry");
+            builder.append_entry_params(entry, DebugInfo::fake());
+            builder.switch_to(entry);
+
+            // %1 = extract f64, { f64, f64, f64 } %0, 1
+            let agg = builder.block_params(entry)[0];
+            let extract = builder
+                .append()
+                .extract(Type::f64(), agg, 1, DebugInfo::fake());
+            builder.append().ret_val(extract, DebugInfo::fake());
+
+            // }
+            let _ = builder.define();
+        }
+
+        let expected = r#"fn f64 @x_coord({ f64, f64, f64 }) {
+entry({ f64, f64, f64 } %0):
+  %1 = extract f64, { f64, f64, f64 } %0, 1
+  ret f64 %1
+}
+"#;
+
+        assert_eq!(ModuleWriter::from(&module).module(), expected);
+    }
+
+    #[test]
+    fn test_write_multiple_blocks_invalid_empty() {
+        let mut module = Module::new("test");
+        let sig = SigBuilder::new().param(Type::bool()).build();
+
+        {
+            // fn void @test(bool) {
+            let mut builder = module.define_function("test", sig);
+
+            // entry:
+            // a:
+            // b:
+            // c:
+            let _ = builder.create_block("entry");
+            let _ = builder.create_block("a");
+            let _ = builder.create_block("b");
+            let _ = builder.create_block("c");
+
+            // }
+            let _ = builder.define();
+        }
+
+        let expected = r#"fn void @test(bool) {
+entry:
+
+a:
+
+b:
+
+c:
+}
+"#;
+
+        assert_eq!(ModuleWriter::from(&module).module(), expected);
+    }
+
+    #[test]
+    fn test_write_multiple_blocks_valid_no_branch_params() {
+        let mut module = Module::new("test");
+        let sig = SigBuilder::new()
+            .param(Type::bool())
+            .ret(Some(Type::bool()))
+            .build();
+
+        {
+            // fn void @test(bool) {
+            let mut builder = module.define_function("test", sig);
+
+            // entry(bool %0):
+            // a:
+            // b:
+            // c:
+            let entry = builder.create_block("entry");
+            let a = builder.create_block("a");
+            let b = builder.create_block("b");
+            let c = builder.create_block("c");
+
+            builder.append_entry_params(entry, DebugInfo::fake());
+            builder.switch_to(entry);
+
+            // condbr bool %0, a, b
+            let cond = builder.block_params(entry)[0];
+            let if_true = BlockWithParams::new(a, &[]);
+            let if_false = BlockWithParams::new(b, &[]);
+
+            builder
+                .append()
+                .condbr(cond, if_true, if_false, DebugInfo::fake());
+
+            let target = BlockWithParams::new(c, &[]);
+
+            // br c
+            builder.switch_to(a);
+            builder.append().br(target.clone(), DebugInfo::fake());
+
+            // br c
+            builder.switch_to(b);
+            builder.append().br(target, DebugInfo::fake());
+
+            // ret void
+            builder.switch_to(c);
+            builder.append().ret_val(cond, DebugInfo::fake());
+
+            // }
+            let _ = builder.define();
+        }
+
+        let expected = r#"fn bool @test(bool) {
+entry(bool %0):
+  condbr bool %0, a, b
+
+a:
+  br c
+
+b:
+  br c
+
+c:
+  ret bool %0
+}
+"#;
+
+        assert_eq!(ModuleWriter::from(&module).module(), expected);
+    }
+
+    #[test]
+    fn test_write_multiple_blocks_valid_with_branch_params() {
+        let mut module = Module::new("test");
+        let sig = SigBuilder::new()
+            .param(Type::i64())
+            .ret(Some(Type::i64()))
+            .build();
+
+        {
+            let f = DebugInfo::fake();
+
+            // fn i64 @magic(i64) {
+            let mut builder = module.define_function("magic", sig);
+
+            // entry(i64 %0):
+            let entry = builder.create_block("entry");
+            let vals = builder.append_entry_params(entry, f);
+            let v0 = vals[0];
+
+            // a(i32 %5):
+            let a = builder.create_block("a");
+            let v5 = builder.append_block_param(a, Type::i32(), f);
+
+            // b(i32 %7, i32 %8):
+            let b = builder.create_block("b");
+            let v7 = builder.append_block_param(b, Type::i32(), f);
+            let v8 = builder.append_block_param(b, Type::i32(), f);
+
+            // c(i64 %12):
+            let c = builder.create_block("c");
+            let v12 = builder.append_block_param(c, Type::i64(), f);
+
+            // %1 = trunc i32, %0
+            // %2 = iconst i32 275
+            // %3 = iconst i64 42
+            // %4 = icmp eq i64 %0, %3
+            // condbr bool %0, a(i32 %1), b(i32 %1, i32 %2)
+            builder.switch_to(entry);
+            let v1 = builder.append().trunc(Type::i32(), v0, f);
+            let v2 = builder.append().iconst(Type::i32(), 275, f);
+            let v3 = builder.append().iconst(Type::i64(), 42, f);
+            let v4 = builder.append().icmp_eq(v0, v3, f);
+
+            let if_true = BlockWithParams::new(a, &[v1]);
+            let if_false = BlockWithParams::new(b, &[v1, v2]);
+
+            builder.append().condbr(v4, if_true, if_false, f);
+
+            // %6 = sext i64, i32 %5
+            // br c(i64 %6)
+            builder.switch_to(a);
+            let v6 = builder.append().sext(Type::i64(), v5, f);
+            let target = BlockWithParams::new(c, &[v6]);
+            builder.append().br(target, f);
+
+            // %9 = xor i32 %7, %8
+            // %10 = imul i32 %9, %2
+            // %11 = zext i64, i32 %10
+            // br c(i64 %11)
+            builder.switch_to(b);
+            let v9 = builder.append().xor(v7, v8, f);
+            let v10 = builder.append().imul(v9, v2, f);
+            let v11 = builder.append().zext(Type::i64(), v10, f);
+            let target = BlockWithParams::new(c, &[v11]);
+            builder.append().br(target, f);
+
+            // ret i64 %12
+            builder.switch_to(c);
+            builder.append().ret_val(v12, f);
+
+            // }
+            let _ = builder.define();
+        }
+
+        let expected = r#"fn i64 @magic(i64) {
+entry(i64 %0):
+  %1 = trunc i32, i64 %0
+  %2 = iconst i32 275
+  %3 = iconst i64 42
+  %4 = icmp eq i64 %0, %3
+  condbr bool %4, a(i32 %1), b(i32 %1, i32 %2)
+
+a(i32 %5):
+  %6 = sext i64, i32 %5
+  br c(i64 %6)
+
+b(i32 %7, i32 %8):
+  %9 = xor i32 %7, %8
+  %10 = imul i32 %9, %2
+  %11 = zext i64, i32 %10
+  br c(i64 %11)
+
+c(i64 %12):
+  ret i64 %12
+}
+"#;
+
+        assert_eq!(ModuleWriter::from(&module).module(), expected);
+    }
+
+    #[test]
+    fn test_write_multiple_functions_valid() {
+        let mut module = Module::new("test");
+        let f = DebugInfo::fake();
+
+        let sig1 = SigBuilder::new()
+            .ret(Some(Type::i32()))
+            .params(&[Type::i32()])
+            .build();
+
+        let sig2 = SigBuilder::new()
+            .ret(Some(Type::i32()))
+            .params(&[Type::i32(), Type::i32()])
+            .build();
+
+        {
+            // fn i32 @mul_by_42(i32) {
+            let mut builder = module.define_function("mul_by_42", sig1);
+
+            // entry(i32 %0):
+            let entry = builder.create_block("entry");
+            builder.append_entry_params(entry, f);
+            builder.switch_to(entry);
+
+            // %1 = iconst i32 42
+            // %2 = imul i32 %0, %1
+            // ret i32 %2
+            let v0 = builder.block_params(entry)[0];
+            let v1 = builder.append().iconst(Type::i32(), 42, f);
+            let v2 = builder.append().imul(v0, v1, f);
+            builder.append().ret_val(v2, f);
+
+            // }
+            let _ = builder.define();
+        }
+
+        {
+            // fn i32 @add(i32, i32) {
+            let mut builder = module.define_function("add", sig2);
+
+            // entry(i32 %0, i32 %1):
+            let entry = builder.create_block("entry");
+            let params = builder.append_entry_params(entry, f);
+            builder.switch_to(entry);
+
+            // %2 = iadd i32 %0, %1
+            // ret i32 %2
+            let (v0, v1) = (params[0], params[1]);
+            let v2 = builder.append().iadd(v0, v1, f);
+            builder.append().ret_val(v2, f);
+
+            // }
+            let _ = builder.define();
+        }
+
+        let expected = r#"fn i32 @mul_by_42(i32) {
+entry(i32 %0):
+  %1 = iconst i32 42
+  %2 = imul i32 %0, %1
+  ret i32 %2
+}
+
+fn i32 @add(i32, i32) {
+entry(i32 %0, i32 %1):
+  %2 = iadd i32 %0, %1
+  ret i32 %2
+}
+"#;
+
+        assert_eq!(ModuleWriter::from(&module).module(), expected);
+    }
+
+    #[test]
+    fn test_write_calls() {
+        let mut module = Module::new("test");
+        let puts_sig = SigBuilder::new()
+            .ret(Some(Type::i32()))
+            .params(&[Type::ptr()])
+            .build();
+
+        let puts = module.declare_function("puts", puts_sig.clone());
+
+        {
+            // fn i32 @puts_wrapper(ptr) {
+            let mut builder = module.define_function("puts_wrapper", puts_sig.clone());
+
+            // entry(ptr %0):
+            let entry = builder.create_block("entry");
+            let params = builder.append_entry_params(entry, DebugInfo::fake());
+            let v0 = params[0];
+
+            // %1 = call i32 @puts(ptr %0)
+            // ret i32 %1
+            builder.switch_to(entry);
+            let sig = builder.import_signature(&puts_sig);
+            let call = builder.append().call(puts, sig, &[v0], DebugInfo::fake());
+            let v1 = builder.inst_to_result(call).unwrap();
+            builder.append().ret_val(v1, DebugInfo::fake());
+
+            // }
+            let _ = builder.define();
+        }
+
+        let expected = r#"fn i32 @puts(ptr)
+
+fn i32 @puts_wrapper(ptr) {
+entry(ptr %0):
+  %1 = call i32 @puts(ptr %0)
+  ret i32 %1
+}
+"#;
+
+        assert_eq!(ModuleWriter::from(&module).module(), expected);
     }
 }

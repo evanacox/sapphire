@@ -10,9 +10,9 @@
 
 use crate::arena::UniqueArenaMap;
 use crate::arena_key;
-use num_derive::FromPrimitive;
-use num_traits::FromPrimitive;
 use static_assertions::assert_eq_size;
+use std::fmt;
+use std::fmt::{Debug, Formatter};
 
 use crate::utility::Packable;
 #[cfg(feature = "enable-serde")]
@@ -247,13 +247,13 @@ impl Int {
 ///
 /// These map directly to types defined in the IEEE-754 standard.
 #[repr(u32)]
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, FromPrimitive)]
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 #[cfg_attr(feature = "enable-serde", derive(Serialize, Deserialize))]
 pub enum FloatFormat {
     /// Models `f32`, an IEEE single-precision float (`binary32`).
-    Single,
+    Single = 32,
     /// Models `f64`, an IEEE double-precision float (`binary64`).
-    Double,
+    Double = 64,
 }
 
 /// Models the `fN` class of fundamental types.
@@ -400,7 +400,7 @@ impl Struct {
 /// For better pattern-matching it must be unpacked into an [`UType`]
 /// that has an actual `enum` representation, note that [`UType`] is
 /// the size of `(u32, u32)` instead of `u32`.
-#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Copy, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
 #[cfg_attr(feature = "enable-serde", derive(Serialize, Deserialize))]
 pub struct Type {
     // representation:
@@ -783,9 +783,11 @@ impl Type {
     /// and returns it.
     pub fn as_float(&self) -> Option<Float> {
         self.is_float().then(|| {
-            Float::new(
-                FromPrimitive::from_u32(self.data()).expect("broken data inside of the type"),
-            )
+            Float::new(match self.data() {
+                32 => FloatFormat::Single,
+                64 => FloatFormat::Double,
+                _ => unreachable!(),
+            })
         })
     }
 
@@ -888,6 +890,23 @@ impl Type {
 
     const fn data(&self) -> u32 {
         (self.raw & Self::DATA_MASK) >> Self::DATA_SHIFT
+    }
+}
+
+impl Debug for Type {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let mut tup = f.debug_tuple("Type");
+
+        match self.unpack() {
+            UType::Bool(b) => tup.field(&b),
+            UType::Ptr(b) => tup.field(&b),
+            UType::Int(b) => tup.field(&b),
+            UType::Float(b) => tup.field(&b),
+            UType::Array(b) => tup.field(&b),
+            UType::Struct(b) => tup.field(&b),
+        };
+
+        tup.finish()
     }
 }
 

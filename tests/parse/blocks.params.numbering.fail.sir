@@ -1,0 +1,8 @@
+fn i32 @add(i32, i32) {
+first(i32 %0, i32 %1):
+  %2 = iadd i32 %0, %1
+  br leave(i32 %2)
+
+leave(i32 %4):
+  ret i32 %4
+}

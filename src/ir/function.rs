@@ -54,6 +54,7 @@ bitflags! {
 
 /// Models which calling convention a given function should be emitted
 /// to follow.
+#[repr(u8)]
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
 #[cfg_attr(feature = "enable-serde", derive(Serialize, Deserialize))]
 pub enum CallConv {
@@ -135,6 +136,12 @@ impl Signature {
     #[inline]
     pub fn vararg(&self) -> bool {
         self.vararg
+    }
+
+    /// Checks if the signature refers to a `void` function.
+    #[inline]
+    pub fn is_void(&self) -> bool {
+        self.return_ty().is_none()
     }
 }
 

@@ -23,20 +23,18 @@
     rustdoc::broken_intra_doc_links,
     rustdoc::private_intra_doc_links
 )]
-#![feature(trusted_len)]
-#![feature(is_some_and)]
-#![feature(fn_traits)]
-#![feature(vec_into_raw_parts)]
-#![feature(map_try_insert)]
 
 //! # Sapphire
 //!
 //! These are the basic APIs for building, manipulating and emitting SIR.
+
+mod reader;
 
 pub mod analysis;
 pub mod arena;
 pub mod cli;
 pub mod ir;
 pub mod passes;
-pub mod reader;
 pub mod utility;
+
+pub use reader::parse_sir;

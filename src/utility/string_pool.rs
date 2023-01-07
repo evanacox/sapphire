@@ -45,6 +45,9 @@ impl Packable for Str {
     }
 }
 
+pub(in crate::utility::string_pool) const DEBUG_FAKE_INVALID: &str =
+    "<invalid created from DebugInfo::fake>";
+
 /// Contains a number of heap-allocated strings, and provides an API to
 /// map [`Str`]s to those heap-allocated strings. All strings are automatically
 /// de-duplicated internally, so two [`Str`]s from two calls to [`Self::insert`] with the
@@ -77,6 +80,10 @@ pub struct StringPool {
 }
 
 impl StringPool {
+    pub(crate) fn debuginfo_fake() -> Str {
+        Str(0)
+    }
+
     /// Creates an empty string pool that has no valid indices
     /// into it.
     ///
@@ -85,10 +92,14 @@ impl StringPool {
     /// let pool = StringPool::new();
     /// ```
     pub fn new() -> Self {
-        Self {
+        let mut obj = Self {
             strings: Vec::default(),
             refs: AHashMap::default(),
-        }
+        };
+
+        let _ = obj.insert(DEBUG_FAKE_INVALID);
+
+        obj
     }
 
     // provides a way to initialize a pool with a pre-set list of strings
@@ -161,30 +172,15 @@ impl StringPool {
     /// assert_eq!(it.next(), Some("Hello!"));
     /// ```
     pub fn values(&self) -> impl Iterator<Item = &str> {
-        self.strings.iter().map(|rc| rc.as_ref())
+        self.strings.iter().skip(1).map(|rc| rc.as_ref())
     }
 
     /// Returns the number of unique strings stored inside the pool.
-    ///
-    /// ```
-    /// # use sapphire::utility::StringPool;
-    /// let mut pool = StringPool::new();
-    /// pool.insert("a");
-    /// pool.insert("b");
-    /// pool.insert("b");
-    /// assert_eq!(pool.len(), 2);
-    /// ```
     pub fn len(&self) -> usize {
         self.strings.len()
     }
 
     /// Checks if the pool contains any strings.
-    ///
-    /// ```
-    /// # use sapphire::utility::StringPool;
-    /// let mut pool = StringPool::new();
-    /// assert_eq!(pool.is_empty(), true);
-    /// ```
     pub fn is_empty(&self) -> bool {
         self.strings.is_empty()
     }
@@ -276,8 +272,8 @@ mod tests {
     fn default() {
         let pool = StringPool::new();
 
-        assert_eq!(pool.len(), 0);
-        assert_eq!(pool.is_empty(), true);
+        // debuginfo::fake string is always there
+        assert_eq!(pool.len(), 1);
     }
 
     #[test]
@@ -305,7 +301,7 @@ mod tests {
         assert_eq!(&pool[s1], "one");
         assert_eq!(&pool[s2], "one");
         assert_eq!(&pool[s3], "two");
-        assert_eq!(pool.len(), 2);
+        assert_eq!(&pool[s1] as *const _, &pool[s2] as *const _);
     }
 
     #[cfg(feature = "enable-serde")]
@@ -320,7 +316,8 @@ mod tests {
             &pool,
             &[
                 // should just be an empty sequence with a specified length
-                Token::Seq { len: Some(0) },
+                Token::Seq { len: Some(1) },
+                Token::Str(DEBUG_FAKE_INVALID),
                 Token::SeqEnd,
             ],
         );
@@ -339,7 +336,8 @@ mod tests {
             &pool,
             &[
                 // should just be an empty sequence with a specified length
-                Token::Seq { len: Some(3) },
+                Token::Seq { len: Some(4) },
+                Token::Str(DEBUG_FAKE_INVALID),
                 Token::Str("one"),
                 Token::Str("two"),
                 Token::Str("three"),

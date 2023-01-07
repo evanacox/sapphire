@@ -19,11 +19,11 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      - name: Install nightly toolchain
+      - name: Install stable toolchain
         uses: actions-rs/toolchain@v1
         with:
           profile: default
-          toolchain: nightly
+          toolchain: stable
           override: true
 
       - name: Run cargo check
@@ -58,6 +58,13 @@ jobs:
         with:
           command: doc
           args: --no-deps --package sapphire
+
+      - name: Install nightly toolchain for cargo-tarpaulin
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: default
+          toolchain: nightly
+          override: true
 
       - name: Run cargo tarpaulin
         uses: actions-rs/tarpaulin@v0.1

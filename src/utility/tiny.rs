@@ -66,7 +66,10 @@ impl<T, const N: usize> TinyArray<T, N> {
     fn from_large_buffer(mut vec: Vec<T>) -> Self {
         vec.shrink_to_fit();
 
-        Self::from_raw_parts(vec.into_raw_parts())
+        let len = vec.len();
+        let raw = Box::into_raw(vec.into_boxed_slice()) as *mut T;
+
+        Self::from_raw_parts(raw, len)
     }
 
     fn from_inline_buffer(buffer: [T; N]) -> Self {
@@ -84,11 +87,13 @@ impl<T, const N: usize> TinyArray<T, N> {
     {
         vec.shrink_to_fit();
 
-        // this will not allocate, we know that `vec` has already spilled onto the heap
-        Self::from_raw_parts(vec.into_vec().into_raw_parts())
+        let len = vec.len();
+        let raw = Box::into_raw(vec.into_boxed_slice()) as *mut T;
+
+        Self::from_raw_parts(raw, len)
     }
 
-    fn from_raw_parts((ptr, len, _): (*mut T, usize, usize)) -> Self {
+    fn from_raw_parts(ptr: *mut T, len: usize) -> Self {
         Self {
             len,
             data: Storage { heap: ptr },
@@ -499,10 +504,10 @@ impl<T, const N: usize> Drop for TinyArray<T, N> {
             } else {
                 // if we haven't spilled, we can just drop all the elements and let the union's drop
                 // handle the space taken up by the array. not our problem
-                ptr::drop_in_place(slice::from_raw_parts_mut(
-                    (*self.inline_ptr_mut()).as_mut_ptr(),
-                    self.len,
-                ));
+                let array = self.inline_ptr_mut();
+                let slice = slice::from_raw_parts_mut((*array).as_mut_ptr(), self.len);
+
+                ptr::drop_in_place(slice);
             }
         }
     }

@@ -1,0 +1,13 @@
+fn void @flat_jumps() {
+a:
+  br b
+
+b:
+  br c
+
+c:
+  br d
+
+d:
+  ret void
+}

@@ -9,8 +9,100 @@
 //======---------------------------------------------------------------======//
 
 use crate::ir::*;
-use crate::utility::{StringPool, TinyArray};
+use crate::utility::{PackedOption, StringPool, TinyArray};
 use smallvec::SmallVec;
+
+/// Helper type for building a [`Signature`].
+pub struct SigBuilder {
+    vararg: bool,
+    abi: CallConv,
+    ret: PackedOption<Type>,
+    params: SmallVec<[Type; 4]>,
+}
+
+impl SigBuilder {
+    /// Creates a [`SigBuilder`] for the signature `void ()`
+    pub fn new() -> Self {
+        Self {
+            vararg: false,
+            abi: CallConv::C,
+            ret: None.into(),
+            params: SmallVec::default(),
+        }
+    }
+
+    /// Marks the signature as having a variable number of arguments.
+    pub fn vararg(self, value: bool) -> Self {
+        Self {
+            vararg: value,
+            abi: self.abi,
+            ret: self.ret,
+            params: self.params,
+        }
+    }
+
+    /// Marks the function as having a specified ABI.
+    pub fn abi(self, abi: CallConv) -> Self {
+        Self {
+            vararg: self.vararg,
+            abi,
+            ret: self.ret,
+            params: self.params,
+        }
+    }
+
+    /// Marks the signature as having a given return type.
+    pub fn ret(self, ret: Option<Type>) -> Self {
+        Self {
+            vararg: self.vararg,
+            abi: self.abi,
+            ret: ret.into(),
+            params: self.params,
+        }
+    }
+
+    /// Appends a parameter to the signature
+    pub fn param(mut self, param: Type) -> Self {
+        self.params.push(param);
+
+        Self {
+            vararg: self.vararg,
+            abi: self.abi,
+            ret: self.ret,
+            params: self.params,
+        }
+    }
+
+    /// Appends a list of parameters to the signature
+    pub fn params(mut self, params: &[Type]) -> Self {
+        self.params.extend_from_slice(params);
+
+        Self {
+            vararg: self.vararg,
+            abi: self.abi,
+            ret: self.ret,
+            params: self.params,
+        }
+    }
+
+    /// Builds the signature
+    pub fn build(self) -> Signature {
+        let ret = (self.ret.into(), RetAttributes::empty());
+        let params = self
+            .params
+            .into_iter()
+            .map(|p| (p, ParamAttributes::empty()))
+            .collect();
+
+        Signature::new(params, ret, self.abi, self.vararg)
+    }
+}
+
+impl Default for SigBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 /// Helper type that appends to a function. Implements the [`InstBuilder`]
 /// trait to allow easy instruction creation.
@@ -57,10 +149,12 @@ impl<'m> FuncBuilder<'m> {
     /// Finishes defining the function, and actually generates a full definition
     /// and inserts it into the module. Until this method is called, the function
     /// is not actually defined in the module.
-    pub fn define(self) {
+    pub fn define(self) -> Func {
         self.module
             .function_mut(self.func)
-            .replace_definition(self.def)
+            .replace_definition(self.def);
+
+        self.func
     }
 
     /// Finds a block by its name, returning it if it's inserted into the current function.
@@ -232,6 +326,27 @@ impl<'m> FuncBuilder<'m> {
     /// the module, `None` is returned.
     pub fn find_function_by_name(&self, func: &str) -> Option<Func> {
         self.module.find_function_by_name(func)
+    }
+
+    /// Checks if a given block is the entry block to the function
+    pub fn is_entry_block(&self, block: Block) -> bool {
+        self.def.layout.entry_block() == Some(block)
+    }
+
+    /// Gets the entry block of the function. Unless no blocks have been
+    /// appended to the function, this will be `Some`.
+    pub fn entry_block(&self) -> Option<Block> {
+        self.def.layout.entry_block()
+    }
+
+    /// Gets a [`Func`] referring to the function being built.
+    pub fn current_func(&self) -> Func {
+        self.func
+    }
+
+    /// Gets the [`Signature`] of the function being built.
+    pub fn current_signature(&self) -> &Signature {
+        self.function(self.func).signature()
     }
 
     fn create_block_with_name(&mut self, name: &str) -> Block {
