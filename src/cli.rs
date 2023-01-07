@@ -77,14 +77,10 @@ pub fn tool<T>(description: &'static str, usage: &'static str) -> OptionParser<B
 
 /// Gets the baseline default options that every tool needs.
 pub fn default() -> impl Parser<BaseOptions> {
-    let inputs = inputs();
-    let output = output();
-    let verbose = verbose();
-
     construct!(BaseOptions {
-        output,
-        verbose,
-        inputs,
+        output(),
+        verbose(),
+        inputs(),
     })
 }
 
