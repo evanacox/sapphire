@@ -98,6 +98,12 @@ impl SigBuilder {
     }
 }
 
+impl Default for SigBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Helper type that appends to a function. Implements the [`InstBuilder`]
 /// trait to allow easy instruction creation.
 pub struct AppendBuilder<'b> {

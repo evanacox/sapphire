@@ -90,7 +90,7 @@ impl Module {
     /// later with [`Self::define_existing_function`], or it can be left
     /// as-is if the function is opaque.
     pub fn declare_function(&mut self, name: &str, sig: Signature) -> Func {
-        debug_assert!(matches!(self.find_function_by_name(&name), None));
+        debug_assert!(matches!(self.find_function_by_name(name), None));
 
         let name = name.to_owned();
         let new = Function::new(name.clone(), sig, self.functions.next_key());

@@ -54,7 +54,7 @@ impl Subtest {
                 // we want to display the time taken on a per-test basis
                 let details = TestDetails {
                     elapsed: end.duration_since(start).unwrap(),
-                    failure: result.map(|failure| Box::new(failure)),
+                    failure: result.map(Box::new),
                 };
 
                 send.send((name.as_str(), details)).expect("unable to send")
