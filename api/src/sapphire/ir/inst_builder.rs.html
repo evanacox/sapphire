@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `src/ir/inst_builder.rs`."><meta name="keywords" content="rust, rustlang, rust-lang"><title>inst_builder.rs - source</title><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/SourceSerif4-Regular-1f7d512b176f0f72.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/FiraSans-Regular-018c141bf0843ffd.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/FiraSans-Medium-8f9a781e4970d388.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/SourceSerif4-Bold-124a1ca42af929b6.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2"><link rel="stylesheet" href="../../../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../../../static.files/rustdoc-94f503864730768f.css" id="mainThemeStyle"><link rel="stylesheet" id="themeStyle" href="../../../static.files/light-4743e13df3dfe8c4.css"><link rel="stylesheet" disabled href="../../../static.files/dark-0e1b889528bd466b.css"><link rel="stylesheet" disabled href="../../../static.files/ayu-65289d5d067c7c66.css"><script id="default-settings" ></script><script src="../../../static.files/storage-d43fa987303ecbbb.js"></script><script defer src="../../../static.files/source-script-ea63cb6500f71309.js"></script><script defer src="../../../source-files.js"></script><script defer src="../../../static.files/main-4a084badb5778746.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-13285aec31fa243e.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-16x16-8b506e7a72182f1c.png"><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-2c020d218678b618.svg"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.6.0/katex.min.css">
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `src/ir/inst_builder.rs`."><meta name="keywords" content="rust, rustlang, rust-lang"><title>inst_builder.rs - source</title><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/SourceSerif4-Regular-1f7d512b176f0f72.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/FiraSans-Regular-018c141bf0843ffd.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/FiraSans-Medium-8f9a781e4970d388.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/SourceSerif4-Bold-124a1ca42af929b6.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2"><link rel="stylesheet" href="../../../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../../../static.files/rustdoc-a67221f24dabeddb.css" id="mainThemeStyle"><link rel="stylesheet" id="themeStyle" href="../../../static.files/light-4743e13df3dfe8c4.css"><link rel="stylesheet" disabled href="../../../static.files/dark-0e1b889528bd466b.css"><link rel="stylesheet" disabled href="../../../static.files/ayu-65289d5d067c7c66.css"><script id="default-settings" ></script><script src="../../../static.files/storage-d43fa987303ecbbb.js"></script><script defer src="../../../static.files/source-script-ea63cb6500f71309.js"></script><script defer src="../../../source-files.js"></script><script defer src="../../../static.files/main-bc1b32400f872ddb.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-13285aec31fa243e.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-16x16-8b506e7a72182f1c.png"><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-2c020d218678b618.svg"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.6.0/katex.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.6.0/katex.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.6.0/contrib/auto-render.min.js"></script>
 </head><body class="rustdoc source"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"></nav><main><nav class="sub"><a class="sub-logo-container" href="../../../sapphire/index.html"><img class="rust-logo" src="../../../static.files/rust-logo-151179464ae7ed46.svg" alt="logo"></a><form class="search-form"><span></span><input class="search-input" name="search" aria-label="Run search in the documentation" autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"><div id="help-button" title="help" tabindex="-1"><a href="../../../help.html">?</a></div><div id="settings-menu" tabindex="-1"><a href="../../../settings.html" title="settings"><img width="22" height="22" alt="Change settings" src="../../../static.files/wheel-5ec35bf9ca753509.svg"></a></div></form></nav><section id="main-content" class="content"><div class="example-wrap"><pre class="src-line-numbers"><a href="#1" id="1">1</a>
@@ -502,6 +502,41 @@
 <a href="#499" id="499">499</a>
 <a href="#500" id="500">500</a>
 <a href="#501" id="501">501</a>
+<a href="#502" id="502">502</a>
+<a href="#503" id="503">503</a>
+<a href="#504" id="504">504</a>
+<a href="#505" id="505">505</a>
+<a href="#506" id="506">506</a>
+<a href="#507" id="507">507</a>
+<a href="#508" id="508">508</a>
+<a href="#509" id="509">509</a>
+<a href="#510" id="510">510</a>
+<a href="#511" id="511">511</a>
+<a href="#512" id="512">512</a>
+<a href="#513" id="513">513</a>
+<a href="#514" id="514">514</a>
+<a href="#515" id="515">515</a>
+<a href="#516" id="516">516</a>
+<a href="#517" id="517">517</a>
+<a href="#518" id="518">518</a>
+<a href="#519" id="519">519</a>
+<a href="#520" id="520">520</a>
+<a href="#521" id="521">521</a>
+<a href="#522" id="522">522</a>
+<a href="#523" id="523">523</a>
+<a href="#524" id="524">524</a>
+<a href="#525" id="525">525</a>
+<a href="#526" id="526">526</a>
+<a href="#527" id="527">527</a>
+<a href="#528" id="528">528</a>
+<a href="#529" id="529">529</a>
+<a href="#530" id="530">530</a>
+<a href="#531" id="531">531</a>
+<a href="#532" id="532">532</a>
+<a href="#533" id="533">533</a>
+<a href="#534" id="534">534</a>
+<a href="#535" id="535">535</a>
+<a href="#536" id="536">536</a>
 </pre><pre class="rust"><code><span class="comment">//======---------------------------------------------------------------======//
 //                                                                           //
 // Copyright 2022 Evan Cox &lt;evanacox00@gmail.com&gt;. All rights reserved.      //
@@ -525,12 +560,12 @@
 
 <span class="macro">macro_rules! </span>integer_cast {
     (<span class="macro-nonterminal">$var</span>:ident, <span class="macro-nonterminal">$self</span>:expr, <span class="macro-nonterminal">$into</span>:expr, <span class="macro-nonterminal">$from</span>:expr, from_width <span class="macro-nonterminal">$op</span>:tt into_width, <span class="macro-nonterminal">$debug</span>:expr) =&gt; {{
-        <span class="macro">debug_assert!</span>(<span class="macro-nonterminal">$into</span>.is_int());
-        <span class="macro">debug_assert!</span>({
-            <span class="kw">let </span>ty = <span class="macro-nonterminal">$self</span>.dfg().ty(<span class="macro-nonterminal">$from</span>);
+        <span class="kw">let </span>from = <span class="macro-nonterminal">$self</span>.dfg().ty(<span class="macro-nonterminal">$from</span>);
 
-            ty.is_int() &amp;&amp; (ty.unwrap_int().width() <span class="macro-nonterminal">$op $into</span>.unwrap_int().width())
-        });
+        <span class="macro">debug_assert!</span>(<span class="macro-nonterminal">$into</span>.is_int(), <span class="string">&quot;result must be integer&quot;</span>);
+        <span class="macro">debug_assert!</span>(from.is_int(), <span class="string">&quot;operand must be integer&quot;</span>);
+        <span class="macro">debug_assert!</span>((from.unwrap_int().width() <span class="macro-nonterminal">$op $into</span>.unwrap_int().width()),
+            <span class="macro">concat!</span>(<span class="string">&quot;operand width must be &quot;</span>, <span class="macro">stringify!</span>(<span class="macro-nonterminal">$op</span>), <span class="string">&quot; output width&quot;</span>));
 
         <span class="macro-nonterminal">$self</span>.build_result(InstData::<span class="macro-nonterminal">$var</span>(CastInst::new(<span class="macro-nonterminal">$into</span>, <span class="macro-nonterminal">$from</span>)), <span class="macro-nonterminal">$debug</span>)
     }}
@@ -540,7 +575,11 @@
     (<span class="macro-nonterminal">$t</span>:ident, <span class="macro-nonterminal">$var</span>:ident, <span class="macro-nonterminal">$self</span>:expr, operands: (lhs: <span class="macro-nonterminal">$lhs</span>:expr, rhs: <span class="macro-nonterminal">$rhs</span>:expr, check: <span class="macro-nonterminal">$check</span>:ident), <span class="macro-nonterminal">$debug</span>:expr) =&gt; {{
         <span class="kw">let </span>lhs_ty = <span class="macro-nonterminal">$self</span>.dfg().ty(<span class="macro-nonterminal">$lhs</span>);
 
-        <span class="macro">debug_assert_eq!</span>(<span class="macro-nonterminal">$self</span>.dfg().ty(<span class="macro-nonterminal">$lhs</span>), <span class="macro-nonterminal">$self</span>.dfg().ty(<span class="macro-nonterminal">$rhs</span>));
+        <span class="macro">debug_assert_eq!</span>(
+            <span class="macro-nonterminal">$self</span>.dfg().ty(<span class="macro-nonterminal">$lhs</span>),
+            <span class="macro-nonterminal">$self</span>.dfg().ty(<span class="macro-nonterminal">$rhs</span>),
+            <span class="string">&quot;operands must be same type&quot;
+        </span>);
         <span class="macro">debug_assert!</span>(lhs_ty.<span class="macro-nonterminal">$check</span>());
 
         <span class="kw">let </span>inst = <span class="macro-nonterminal">$t::new</span>(lhs_ty, <span class="macro-nonterminal">$lhs</span>, <span class="macro-nonterminal">$rhs</span>);
@@ -634,6 +673,16 @@
         <span class="kw">let </span>icmp = ICmpInst::new(cmp, lhs, rhs);
 
         <span class="self">self</span>.build_result(InstData::ICmp(icmp), debug)
+    }
+
+    <span class="doccomment">/// Builds an `icmp eq` instruction
+    </span><span class="kw">fn </span>icmp_eq(<span class="self">self</span>, lhs: Value, rhs: Value, debug: DebugInfo) -&gt; Value {
+        <span class="self">self</span>.icmp(ICmpOp::EQ, lhs, rhs, debug)
+    }
+
+    <span class="doccomment">/// Builds an `icmp ne` instruction
+    </span><span class="kw">fn </span>icmp_ne(<span class="self">self</span>, lhs: Value, rhs: Value, debug: DebugInfo) -&gt; Value {
+        <span class="self">self</span>.icmp(ICmpOp::NE, lhs, rhs, debug)
     }
 
     <span class="doccomment">/// Builds an `fcmp` instruction
@@ -836,30 +885,16 @@
         <span class="self">self</span>.build_result(InstData::Offset(inst), debug)
     }
 
-    <span class="doccomment">/// Builds an `extract` instruction
-    </span><span class="kw">fn </span>extract(<span class="self">self</span>, ctx: <span class="kw-2">&amp;</span>TypePool, agg: Value, index: u64, debug: DebugInfo) -&gt; Value {
-        <span class="kw">let </span>ty = <span class="self">self</span>.dfg().ty(agg);
-        <span class="macro">debug_assert!</span>(ty.is_struct());
-
-        <span class="kw">let </span>structure = ty.unwrap_struct().members(ctx);
-        <span class="macro">debug_assert!</span>(structure.len() &gt;= index <span class="kw">as </span>usize);
-
-        <span class="kw">let </span>inst = ExtractInst::new(structure[index <span class="kw">as </span>usize], agg, index);
+    <span class="doccomment">/// Builds an `extract` instruction that extracts a value of a given type
+    </span><span class="kw">fn </span>extract(<span class="self">self</span>, output: Type, agg: Value, index: u64, debug: DebugInfo) -&gt; Value {
+        <span class="kw">let </span>inst = ExtractInst::new(output, agg, index);
 
         <span class="self">self</span>.build_result(InstData::Extract(inst), debug)
     }
 
     <span class="doccomment">/// Builds an `insert` instruction
-    </span><span class="kw">fn </span>insert(<span class="self">self</span>, ctx: <span class="kw-2">&amp;</span>TypePool, agg: Value, val: Value, index: u64, debug: DebugInfo) -&gt; Value {
+    </span><span class="kw">fn </span>insert(<span class="self">self</span>, agg: Value, val: Value, index: u64, debug: DebugInfo) -&gt; Value {
         <span class="kw">let </span>ty = <span class="self">self</span>.dfg().ty(agg);
-        <span class="macro">debug_assert!</span>(ty.is_struct());
-
-        <span class="comment">// technically `ctx` is unnecessary except in debug builds, but eh
-        </span><span class="macro">debug_assert_eq!</span>(
-            ty.unwrap_struct().members(ctx).get(index <span class="kw">as </span>usize).copied(),
-            <span class="prelude-val">Some</span>(<span class="self">self</span>.dfg().ty(val))
-        );
-
         <span class="kw">let </span>inst = InsertInst::new(ty, agg, val, index);
 
         <span class="self">self</span>.build_result(InstData::Insert(inst), debug)
@@ -876,17 +911,17 @@
 
     <span class="doccomment">/// Builds a `sext` instruction
     </span><span class="kw">fn </span>sext(<span class="self">self</span>, into: Type, from: Value, debug: DebugInfo) -&gt; Value {
-        <span class="macro">integer_cast!</span>(Sext, <span class="self">self</span>, into, from, from_width &gt; into_width, debug)
+        <span class="macro">integer_cast!</span>(Sext, <span class="self">self</span>, into, from, from_width &lt; into_width, debug)
     }
 
     <span class="doccomment">/// Builds a `zext` instruction
     </span><span class="kw">fn </span>zext(<span class="self">self</span>, into: Type, from: Value, debug: DebugInfo) -&gt; Value {
-        <span class="macro">integer_cast!</span>(Zext, <span class="self">self</span>, into, from, from_width &gt; into_width, debug)
+        <span class="macro">integer_cast!</span>(Zext, <span class="self">self</span>, into, from, from_width &lt; into_width, debug)
     }
 
     <span class="doccomment">/// Builds a `trunc` instruction
     </span><span class="kw">fn </span>trunc(<span class="self">self</span>, into: Type, from: Value, debug: DebugInfo) -&gt; Value {
-        <span class="macro">integer_cast!</span>(Trunc, <span class="self">self</span>, into, from, from_width &lt; into_width, debug)
+        <span class="macro">integer_cast!</span>(Trunc, <span class="self">self</span>, into, from, from_width &gt; into_width, debug)
     }
 
     <span class="doccomment">/// Builds an `itob` instruction
@@ -1002,6 +1037,41 @@
             debug
         )
     }
+
+    <span class="doccomment">/// Builds an `iconst` instruction
+    </span><span class="kw">fn </span>iconst(<span class="self">self</span>, into: Type, from: u64, debug: DebugInfo) -&gt; Value {
+        <span class="macro">debug_assert!</span>(into.is_int());
+        <span class="macro">debug_assert!</span>(into.unwrap_int().mask() &gt;= from);
+
+        <span class="self">self</span>.build_result(InstData::IConst(IConstInst::new(into, from)), debug)
+    }
+
+    <span class="doccomment">/// Builds an `fconst` instruction
+    </span><span class="kw">fn </span>fconst(<span class="self">self</span>, into: Type, from: f64, debug: DebugInfo) -&gt; Value {
+        <span class="self">self</span>.fconst_raw(into, from.to_bits(), debug)
+    }
+
+    <span class="doccomment">/// Builds an `fconst` instruction
+    </span><span class="kw">fn </span>fconst_raw(<span class="self">self</span>, into: Type, raw: u64, debug: DebugInfo) -&gt; Value {
+        <span class="macro">debug_assert!</span>(into.is_float());
+
+        <span class="self">self</span>.build_result(InstData::FConst(FConstInst::new(into, raw)), debug)
+    }
+
+    <span class="doccomment">/// Builds a `bconst` instruction
+    </span><span class="kw">fn </span>bconst(<span class="self">self</span>, value: bool, debug: DebugInfo) -&gt; Value {
+        <span class="self">self</span>.build_result(InstData::BConst(BConstInst::new(value)), debug)
+    }
+
+    <span class="doccomment">/// Builds an `undef` instruction
+    </span><span class="kw">fn </span>undef(<span class="self">self</span>, into: Type, debug: DebugInfo) -&gt; Value {
+        <span class="self">self</span>.build_result(InstData::Undef(UndefConstInst::new(into)), debug)
+    }
+
+    <span class="doccomment">/// Builds a `null` instruction
+    </span><span class="kw">fn </span>null(<span class="self">self</span>, into: Type, debug: DebugInfo) -&gt; Value {
+        <span class="self">self</span>.build_result(InstData::Null(NullConstInst::new(into)), debug)
+    }
 }
 </code></pre></div>
 </section></main><script>
@@ -1014,4 +1084,4 @@ renderMathInElement(document.body, {
     ]
 });
 </script>
-<div id="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="sapphire" data-themes="" data-resource-suffix="" data-rustdoc-version="1.68.0-nightly (c7572670a 2023-01-03)" data-search-js="search-181581080540673f.js" data-settings-js="settings-bebeae96e00e4617.js" data-settings-css="settings-58836c674e2f7bd2.css" ></div></body></html>
+<div id="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="sapphire" data-themes="" data-resource-suffix="" data-rustdoc-version="1.68.0-nightly (0fb8b72ce 2023-01-06)" data-search-js="search-181581080540673f.js" data-settings-js="settings-bebeae96e00e4617.js" data-settings-css="settings-58836c674e2f7bd2.css" ></div></body></html>

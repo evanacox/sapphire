@@ -458,16 +458,17 @@ condbr bool %2, if.true, if.false
 condbr bool %1, if.true, if.false
 </code></pre>
 <p><code>condbr</code> is only able to branch based on <code>bool</code> values. The first branch is always taken for a <code>true</code> value, and the second is always taken for a <code>false</code> value.</p>
+<p><code>if.true</code> and <code>if.false</code> cannot be the same block (even with different arguments), they must be different blocks.</p>
 <p>Syntax:</p>
-<pre><code class="language-other">condbr &lt;ty&gt; &lt;val&gt;, &lt;label&gt;, &lt;label&gt;
+<pre><code class="language-other">condbr &lt;ty&gt; &lt;val&gt;, &lt;label1&gt;( (&lt;args&gt;) )?, &lt;label2&gt;( (&lt;args&gt;) )?
 </code></pre>
 <h4 id="unreachable---unreachable-instruction"><a class="header" href="#unreachable---unreachable-instruction">‘<code>unreachable</code>‘ - Unreachable instruction</a></h4>
-<p>Similar to <code>__builtin_unreachable</code>: Effectively asserts that the containing block cannot be reached in a valid program. If the containing block is reached (and therefore the <code>unreachable</code> is executed), the program's behavior is undefined.</p>
+<p>Similar to <code>__builtin_unreachable</code>: Effectively asserts that the end of the block cannot be reached in a valid program. If the containing block is reached and the <code>unreachable</code> is executed, the program's behavior is undefined.</p>
 <pre><code class="language-other">unreachable
 </code></pre>
 <blockquote>
 <blockquote>
-<p>This can be used for aggressive optimizations, as blocks that have <code>unreachable</code> as their terminator can be optimized into an empty block (except for <code>unreachable</code>), and any branches that go to an <code>unreachable</code> block can be assumed to be never taken.</p>
+<p>This can be used for aggressive optimizations, as blocks that have <code>unreachable</code> as their terminator and do not call any other functions can be optimized into a block only containing <code>unreachable</code>, and any branches that go to an empty (except for <code>unreachable</code>) block can be assumed to be never taken.</p>
 </blockquote>
 </blockquote>
 <p>This can lead to some extremely aggressive transformations. <code>unreachable</code> is effectively &quot;viral,” one block containing it can &quot;infect&quot; many blocks that go to it (directly or not).</p>
@@ -802,12 +803,11 @@ be stored in memory and the <code>offset</code> instruction should be used.</p>
 <ul>
 <li>Standard decimal form: <code>([0-9]+).([0-9]+)</code> (ex. <code>0.0039</code>)</li>
 <li>Scientific notation: <code>.([0-9]+)(.[0-9]+)?e(+|-)([0-9]+)</code> (ex. <code>1.749e-3</code>)</li>
-<li>C hex float: &lt;whatever exactly C’s standard is&gt; (ex. <code>0x0.3p10</code>)</li>
 <li>Raw hex: <code>0xfp([0-9a-fA-F]+)</code> (ex. <code>0xfp3FD55558B21DC9EA</code>)</li>
+<li><code>NaN</code> for an unspecified NaN value</li>
 </ul>
 <pre><code class="language-other">%0 = fconst f64 0xfp3FD55558B21DC9EA
 %1 = fconst f32 3.14195
-%2 = fconst f64 0.55ap6
 %3 = fconst f32 1.3e100
 </code></pre>
 <h3 id="undef---undefined-value"><a class="header" href="#undef---undefined-value">‘<code>undef</code>’ - Undefined Value</a></h3>

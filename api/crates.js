@@ -1,1 +1,1 @@
-window.ALL_CRATES = ["sapphire","sirc"];
+window.ALL_CRATES = ["filetest","sapphire","sirc"];
