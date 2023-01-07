@@ -1,0 +1,7 @@
+fn i32 @printf(ptr, ...)
+
+fn void @test() {
+entry:
+  %2 = call i32 @printf()
+  ret void
+}

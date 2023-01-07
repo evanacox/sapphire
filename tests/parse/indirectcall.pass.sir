@@ -1,0 +1,7 @@
+fn void @test() {
+entry:
+  %0 = null ptr
+  %1 = null i32
+  indirectcall void (i32, ...), ptr %0(i32 %1)
+  ret void
+}

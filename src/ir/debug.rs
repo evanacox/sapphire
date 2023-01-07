@@ -8,7 +8,7 @@
 //                                                                           //
 //======---------------------------------------------------------------======//
 
-use crate::utility::{PackedOption, Str};
+use crate::utility::{PackedOption, Str, StringPool};
 use static_assertions::assert_eq_size;
 
 #[cfg(feature = "enable-serde")]
@@ -64,6 +64,18 @@ impl DebugInfo {
             line,
             col,
             file,
+        }
+    }
+
+    /// Intentionally creates meaningless debuginfo, this must be done
+    /// explicitly. This effectively makes it impossible to debug/test passes,
+    /// but can be handy for writing unit tests.
+    pub fn fake() -> Self {
+        Self {
+            name: PackedOption::none(),
+            line: !0,
+            col: !0,
+            file: StringPool::debuginfo_fake(),
         }
     }
 

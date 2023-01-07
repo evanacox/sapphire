@@ -320,6 +320,11 @@ impl Layout {
         }
     }
 
+    /// Gets the entry block for the layout, if it exists. 
+    pub fn entry_block(&self) -> Option<Block> {
+        self.head.expand()
+    }
+    
     fn insert_node(
         &mut self,
         inst: Inst,

@@ -21,12 +21,12 @@ macro_rules! into_cast {
 
 macro_rules! integer_cast {
     ($var:ident, $self:expr, $into:expr, $from:expr, from_width $op:tt into_width, $debug:expr) => {{
-        debug_assert!($into.is_int());
-        debug_assert!({
-            let ty = $self.dfg().ty($from);
+        let from = $self.dfg().ty($from);
 
-            ty.is_int() && (ty.unwrap_int().width() $op $into.unwrap_int().width())
-        });
+        debug_assert!($into.is_int(), "result must be integer");
+        debug_assert!(from.is_int(), "operand must be integer");
+        debug_assert!((from.unwrap_int().width() $op $into.unwrap_int().width()),
+            concat!("operand width must be ", stringify!($op), " output width"));
 
         $self.build_result(InstData::$var(CastInst::new($into, $from)), $debug)
     }}
@@ -36,7 +36,11 @@ macro_rules! base_binary_inst {
     ($t:ident, $var:ident, $self:expr, operands: (lhs: $lhs:expr, rhs: $rhs:expr, check: $check:ident), $debug:expr) => {{
         let lhs_ty = $self.dfg().ty($lhs);
 
-        debug_assert_eq!($self.dfg().ty($lhs), $self.dfg().ty($rhs));
+        debug_assert_eq!(
+            $self.dfg().ty($lhs),
+            $self.dfg().ty($rhs),
+            "operands must be same type"
+        );
         debug_assert!(lhs_ty.$check());
 
         let inst = $t::new(lhs_ty, $lhs, $rhs);
@@ -130,6 +134,16 @@ pub trait InstBuilder<'dfg>: Sized {
         let icmp = ICmpInst::new(cmp, lhs, rhs);
 
         self.build_result(InstData::ICmp(icmp), debug)
+    }
+
+    /// Builds an `icmp eq` instruction
+    fn icmp_eq(self, lhs: Value, rhs: Value, debug: DebugInfo) -> Value {
+        self.icmp(ICmpOp::EQ, lhs, rhs, debug)
+    }
+
+    /// Builds an `icmp ne` instruction
+    fn icmp_ne(self, lhs: Value, rhs: Value, debug: DebugInfo) -> Value {
+        self.icmp(ICmpOp::NE, lhs, rhs, debug)
     }
 
     /// Builds an `fcmp` instruction
@@ -332,30 +346,16 @@ pub trait InstBuilder<'dfg>: Sized {
         self.build_result(InstData::Offset(inst), debug)
     }
 
-    /// Builds an `extract` instruction
-    fn extract(self, ctx: &TypePool, agg: Value, index: u64, debug: DebugInfo) -> Value {
-        let ty = self.dfg().ty(agg);
-        debug_assert!(ty.is_struct());
-
-        let structure = ty.unwrap_struct().members(ctx);
-        debug_assert!(structure.len() >= index as usize);
-
-        let inst = ExtractInst::new(structure[index as usize], agg, index);
+    /// Builds an `extract` instruction that extracts a value of a given type
+    fn extract(self, output: Type, agg: Value, index: u64, debug: DebugInfo) -> Value {
+        let inst = ExtractInst::new(output, agg, index);
 
         self.build_result(InstData::Extract(inst), debug)
     }
 
     /// Builds an `insert` instruction
-    fn insert(self, ctx: &TypePool, agg: Value, val: Value, index: u64, debug: DebugInfo) -> Value {
+    fn insert(self, agg: Value, val: Value, index: u64, debug: DebugInfo) -> Value {
         let ty = self.dfg().ty(agg);
-        debug_assert!(ty.is_struct());
-
-        // technically `ctx` is unnecessary except in debug builds, but eh
-        debug_assert_eq!(
-            ty.unwrap_struct().members(ctx).get(index as usize).copied(),
-            Some(self.dfg().ty(val))
-        );
-
         let inst = InsertInst::new(ty, agg, val, index);
 
         self.build_result(InstData::Insert(inst), debug)
@@ -372,17 +372,17 @@ pub trait InstBuilder<'dfg>: Sized {
 
     /// Builds a `sext` instruction
     fn sext(self, into: Type, from: Value, debug: DebugInfo) -> Value {
-        integer_cast!(Sext, self, into, from, from_width > into_width, debug)
+        integer_cast!(Sext, self, into, from, from_width < into_width, debug)
     }
 
     /// Builds a `zext` instruction
     fn zext(self, into: Type, from: Value, debug: DebugInfo) -> Value {
-        integer_cast!(Zext, self, into, from, from_width > into_width, debug)
+        integer_cast!(Zext, self, into, from, from_width < into_width, debug)
     }
 
     /// Builds a `trunc` instruction
     fn trunc(self, into: Type, from: Value, debug: DebugInfo) -> Value {
-        integer_cast!(Trunc, self, into, from, from_width < into_width, debug)
+        integer_cast!(Trunc, self, into, from, from_width > into_width, debug)
     }
 
     /// Builds an `itob` instruction
@@ -497,5 +497,40 @@ pub trait InstBuilder<'dfg>: Sized {
             from: (from, is_ptr),
             debug
         )
+    }
+
+    /// Builds an `iconst` instruction
+    fn iconst(self, into: Type, from: u64, debug: DebugInfo) -> Value {
+        debug_assert!(into.is_int());
+        debug_assert!(into.unwrap_int().mask() >= from);
+
+        self.build_result(InstData::IConst(IConstInst::new(into, from)), debug)
+    }
+
+    /// Builds an `fconst` instruction
+    fn fconst(self, into: Type, from: f64, debug: DebugInfo) -> Value {
+        self.fconst_raw(into, from.to_bits(), debug)
+    }
+
+    /// Builds an `fconst` instruction
+    fn fconst_raw(self, into: Type, raw: u64, debug: DebugInfo) -> Value {
+        debug_assert!(into.is_float());
+
+        self.build_result(InstData::FConst(FConstInst::new(into, raw)), debug)
+    }
+
+    /// Builds a `bconst` instruction
+    fn bconst(self, value: bool, debug: DebugInfo) -> Value {
+        self.build_result(InstData::BConst(BConstInst::new(value)), debug)
+    }
+
+    /// Builds an `undef` instruction
+    fn undef(self, into: Type, debug: DebugInfo) -> Value {
+        self.build_result(InstData::Undef(UndefConstInst::new(into)), debug)
+    }
+
+    /// Builds a `null` instruction
+    fn null(self, into: Type, debug: DebugInfo) -> Value {
+        self.build_result(InstData::Null(NullConstInst::new(into)), debug)
     }
 }

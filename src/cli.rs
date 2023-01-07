@@ -43,18 +43,16 @@ pub enum IRFormat {
 /// Basic options that every CLI tool in the suite takes in.
 pub struct BaseOptions {
     /// The file to output results to
-    pub output: PathBuf,
+    pub output: Option<PathBuf>,
     /// Whether or not to run the logging in verbose mode.
     pub verbose: bool,
-    /// The list of input files given to the tool
-    pub input: PathBuf,
+    /// The list of inputs given to the tool
+    pub inputs: Vec<PathBuf>,
 }
 
-/// Returns a [`clap::Command`] preconfigured with the standard Sapphire
-/// options, version, etc.
-///
-/// Helps make everything a bit more standardized in the CLI tools.
-pub fn tool<T>(
+/// Returns a [`bpaf::OptionParser`] preconfigured with the standard Sapphire
+/// options and additional tool-specific options.
+pub fn tool_with<T>(
     description: &'static str,
     usage: &'static str,
     additional: impl Parser<T> + 'static,
@@ -67,30 +65,43 @@ pub fn tool<T>(
         .usage(usage)
 }
 
+/// Returns a [`bpaf::OptionParser`] preconfigured with the standard Sapphire
+/// options and nothing else.
+pub fn tool<T>(description: &'static str, usage: &'static str) -> OptionParser<BaseOptions> {
+    default()
+        .to_options()
+        .descr(description)
+        .version(VERSION)
+        .usage(usage)
+}
+
 /// Gets the baseline default options that every tool needs.
 pub fn default() -> impl Parser<BaseOptions> {
-    let input = single_input();
+    let inputs = inputs();
     let output = output();
     let verbose = verbose();
 
     construct!(BaseOptions {
         output,
         verbose,
-        input,
+        inputs,
     })
 }
 
 /// Gets the output file specified on the CLI, if one exists.
-pub fn output() -> impl Parser<PathBuf> {
+pub fn output() -> impl Parser<Option<PathBuf>> {
     bpaf::long("output")
         .short('o')
         .help("the file to output to")
         .argument::<PathBuf>("FILE")
+        .optional()
 }
 
 /// Gets the input file specified on the CLI.
-pub fn single_input() -> impl Parser<PathBuf> {
-    bpaf::positional::<PathBuf>("FILES").help("files to read as input to the tool")
+pub fn inputs() -> impl Parser<Vec<PathBuf>> {
+    bpaf::positional::<PathBuf>("FILES")
+        .help("files to read as input to the tool")
+        .many()
 }
 
 /// Checks for the presence of `-v` or `--verbose`
@@ -143,4 +154,13 @@ pub fn emit_sir() -> impl Parser<IRFormat> {
             Some(val) => val,
             None => IRFormat::Bitcode,
         })
+}
+
+/// Gets the number of concurrent threads to use for a given task
+pub fn jobs() -> impl Parser<Option<usize>> {
+    bpaf::long("jobs")
+        .short('j')
+        .help("the number of concurrent jobs to run tests on")
+        .argument::<usize>("JOBS")
+        .optional()
 }

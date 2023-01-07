@@ -52,13 +52,15 @@ param_list = {
      ("(" ~ ty_list ~ ("," ~ variadic)? ~ ")")
 }
 function_prototype = { "fn" ~ ty_or_void ~ global ~ param_list ~ abi? }
-function = {
-    function_prototype ~ "{" ~ (NEWLINE | LINE_COMMENT) ~
+function_body = {
+	"{" ~ (NEWLINE | LINE_COMMENT) ~
     (PATTERN_WHITE_SPACE*) ~
     (basic_block | LINE_COMMENT)* ~
     (PATTERN_WHITE_SPACE*) ~
-    "}" ~
-    (LINE_COMMENT*)
+    "}"
+}
+function = {
+    function_prototype ~ function_body? ~ (LINE_COMMENT*) ~ NEWLINE
 }
 
 //
@@ -78,7 +80,9 @@ block_label = { ident ~ block_params? ~ ":" }
 basic_block = {
     block_label ~ (NEWLINE | LINE_COMMENT) ~
     LINE_COMMENT* ~
-    ((inst | LINE_COMMENT) ~ (NEWLINE | LINE_COMMENT))*
+    (PATTERN_WHITE_SPACE*) ~
+ 	((inst | LINE_COMMENT) ~ (NEWLINE | LINE_COMMENT))* ~
+    (PATTERN_WHITE_SPACE*)
 }
 
 // single instruction
@@ -191,13 +195,13 @@ store = { "store" ~ operand ~ "," ~ ptr_ty ~ local }
 offset = { result ~ "offset" ~ ty ~ "," ~ ptr_ty ~ local ~ "," ~ int_ty ~ local }
 
 // %1 = extract { T... } %0, 1
-extract = { result ~ "extract" ~ struct_ty ~ local ~ "," ~ DECIMAL_NUMBER }
+extract = { result ~ "extract" ~ ty ~ "," ~ (struct_ty | array_ty) ~ local ~ "," ~ int_literal }
 
 // %2 = insert { T... } %0, T %1, 1
-insert = { result ~ "insert" ~ struct_ty ~ local ~ "," ~ operand ~ "," ~ DECIMAL_NUMBER }
+insert = { result ~ "insert" ~ (struct_ty | array_ty) ~ local ~ "," ~ operand ~ "," ~ int_literal }
 
 // %1 = elemptr { T... }, ptr %0, 1
-elemptr = { result ~ "elemptr" ~ struct_ty ~ "," ~ ptr_ty ~ local ~ "," ~ DECIMAL_NUMBER }
+elemptr = { result ~ "elemptr" ~ (struct_ty | array_ty) ~ "," ~ ptr_ty ~ local ~ "," ~ int_literal }
 
 // %1 = sext/zext/trunc i32, i8 %0
 int_conv_opcode = @{ "sext" | "zext" | "trunc" }
@@ -229,10 +233,10 @@ ptoi = { result ~ "ptoi" ~ int_ty ~ "," ~ ptr_ty ~ local }
 
 // %0 = iconst i32 42
 int_literal = @{
-    ("-"? ~ ASCII_DIGIT+) |
     ("0x" ~ ASCII_HEX_DIGIT+) |
     ("0b" ~ ASCII_BIN_DIGIT+) |
-    ("0o" ~ ASCII_OCT_DIGIT+)
+    ("0o" ~ ASCII_OCT_DIGIT+) |
+    ("-"? ~ ASCII_DIGIT+)
 }
 iconst = { result ~ "iconst" ~ int_ty ~ int_literal }
 
@@ -246,7 +250,7 @@ float_standard = @{
 float_raw = @{
     "0xfp" ~ ASCII_HEX_DIGIT+
 }
-float_literal = @{ float_standard | float_raw }
+float_literal = @{ float_raw | float_standard | "NaN" }
 fconst = { result ~ "fconst" ~ float_ty ~ float_literal }
 
 // %0 = bconst bool true

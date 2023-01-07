@@ -394,21 +394,23 @@ condbr bool %1, if.true, if.false
 
 `condbr` is only able to branch based on `bool` values. The first branch is always taken for a `true` value, and the second is always taken for a `false` value.
 
+`if.true` and `if.false` cannot be the same block (even with different arguments), they must be different blocks.
+
 Syntax:
 
 ```other
-condbr <ty> <val>, <label>, <label>
+condbr <ty> <val>, <label1>( (<args>) )?, <label2>( (<args>) )?
 ```
 
 #### ‘`unreachable`‘ - Unreachable instruction
 
-Similar to `__builtin_unreachable`: Effectively asserts that the containing block cannot be reached in a valid program. If the containing block is reached (and therefore the `unreachable` is executed), the program's behavior is undefined.
+Similar to `__builtin_unreachable`: Effectively asserts that the end of the block cannot be reached in a valid program. If the containing block is reached and the `unreachable` is executed, the program's behavior is undefined.
 
 ```other
 unreachable
 ```
 
-> > This can be used for aggressive optimizations, as blocks that have `unreachable` as their terminator can be optimized into an empty block (except for `unreachable`), and any branches that go to an `unreachable` block can be assumed to be never taken.
+> > This can be used for aggressive optimizations, as blocks that have `unreachable` as their terminator and do not call any other functions can be optimized into a block only containing `unreachable`, and any branches that go to an empty (except for `unreachable`) block can be assumed to be never taken.
 
 This can lead to some extremely aggressive transformations. `unreachable` is effectively "viral,” one block containing it can "infect" many blocks that go to it (directly or not).
 
@@ -958,13 +960,12 @@ Floating-point literals can be in decimal form with a `.`, scientific notation, 
 
 - Standard decimal form: `([0-9]+).([0-9]+)` (ex. `0.0039`)
 - Scientific notation: `.([0-9]+)(.[0-9]+)?e(+|-)([0-9]+)` (ex. `1.749e-3`)
-- C hex float: <whatever exactly C’s standard is> (ex. `0x0.3p10`)
 - Raw hex: `0xfp([0-9a-fA-F]+)` (ex. `0xfp3FD55558B21DC9EA`)
+- `NaN` for an unspecified NaN value
 
 ```other
 %0 = fconst f64 0xfp3FD55558B21DC9EA
 %1 = fconst f32 3.14195
-%2 = fconst f64 0.55ap6
 %3 = fconst f32 1.3e100
 ```
 

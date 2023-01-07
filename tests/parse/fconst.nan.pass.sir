@@ -1,0 +1,5 @@
+fn f32 @test() {
+entry:
+  %0 = fconst f32 NaN
+  ret f32 %0
+}

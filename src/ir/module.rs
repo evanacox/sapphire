@@ -80,7 +80,7 @@ impl Module {
     }
 
     /// Declares and then defines a new function.
-    pub fn define_function(&mut self, name: String, sig: Signature) -> FuncBuilder<'_> {
+    pub fn define_function(&mut self, name: &str, sig: Signature) -> FuncBuilder<'_> {
         let f = self.declare_function(name, sig);
 
         self.define_existing_function(f)
@@ -89,9 +89,10 @@ impl Module {
     /// Declares a function without providing it a definition. It can be defined
     /// later with [`Self::define_existing_function`], or it can be left
     /// as-is if the function is opaque.
-    pub fn declare_function(&mut self, name: String, sig: Signature) -> Func {
+    pub fn declare_function(&mut self, name: &str, sig: Signature) -> Func {
         debug_assert!(matches!(self.find_function_by_name(&name), None));
 
+        let name = name.to_owned();
         let new = Function::new(name.clone(), sig, self.functions.next_key());
         let func = self.functions.insert(new);
 

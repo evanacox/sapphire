@@ -1,0 +1,30 @@
+fn i32 @add_cond_mul(bool, i32, i32) {
+entry(bool %0, i32 %1, i32 %2):
+  %3 = xor i32 %1, %2
+  %4 = iconst i32 -42
+  %5 = imul i32 %3, %4
+  %6 = btoi i32, bool %0
+  %7 = iadd i32 %5, %6
+  condbr bool %0, one(i32 %4, i32 %6), two(i32 %5)
+
+one(i32 %8, i32 %9):
+  %10 = xor i32 %8, %9
+  br merge(i32 %10)
+
+two(i32 %11):
+  %12 = itob bool, i32 %11
+  condbr bool %12, three, four(bool %12)
+
+three:
+  %13 = iconst i32 -1
+  br merge(i32 %13)
+
+four(bool %14):
+  %15 = null i32
+  %16 = isub i32 %15, %5
+  %17 = sel i32, bool %14, %7, %16
+  condbr bool %14, three, merge(i32 %17)
+
+merge(i32 %18):
+  ret i32 %18
+}
