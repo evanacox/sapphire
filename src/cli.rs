@@ -16,7 +16,7 @@
 //! module and then used in the drivers of the different tools.
 
 use bpaf::{construct, OptionParser, Parser};
-use std::path::PathBuf;
+use std::{path::PathBuf, str::FromStr};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -30,6 +30,17 @@ pub enum MachineFormat {
     Obj,
 }
 
+impl FromStr for MachineFormat {
+    type Err = &'static str;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s {
+            "asm" => MachineFormat::Asm,
+            "obj" => MachineFormat::Obj,
+            _ => return Err("format must be one of 'asm' or 'obj'"),
+        })
+    }
+}
+
 /// The format for a tool emitting SIR to emit in.
 #[derive(Copy, Clone, Eq, PartialEq)]
 pub enum IRFormat {
@@ -38,6 +49,17 @@ pub enum IRFormat {
     /// A dense binary format that can be serialized and deserialized
     /// quickly and efficiently, and takes up less space on disk.
     Bitcode,
+}
+
+impl FromStr for IRFormat {
+    type Err = &'static str;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s {
+            "ir" => IRFormat::IR,
+            "bc" => IRFormat::Bitcode,
+            _ => return Err("format must be one of 'ir' or 'bc'"),
+        })
+    }
 }
 
 /// Basic options that every CLI tool in the suite takes in.
@@ -113,21 +135,8 @@ pub fn emit_machine_format() -> impl Parser<MachineFormat> {
     bpaf::long("emit")
         .short('e')
         .help("the machine format to emit, either 'asm' or 'obj'")
-        .argument::<String>("FORMAT")
-        .guard(
-            |fmt| fmt == "asm" || fmt == "obj",
-            "format must be one of 'asm', 'obj'",
-        )
-        .map(|fmt| match fmt.as_str() {
-            "asm" => MachineFormat::Asm,
-            "obj" => MachineFormat::Obj,
-            _ => unreachable!(),
-        })
-        .optional()
-        .map(|opt| match opt {
-            Some(val) => val,
-            None => MachineFormat::Obj,
-        })
+        .argument::<MachineFormat>("FORMAT")
+        .fallback(MachineFormat::Obj)
 }
 
 /// Gets the emit format for a tool that emits SIR
@@ -135,21 +144,8 @@ pub fn emit_sir() -> impl Parser<IRFormat> {
     bpaf::long("emit")
         .short('e')
         .help("the SIR format to emit, either 'ir' or 'bc'")
-        .argument::<String>("FORMAT")
-        .guard(
-            |fmt| fmt == "ir" || fmt == "bc",
-            "format must be one of 'ir', 'bc'",
-        )
-        .map(|fmt| match fmt.as_str() {
-            "ir" => IRFormat::IR,
-            "bc" => IRFormat::Bitcode,
-            _ => unreachable!(),
-        })
-        .optional()
-        .map(|opt| match opt {
-            Some(val) => val,
-            None => IRFormat::Bitcode,
-        })
+        .argument::<IRFormat>("FORMAT")
+        .fallback(IRFormat::Bitcode)
 }
 
 /// Gets the number of concurrent threads to use for a given task
