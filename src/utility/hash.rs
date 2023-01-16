@@ -8,18 +8,14 @@
 //                                                                           //
 //======---------------------------------------------------------------======//
 
-//! Provides several utility APIs that are used inside of various modules
-//! inside of the compiler.
-//!
-//! This is the general catch-all for random utility code.
+use std::collections::{HashMap, HashSet};
 
-mod graph;
-mod hash;
-mod packed_option;
-mod string_pool;
-mod tiny;
+/// Alias for `std::collections::HashMap<K, V, ahash::RandomState>`. This is a
+/// hash table that uses a faster hash function, this is significantly faster
+/// for the small keys that we are using everywhere.
+pub type SaHashMap<K, V> = HashMap<K, V, ahash::RandomState>;
 
-pub use hash::*;
-pub use packed_option::{Packable, PackedOption};
-pub use string_pool::*;
-pub use tiny::*;
+/// Alias for `std::collections::HashSet<V, ahash::RandomState>`. This is a
+/// hash table that uses a faster hash function, this is significantly faster
+/// for the small keys that we are using everywhere.
+pub type SaHashSet<V> = HashSet<V, ahash::RandomState>;

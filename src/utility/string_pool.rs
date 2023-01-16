@@ -8,8 +8,7 @@
 //                                                                           //
 //======---------------------------------------------------------------======//
 
-use crate::utility::Packable;
-use ahash::AHashMap;
+use crate::utility::{Packable, SaHashMap};
 use std::fmt;
 use std::ops::Index;
 use std::rc::Rc;
@@ -76,7 +75,7 @@ pub struct StringPool {
     // way specifically because we're dealing in dynamically sized types and UniqueArenaMap
     // doesn't support those.
     strings: Vec<Rc<str>>,
-    refs: AHashMap<Rc<str>, Str>,
+    refs: SaHashMap<Rc<str>, Str>,
 }
 
 impl StringPool {
@@ -94,7 +93,7 @@ impl StringPool {
     pub fn new() -> Self {
         let mut obj = Self {
             strings: Vec::default(),
-            refs: AHashMap::default(),
+            refs: SaHashMap::default(),
         };
 
         let _ = obj.insert(DEBUG_FAKE_INVALID);

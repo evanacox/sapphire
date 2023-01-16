@@ -10,11 +10,13 @@
 
 use crate::arena::{ArenaKey, ArenaMap, SecondaryMap, UniqueArenaMap};
 use crate::dense_arena_key;
-use crate::ir::{BasicBlock, Block, DebugInfo, InstData, Instruction, Sig, Signature, Type};
-use crate::utility::Str;
+use crate::ir::{
+    BasicBlock, Block, BlockWithParams, DebugInfo, InstData, Instruction, Sig, Signature,
+    Terminator, Type,
+};
+use crate::utility::{SaHashMap, Str};
 use smallvec::SmallVec;
 use static_assertions::assert_eq_size;
-use std::collections::HashMap;
 
 #[cfg(feature = "enable-serde")]
 use serde::{Deserialize, Serialize};
@@ -119,7 +121,7 @@ pub struct DataFlowGraph {
     // Values themselves can only be safely converted when its known that the inst referred to has a result
     sigs: UniqueArenaMap<Sig, Signature>,
     blocks: ArenaMap<Block, BasicBlock>,
-    block_names: HashMap<Str, Block, ahash::RandomState>,
+    block_names: SaHashMap<Str, Block>,
     entities: ArenaMap<EntityRef, EntityData>,
     values: SecondaryMap<Value, ValueDefinition>,
     params: SecondaryMap<Block, SmallVec<[Value; 4]>>,
@@ -165,12 +167,12 @@ impl DataFlowGraph {
         }
     }
 
-    /// Gets a single instruction's [`DebugInfo`](crate::ir::DebugInfo).
+    /// Gets a single instruction's [`DebugInfo`].
     pub fn inst_debug(&self, inst: Inst) -> DebugInfo {
         self.debug[inst.raw_into()]
     }
 
-    /// Gets a single value's [`DebugInfo`](crate::ir::DebugInfo).
+    /// Gets a single value's [`DebugInfo`].
     pub fn debug(&self, inst: Value) -> DebugInfo {
         self.debug[inst.raw_into()]
     }
@@ -300,5 +302,19 @@ impl DataFlowGraph {
     /// Checks if a given value is a block parameter.
     pub fn is_block_param(&self, val: Value) -> bool {
         matches!(self.values[val].data, ValueDef::Param(_, _))
+    }
+
+    /// If an instruction is a branch, returns the list of branch targets. If it
+    /// isn't, returns `None`.
+    pub fn branch_info(&self, inst: Inst) -> Option<&'_ [BlockWithParams]> {
+        match &self.entities[inst.raw_into()] {
+            EntityData::Inst(data) => match data {
+                InstData::Br(br) => Some(br.targets()),
+                InstData::CondBr(condbr) => Some(condbr.targets()),
+                InstData::Ret(_) | InstData::Unreachable(_) => Some(&[]),
+                _ => None,
+            },
+            _ => None,
+        }
     }
 }
