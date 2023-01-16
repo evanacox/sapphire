@@ -100,7 +100,7 @@ pub fn stringify_module(module: &Module) -> String {
 ///
 /// This analysis needs to be run in the standard way for a correct [`ModuleWriter`]
 /// to be produced, the result yielded by the analysis can then be queried as desired.
-pub struct ModuleStringifyAnalysis {}
+pub struct ModuleStringifyAnalysis;
 
 impl ModuleAnalysisPass for ModuleStringifyAnalysis {
     type Result = ModuleWriter;

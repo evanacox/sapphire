@@ -17,6 +17,8 @@
 //! [`FunctionAnalysisPass`]: crate::passes::FunctionAnalysisPass
 //! [`ModuleAnalysisPass`]: crate::passes::ModuleAnalysisPass
 
+mod flowgraph;
 mod writer;
 
+pub use flowgraph::*;
 pub use writer::*;
