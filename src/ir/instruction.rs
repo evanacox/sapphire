@@ -13,7 +13,7 @@ use crate::ir::{Block, FloatFormat, Func, Sig, Type, Value};
 use crate::utility::{PackedOption, TinyArray};
 use smallvec::SmallVec;
 use static_assertions::assert_eq_size;
-use std::{iter, slice};
+use std::{iter, mem, slice};
 
 #[cfg(feature = "enable-serde")]
 use serde::{Deserialize, Serialize};
@@ -135,6 +135,18 @@ pub enum InstData {
     Null(NullConstInst),
     /// `globaladdr @name`, materializes a pointer to a global value
     GlobalAddr(GlobalAddrInst),
+}
+
+type Opcode = mem::Discriminant<InstData>;
+
+impl InstData {
+    /// Gets the discriminant of the [`InstData`], this is the "opcode"
+    /// of the instruction. This can be used to trivially check if two
+    /// instructions are the same variant without needing the `mem::discriminant`
+    /// boilerplate.
+    pub fn opc(&self) -> Opcode {
+        mem::discriminant(self)
+    }
 }
 
 impl Instruction for InstData {

@@ -325,6 +325,41 @@ impl Layout {
         self.head.expand()
     }
 
+    /// Gets the block that comes after `block`
+    pub fn block_next(&self, block: Block) -> Option<Block> {
+        self.blocks[block].next.expand()
+    }
+
+    /// Gets the block that comes before `block`
+    pub fn block_prev(&self, block: Block) -> Option<Block> {
+        self.blocks[block].prev.expand()
+    }
+
+    /// Gets the first instruction in `block`
+    pub fn block_first_inst(&self, block: Block) -> Option<Inst> {
+        self.blocks[block].first.expand()
+    }
+
+    /// Gets the last instruction in `block`
+    pub fn block_last_inst(&self, block: Block) -> Option<Inst> {
+        self.blocks[block].last.expand()
+    }
+
+    /// Gets the instruction that comes after `inst`
+    pub fn inst_next(&self, inst: Inst) -> Option<Inst> {
+        self.nodes[inst].next.expand()
+    }
+
+    /// Gets the instruction that comes before `inst`
+    pub fn inst_prev(&self, inst: Inst) -> Option<Inst> {
+        self.nodes[inst].prev.expand()
+    }
+
+    /// Gets the block that an instruction is in
+    pub fn inst_block(&self, inst: Inst) -> Block {
+        self.inst_blocks[inst]
+    }
+
     fn insert_node(
         &mut self,
         inst: Inst,
