@@ -8,17 +8,14 @@
 //                                                                           //
 //======---------------------------------------------------------------======//
 
-//! Contains the various analysis passes defined in the Sapphire project.
-//!
-//! These are basically all passes that model the [`FunctionAnalysisPass`] or
-//! the [`ModuleAnalysisPass`] traits, and range from debug passes to analyses
-//! that are critical for correctness.
-//!
-//! [`FunctionAnalysisPass`]: crate::passes::FunctionAnalysisPass
-//! [`ModuleAnalysisPass`]: crate::passes::ModuleAnalysisPass
+use std::collections::{HashMap, HashSet};
 
-mod flowgraph;
-mod writer;
+/// Alias for `std::collections::HashMap<K, V, ahash::RandomState>`. This is a
+/// hash table that uses a faster hash function, this is significantly faster
+/// for the small keys that we are using everywhere.
+pub type SaHashMap<K, V> = HashMap<K, V, ahash::RandomState>;
 
-pub use flowgraph::*;
-pub use writer::*;
+/// Alias for `std::collections::HashSet<V, ahash::RandomState>`. This is a
+/// hash table that uses a faster hash function, this is significantly faster
+/// for the small keys that we are using everywhere.
+pub type SaHashSet<V> = HashSet<V, ahash::RandomState>;

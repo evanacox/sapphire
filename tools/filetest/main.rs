@@ -57,5 +57,5 @@ fn main() -> ExitCode {
 
 #[test]
 fn test_parse() {
-    assert!(matches!(run_subtest("parse", Some(2)), Ok(())));
+    assert!(matches!(run_subtest("parse", Some(1)), Ok(())));
 }

@@ -16,13 +16,11 @@
 
 use crate::analysis::{stringify_signature, stringify_ty};
 use crate::ir::*;
-use crate::utility::{Packable, Str};
-use ahash::AHashMap;
+use crate::utility::{Packable, SaHashMap, Str};
 use pest::error::ErrorVariant;
 use pest::iterators::{Pair, Pairs};
 use pest::{error::Error as PestErr, Parser, Span, Token};
 use smallvec::SmallVec;
-use std::collections::HashMap;
 use std::error::Error;
 use std::str::FromStr;
 
@@ -121,7 +119,7 @@ enum LocalIdent {
 struct SIRParser {
     next: u32,
     filename: Str,
-    resolver: HashMap<LocalIdent, Value, ahash::RandomState>,
+    resolver: SaHashMap<LocalIdent, Value>,
 }
 
 impl SIRParser {
@@ -131,7 +129,7 @@ impl SIRParser {
         let mut obj = Self {
             filename: Str::reserved(),
             next: 0,
-            resolver: AHashMap::default().into(),
+            resolver: SaHashMap::default(),
         };
 
         obj.filename = module.insert_string(filename);

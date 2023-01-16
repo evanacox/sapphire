@@ -11,8 +11,8 @@
 use crate::arena;
 use crate::arena::iter::IntoIter;
 use crate::arena::{ArenaKey, ArenaMap};
+use crate::utility::SaHashMap;
 use ahash::AHashMap;
-use std::collections::HashMap;
 use std::fmt;
 use std::fmt::{Debug, Formatter};
 use std::hash::Hash;
@@ -40,7 +40,7 @@ where
     V: Eq + Hash,
 {
     slots: ArenaMap<K, Rc<V>>,
-    dedup: HashMap<Rc<V>, K, ahash::RandomState>,
+    dedup: SaHashMap<Rc<V>, K>,
 }
 
 impl<K, V> UniqueArenaMap<K, V>

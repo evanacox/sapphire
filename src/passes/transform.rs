@@ -16,18 +16,23 @@ use crate::passes::{FunctionAnalysisManager, ModuleAnalysisManager, PreservedAna
 /// While the pass may not actually modify the IR, it has the ability to, and needs to
 /// declare what it changed (if anything) through [`PreservedAnalyses`](crate::passes::PreservedAnalyses).
 pub trait ModuleTransformPass {
+    /// Performs the transformation over a given SIR module.
     ///
-    ///
-    ///
-    ///
+    /// This function is expected to act as-if it was pure, i.e. calling the same
+    /// pass multiple times on the same IR should produce equivalent IR each time
+    /// and should return the same preserved analyses each time.
     fn run(&mut self, module: &mut Module, am: &ModuleAnalysisManager) -> PreservedAnalyses;
 }
 
 /// Defines a transformation over a single SIR function.
+///
+/// While the pass may not actually modify the IR, it has the ability to, and needs to
+/// declare what it changed (if anything) through [`PreservedAnalyses`](crate::passes::PreservedAnalyses).
 pub trait FunctionTransformPass {
+    /// Performs the transformation over a given SIR function.
     ///
-    ///
-    ///
-    ///
+    /// This function is expected to act as-if it was pure, i.e. calling the same
+    /// pass multiple times on the same IR should produce equivalent IR each time
+    /// and should return the same preserved analyses each time.
     fn run(&mut self, func: &mut Function, am: &FunctionAnalysisManager) -> PreservedAnalyses;
 }

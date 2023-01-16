@@ -14,10 +14,12 @@
 //! This is the general catch-all for random utility code.
 
 mod graph;
+mod hash;
 mod packed_option;
 mod string_pool;
 mod tiny;
 
+pub use hash::*;
 pub use packed_option::{Packable, PackedOption};
 pub use string_pool::*;
 pub use tiny::*;
