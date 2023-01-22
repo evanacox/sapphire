@@ -1,5 +1,0 @@
-fn i32 @main(i32, ptr, ptr) {
-entry(i32 %0, ptr %1, ptr %2):
-  %3 = iconst i32 0
-  ret i32 %3
-}

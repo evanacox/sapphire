@@ -9,29 +9,29 @@
 //======---------------------------------------------------------------======//
 
 use crate::discovery;
+use crate::testcase::TestFailure;
 use std::sync::mpsc;
 use std::sync::mpsc::Receiver;
 use std::time::{Duration, SystemTime};
 use threadpool::ThreadPool;
 
-pub enum TestFailure {
-    Diff { expected: String, got: String },
+pub enum TestResult {
+    Output(String),
     CompileError(String),
-    LackOfCompileError,
 }
 
 pub struct TestDetails {
     pub elapsed: Duration,
-    pub failure: Option<Box<TestFailure>>,
+    pub output: Result<(), TestFailure>,
 }
 
 pub struct Subtest {
     subdir: &'static str,
-    runner: fn(&str, &str) -> Option<TestFailure>,
+    runner: fn(&str, &str) -> TestResult,
 }
 
 impl Subtest {
-    pub const fn new(subdir: &'static str, runner: fn(&str, &str) -> Option<TestFailure>) -> Self {
+    pub const fn new(subdir: &'static str, runner: fn(&str, &str) -> TestResult) -> Self {
         Self { subdir, runner }
     }
 
@@ -42,19 +42,20 @@ impl Subtest {
     pub fn run(&self, pool: &mut ThreadPool) -> Receiver<(&'static str, TestDetails)> {
         let (send, recv) = mpsc::channel();
 
-        for (name, contents) in discovery::cases_in_subdir(self.subdir) {
+        for (name, contents, case) in discovery::cases_in_subdir(self.subdir) {
             let send = send.clone();
             let runner = self.runner;
 
             pool.execute(move || {
                 let start = SystemTime::now();
-                let result = runner(name, contents);
+                let output = runner(name, contents);
                 let end = SystemTime::now();
+                let result = case.check(output);
 
                 // we want to display the time taken on a per-test basis
                 let details = TestDetails {
                     elapsed: end.duration_since(start).unwrap(),
-                    failure: result.map(Box::new),
+                    output: result,
                 };
 
                 send.send((name.as_str(), details)).expect("unable to send")

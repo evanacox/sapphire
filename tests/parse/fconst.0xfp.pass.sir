@@ -1,3 +1,4 @@
+; MATCH-ENTIRE
 fn f32 @test() {
 entry:
   %0 = fconst f32 0xfp0000000000003FAA3D71

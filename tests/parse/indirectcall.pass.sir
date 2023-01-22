@@ -1,3 +1,4 @@
+; MATCH-ENTIRE
 fn void @test() {
 entry:
   %0 = null ptr

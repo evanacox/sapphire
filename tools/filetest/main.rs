@@ -9,9 +9,11 @@
 //======---------------------------------------------------------------======//
 
 mod discovery;
-mod parse;
+mod display;
 mod runner;
+mod runners;
 mod subtest;
+mod testcase;
 
 use crate::runner::{run_all, run_subtest};
 use bpaf::Parser;
