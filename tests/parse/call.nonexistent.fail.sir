@@ -1,7 +1,8 @@
+; COMPILE-ERROR: expected 1 arguments but got 0
 fn i32 @printf(ptr, ...)
 
 fn void @test() {
 entry:
-  %2 = call i32 @printf()
+  %0 = call i32 @printf()
   ret void
 }

@@ -1,3 +1,4 @@
+; MATCH-ENTIRE
 fn i32 @add_cond_mul(bool, i32, i32) {
 entry(bool %0, i32 %1, i32 %2):
   %3 = xor i32 %1, %2

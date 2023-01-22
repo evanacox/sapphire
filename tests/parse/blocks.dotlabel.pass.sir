@@ -1,3 +1,4 @@
+; MATCH-ENTIRE
 fn void @test(bool) {
 entry(bool %0):
   condbr bool %0, if.true, if.false

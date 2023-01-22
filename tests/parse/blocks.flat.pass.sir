@@ -1,3 +1,4 @@
+; MATCH-ENTIRE
 fn void @flat_jumps() {
 a:
   br b
