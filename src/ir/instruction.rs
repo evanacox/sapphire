@@ -361,6 +361,13 @@ impl BlockWithParams {
         }
     }
 
+    /// Shorthand for `Self::new(target, &[])`. Meant for branching straight
+    /// to a block without any parameters being passed.
+    #[inline(always)]
+    pub fn to(target: Block) -> Self {
+        Self::new(target, &[])
+    }
+
     /// Same as [`Self::new`] but specifically when there's a pre-existing vec
     /// of parameters.
     ///

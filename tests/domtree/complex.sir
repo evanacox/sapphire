@@ -1,0 +1,47 @@
+; MATCH-SECTION
+;
+; a
+; ├── b
+; └── c
+;     └── d
+;         ├── e
+;         ├── f
+;         └── g
+;             └── h
+;                 ├── i
+;                 └── j
+;
+fn bool @rand()
+
+fn void @main() {
+a:
+    %0 = call bool @rand()
+    condbr bool %0, b, c
+
+b:
+    br c
+
+c:
+    br d
+
+d:
+    condbr bool %0, e, f
+
+e:
+    br g
+
+f:
+    br g
+
+g:
+    br h
+
+h:
+    condbr bool %0, i, j
+
+i:
+    br c
+
+j:
+    br g
+}

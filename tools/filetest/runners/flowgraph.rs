@@ -7,17 +7,3 @@
 // following link: https://opensource.org/licenses/BSD-3-Clause              //
 //                                                                           //
 //======---------------------------------------------------------------======//
-
-use crate::subtest::{Subtest, TestResult};
-use sapphire::analysis;
-
-fn parser_output(name: &str, content: &str) -> TestResult {
-    match sapphire::parse_sir(name, content) {
-        Ok(module) => TestResult::Output(analysis::stringify_module(&module)),
-        Err(err) => TestResult::CompileError(format!("{err}")),
-    }
-}
-
-pub const fn parse_subtest() -> Subtest {
-    Subtest::new("parse", parser_output)
-}

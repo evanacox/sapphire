@@ -47,7 +47,9 @@ fn find_match_section<'data>(rest: &str) -> Check<'data> {
     );
 
     for line in lines
-        .map(|line| line.trim_start_matches("; "))
+        // we don't do `trim_start_matches("; ")` because an empty line `;` needs to be empty
+        // but we also need to maintain whitespace, so we can't just do .trim_start with one space
+        .map(|line| line.trim_start_matches("; ").trim_start_matches(';'))
         .take_while(|line| !line.is_empty())
     {
         section.push_str(line);

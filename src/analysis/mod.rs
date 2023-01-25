@@ -14,11 +14,13 @@
 //! the [`ModuleAnalysisPass`] traits, and range from debug passes to analyses
 //! that are critical for correctness.
 //!
-//! [`FunctionAnalysisPass`]: crate::passes::FunctionAnalysisPass
-//! [`ModuleAnalysisPass`]: crate::passes::ModuleAnalysisPass
+//! [`FunctionAnalysisPass`]: crate::pass::FunctionAnalysisPass
+//! [`ModuleAnalysisPass`]: crate::pass::ModuleAnalysisPass
 
+mod dominators;
 mod flowgraph;
 mod writer;
 
+pub use dominators::*;
 pub use flowgraph::*;
 pub use writer::*;

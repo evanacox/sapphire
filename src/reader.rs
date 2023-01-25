@@ -184,7 +184,7 @@ impl SIRParser {
 
         let mut pairs = pair.into_inner();
         let proto = pairs.next_or("expected a function prototype");
-        let (name, sig) = self.parse_func_proto(proto, module.type_pool_mut())?;
+        let (name, sig) = self.parse_func_proto(proto, &mut module.context().types_mut())?;
         let key = module.declare_function(&name, sig);
 
         Ok((key, pairs.next()))
@@ -363,7 +363,9 @@ impl SIRParser {
         if let Some(params) = pairs.next() {
             // we take a pair for the name here instead of a LocalIdent, because we need
             // the debuginfo just as much as we need the actual name.
-            for (ty, ident) in self.parse_operand_list(params, builder.type_pool_mut())? {
+            let pairs = self.parse_operand_list(params, &mut builder.ctx().types_mut())?;
+
+            for (ty, ident) in pairs {
                 let (ident, debug) = self.preprocess_block_param_local(ident, builder)?;
                 let param = builder.append_block_param(block, ty, debug);
 
@@ -390,7 +392,9 @@ impl SIRParser {
         if let Some(params) = pairs.next() {
             // we take a pair for the name here instead of a LocalIdent, because we need
             // the debuginfo just as much as we need the actual name.
-            for (_, ident) in self.parse_operand_list(params, builder.type_pool_mut())? {
+            let pairs = self.parse_operand_list(params, &mut builder.ctx().types_mut())?;
+
+            for (_, ident) in pairs {
                 self.verify_block_param_local(ident, builder)?;
             }
         }
@@ -480,7 +484,7 @@ impl SIRParser {
         let result = self.parse_optional_result(&mut pairs, builder)?;
         let ty = self.parse_ty_or_void(
             pairs.next_or("expected ty or void"),
-            builder.type_pool_mut(),
+            &mut builder.ctx().types_mut(),
         )?;
 
         let func = self.parse_func_name(pairs.next_or("expected func name"), builder)?;
@@ -490,10 +494,10 @@ impl SIRParser {
             (Some(t1), Some(t2)) if t1 != t2 => {
                 let msg = format!(
                     "mismatched return type, expected '{}' but got '{}'. signature of '{}' is '{}'",
-                    stringify_ty(builder.type_pool(), t1),
-                    stringify_ty(builder.type_pool(), t2),
+                    stringify_ty(&builder.ctx().types(), t1),
+                    stringify_ty(&builder.ctx().types(), t2),
                     builder.function(func).name(),
-                    stringify_signature(builder.type_pool(), &signature)
+                    stringify_signature(&builder.ctx().types(), &signature)
                 );
 
                 return Err(string_into_err(pair.as_span(), msg));
@@ -612,7 +616,7 @@ impl SIRParser {
             vec.push(val);
         }
 
-        if count != expected && !vararg {
+        if count < expected {
             return missing(count, expected, builder);
         }
 
@@ -636,31 +640,51 @@ impl SIRParser {
         let span = pair.as_span();
 
         let mismatch = |val, t1, t2, builder: &FuncBuilder<'_>| {
-            let name = builder.block_name(block);
-            let ty1 = stringify_ty(builder.type_pool(), t1);
-            let ty2 = stringify_ty(builder.type_pool(), t2);
-            let err = string_into_err(span, format!(
-                "while parsing args for block '{name}', mismatched types for value '{val}', expected '{ty1}' but got '{ty2}'",
-            ));
+            let ty1 = stringify_ty(&builder.ctx().types(), t1);
+            let ty2 = stringify_ty(&builder.ctx().types(), t2);
+            let err = string_into_err(
+                span,
+                format!(
+                "while parsing args for block '{}', mismatched types for value '{val}', expected '{ty1}' but got '{ty2}'",
+                builder.ctx().strings().get(builder.block_name(block)).unwrap()),
+            );
 
             Err(err)
         };
 
         let unexpected = |val, builder: &FuncBuilder<'_>| {
-            let name = builder.block_name(block);
             let err = string_into_err(
                 span,
-                format!("while parsing args for block '{name}', unexpected parameter '{val}'",),
+                format!(
+                    "while parsing args for block '{}', unexpected parameter '{val}'",
+                    builder
+                        .ctx()
+                        .strings()
+                        .get(builder.block_name(block))
+                        .unwrap()
+                ),
             );
 
             Err(err)
         };
 
         let missing = |count, expected, builder: &FuncBuilder<'_>| {
-            let name = builder.block_name(block);
-            let err = string_into_err(span, format!(
-                "not enough arguments given for block '{name}', got {count} args but expected {expected}"
-            ));
+            //
+            // seems I found a bug in `rustfmt`, it breaks with three positional arguments here.
+            // the weirdo format-in-format is so the auto-formatter doesn't crash
+            //
+            let rest = format!("should have gotten '{expected}' but got '{count}'");
+            let err = string_into_err(
+                span,
+                format!(
+                    "not enough arguments given for block '{}', {rest}",
+                    builder
+                        .ctx()
+                        .strings()
+                        .get(builder.block_name(block))
+                        .unwrap()
+                ),
+            );
 
             Err(err)
         };
@@ -690,10 +714,10 @@ impl SIRParser {
         let mismatch = |name, t1, t2, builder: &FuncBuilder<'_>| {
             let msg = format!(
                         "while parsing args for function with signature '{}', mismatched types for value '{}', expected '{}' but got '{}'",
-                        stringify_signature(builder.type_pool(), sig),
+                        stringify_signature(&builder.ctx().types(), sig),
                         name,
-                        stringify_ty(builder.type_pool(), t1),
-                        stringify_ty(builder.type_pool(), t2)
+                        stringify_ty(&builder.ctx().types(), t1),
+                        stringify_ty(&builder.ctx().types(), t2)
                     );
 
             let err = string_into_err(span, msg);
@@ -704,7 +728,7 @@ impl SIRParser {
         let unexpected = |name, builder: &FuncBuilder<'_>| {
             let msg = format!(
                 "while parsing args for function with signature '{}', unexpected parameter '{}'",
-                stringify_signature(builder.type_pool(), sig),
+                stringify_signature(&builder.ctx().types(), sig),
                 name,
             );
 
@@ -714,7 +738,7 @@ impl SIRParser {
         };
 
         let missing = |count, expected, builder: &FuncBuilder<'_>| {
-            let sig = stringify_signature(builder.type_pool(), sig);
+            let sig = stringify_signature(&builder.ctx().types(), sig);
             let msg = format!(
                 "while parsing args for function with signature '{sig}', \
 expected {expected} arguments but got {count}"
@@ -784,12 +808,12 @@ expected {expected} arguments but got {count}"
         let mut inner = inner.into_inner();
         let ret = self.parse_ty_or_void(
             inner.next_or("expected ty or void"),
-            builder.type_pool_mut(),
+            &mut builder.ctx().types_mut(),
         )?;
 
         let (params, variadic) = self.parse_param_list(
             inner.next_or("expected param list"),
-            builder.type_pool_mut(),
+            &mut builder.ctx().types_mut(),
         )?;
 
         let params: SmallVec<[(Type, ParamAttributes); 2]> = params
@@ -875,7 +899,10 @@ expected {expected} arguments but got {count}"
 
         let mut inner = pair.into_inner();
         let (ident, info) = self.parse_result(inner.next_or("expected result"), builder)?;
-        let ty = self.parse_ty(inner.next_or("expected type"), builder.type_pool_mut())?;
+        let ty = self.parse_ty(
+            inner.next_or("expected type"),
+            &mut builder.ctx().types_mut(),
+        )?;
         let _ = inner.next_or("expected bool_ty");
         let condition_pair = inner.next_or("expected local");
         let if_true_pair = inner.next_or("expected local");
@@ -1106,7 +1133,7 @@ expected {expected} arguments but got {count}"
         let ty_pair = inner.next_or("expected type");
 
         let (name, info) = self.parse_result(result, builder)?;
-        let ty = self.parse_ty(ty_pair, builder.type_pool_mut())?;
+        let ty = self.parse_ty(ty_pair, &mut builder.ctx().types_mut())?;
 
         self.append_val(builder, name).alloca(ty, info);
 
@@ -1127,7 +1154,7 @@ expected {expected} arguments but got {count}"
         let val_pair = inner.next_or("expected value");
 
         let (name, info) = self.parse_result(result, builder)?;
-        let ty = self.parse_ty(ty_pair, builder.type_pool_mut())?;
+        let ty = self.parse_ty(ty_pair, &mut builder.ctx().types_mut())?;
         let operand = self.parse_existing_local_of_ty(val_pair, Type::ptr(), builder)?;
 
         self.append_val(builder, name).load(ty, operand, info);
@@ -1173,7 +1200,7 @@ expected {expected} arguments but got {count}"
         let offset_pair = inner.next_or("expected local");
 
         let (name, info) = self.parse_result(result, builder)?;
-        let ty = self.parse_ty(ty_pair, builder.type_pool_mut())?;
+        let ty = self.parse_ty(ty_pair, &mut builder.ctx().types_mut())?;
         let offset_ty = self.parse_int_ty(int_ty)?;
         let base = self.parse_existing_local_of_ty(base_pair, Type::ptr(), builder)?;
         let offset = self.parse_existing_local_of_ty(offset_pair, offset_ty, builder)?;
@@ -1239,10 +1266,10 @@ expected {expected} arguments but got {count}"
         idx_span: Span<'_>,
         builder: &FuncBuilder<'_>,
     ) -> ParseResult<()> {
-        let (in_bounds, expected) = Self::agg_ty_properties(agg, idx, builder.type_pool());
+        let (in_bounds, expected) = Self::agg_ty_properties(agg, idx, &builder.ctx().types());
 
         Self::check_agg_within_bounds(in_bounds, idx_span)?;
-        Self::check_agg_correct_ty(expected, got, idx_span, builder.type_pool())?;
+        Self::check_agg_correct_ty(expected, got, idx_span, &builder.ctx().types())?;
 
         Ok(())
     }
@@ -1263,8 +1290,8 @@ expected {expected} arguments but got {count}"
         let idx_span = idx_pair.as_span();
 
         let (name, info) = self.parse_result(result, builder)?;
-        let out_ty = self.parse_ty(out_ty_pair, builder.type_pool_mut())?;
-        let agg_ty = self.parse_array_or_struct_ty(agg_ty_pair, builder.type_pool_mut())?;
+        let out_ty = self.parse_ty(out_ty_pair, &mut builder.ctx().types_mut())?;
+        let agg_ty = self.parse_array_or_struct_ty(agg_ty_pair, &mut builder.ctx().types_mut())?;
         let agg = self.parse_existing_local_of_ty(agg_pair, agg_ty, builder)?;
         let idx = self.parse_int_lit(64, idx_pair)?;
 
@@ -1292,7 +1319,7 @@ expected {expected} arguments but got {count}"
         let idx_span = idx_pair.as_span();
 
         let (name, info) = self.parse_result(result, builder)?;
-        let agg_ty = self.parse_array_or_struct_ty(agg_ty_pair, builder.type_pool_mut())?;
+        let agg_ty = self.parse_array_or_struct_ty(agg_ty_pair, &mut builder.ctx().types_mut())?;
         let agg = self.parse_existing_local_of_ty(agg_pair, agg_ty, builder)?;
         let to_insert = self.parse_operand(operand_pair, builder)?;
         let idx = self.parse_int_lit(64, idx_pair)?;
@@ -1321,11 +1348,11 @@ expected {expected} arguments but got {count}"
         let idx_span = idx_pair.as_span();
 
         let (name, info) = self.parse_result(result, builder)?;
-        let agg_ty = self.parse_array_or_struct_ty(agg_ty_pair, builder.type_pool_mut())?;
+        let agg_ty = self.parse_array_or_struct_ty(agg_ty_pair, &mut builder.ctx().types_mut())?;
         let base = self.parse_existing_local_of_ty(base_pair, Type::ptr(), builder)?;
         let idx = self.parse_int_lit(64, idx_pair)?;
 
-        let (in_bounds, _) = Self::agg_ty_properties(agg_ty, idx, builder.type_pool());
+        let (in_bounds, _) = Self::agg_ty_properties(agg_ty, idx, &builder.ctx().types());
 
         Self::check_agg_within_bounds(in_bounds, idx_span)?;
 
@@ -1663,7 +1690,7 @@ expected {expected} arguments but got {count}"
         let ty_pair = inner.next_or("expected ty");
 
         let (name, info) = self.parse_result(result_pair, builder)?;
-        let ty = self.parse_ty(ty_pair, builder.type_pool_mut())?;
+        let ty = self.parse_ty(ty_pair, &mut builder.ctx().types_mut())?;
 
         self.append_val(builder, name).undef(ty, info);
 
@@ -1682,7 +1709,7 @@ expected {expected} arguments but got {count}"
         let ty_pair = inner.next_or("expected ty");
 
         let (name, info) = self.parse_result(result_pair, builder)?;
-        let ty = self.parse_ty(ty_pair, builder.type_pool_mut())?;
+        let ty = self.parse_ty(ty_pair, &mut builder.ctx().types_mut())?;
 
         self.append_val(builder, name).null(ty, info);
 
@@ -1710,7 +1737,7 @@ expected {expected} arguments but got {count}"
 
         let mut pairs = pair.into_inner();
         let ty_pair = pairs.next_or("expected type");
-        let ty = self.parse_ty(ty_pair, builder.type_pool_mut())?;
+        let ty = self.parse_ty(ty_pair, &mut builder.ctx().types_mut())?;
         let name_pair = pairs.next_or("expected name with type");
 
         self.parse_existing_local_of_ty(name_pair, ty, builder)
@@ -1763,7 +1790,7 @@ expected {expected} arguments but got {count}"
             if !ty.is_bool_or_int() {
                 let msg = format!(
                     "unexpected type for value, expected 'bool' or integer but got '{}'",
-                    stringify_ty(builder.type_pool(), ty)
+                    stringify_ty(&builder.ctx().types(), ty)
                 );
 
                 return Err(string_into_err(span, msg));
@@ -1786,7 +1813,7 @@ expected {expected} arguments but got {count}"
             if !ty.is_int() {
                 let msg = format!(
                     "unexpected type for value, expected integer but got '{}'",
-                    stringify_ty(builder.type_pool(), ty)
+                    stringify_ty(&builder.ctx().types(), ty)
                 );
 
                 return Err(string_into_err(span, msg));
@@ -1809,7 +1836,7 @@ expected {expected} arguments but got {count}"
             if !ty.is_float() {
                 let msg = format!(
                     "unexpected type for value, expected float but got '{}'",
-                    stringify_ty(builder.type_pool(), ty)
+                    stringify_ty(&builder.ctx().types(), ty)
                 );
 
                 return Err(string_into_err(span, msg));
@@ -1855,8 +1882,8 @@ expected {expected} arguments but got {count}"
         let val = self.parse_existing_local(pair, builder)?;
 
         if ty != builder.ty(val) {
-            let expected = stringify_ty(builder.type_pool(), ty);
-            let got = stringify_ty(builder.type_pool(), builder.ty(val));
+            let expected = stringify_ty(&builder.ctx().types(), ty);
+            let got = stringify_ty(&builder.ctx().types(), builder.ty(val));
             let err = format!(
                 "mismatched types for value '{}', expected '{}' but got '{}'",
                 name_span.as_str(),
@@ -1916,7 +1943,7 @@ expected {expected} arguments but got {count}"
                 Ok((LocalIdent::Num(num), info))
             }
             Err(_) => {
-                let key = builder.string_pool_mut().insert(&real);
+                let key = builder.ctx().strings_mut().insert(&real);
                 let info = pair_into_info(pair, self.filename, Some(key));
 
                 Ok((LocalIdent::Name(key), info))
@@ -2232,8 +2259,7 @@ expected {expected} arguments but got {count}"
 /// Parses a SIR source file into a module, or returns the first
 /// error that occurred while parsing.
 ///
-/// Multiple errors are not collected for performance reasons, this is
-/// an IR meant to be used by compiler people.
+/// Multiple errors are not collected for performance reasons.
 pub fn parse_sir(filename: &str, source: &str) -> Result<Module, Box<dyn Error>> {
     let result = generated::SIRReader::parse(Rule::sir, source)?;
 

@@ -8,16 +8,11 @@
 //                                                                           //
 //======---------------------------------------------------------------======//
 
-use crate::subtest::{Subtest, TestResult};
-use sapphire::analysis;
-
-fn parser_output(name: &str, content: &str) -> TestResult {
-    match sapphire::parse_sir(name, content) {
-        Ok(module) => TestResult::Output(analysis::stringify_module(&module)),
-        Err(err) => TestResult::CompileError(format!("{err}")),
-    }
-}
-
-pub const fn parse_subtest() -> Subtest {
-    Subtest::new("parse", parser_output)
+/// An implementation of an engine as a SIR interpreter.
+///
+/// This is meant to be more of an IR behavior verification tool rather
+/// than an a generalized way to execute IR, as a JIT would be much better
+/// suited to the latter purpose.
+pub struct Runtime {
+    //
 }

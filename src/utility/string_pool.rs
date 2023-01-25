@@ -314,7 +314,6 @@ mod tests {
         assert_tokens(
             &pool,
             &[
-                // should just be an empty sequence with a specified length
                 Token::Seq { len: Some(1) },
                 Token::Str(DEBUG_FAKE_INVALID),
                 Token::SeqEnd,
@@ -334,7 +333,6 @@ mod tests {
         assert_tokens(
             &pool,
             &[
-                // should just be an empty sequence with a specified length
                 Token::Seq { len: Some(4) },
                 Token::Str(DEBUG_FAKE_INVALID),
                 Token::Str("one"),

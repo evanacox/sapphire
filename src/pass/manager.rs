@@ -9,14 +9,30 @@
 //======---------------------------------------------------------------======//
 
 use crate::ir::{Function, Module};
-use crate::passes::*;
+use crate::pass::*;
 
 /// Manages running a set of passes over IR.
 ///
 /// An important note is that this is actually a module pass itself, it's a pass
 /// that simply runs other passes.
+#[derive(Default)]
 pub struct ModulePassManager {
     passes: Vec<Box<dyn ModuleTransformPass>>,
+}
+
+impl ModulePassManager {
+    /// Creates a new, empty, module pass manager.
+    pub fn new() -> Self {
+        Self {
+            passes: Vec::default(),
+        }
+    }
+
+    /// Adds a transformation pass to the pass manager. This pass's order is defined
+    /// relative to other calls to [`Self::add_pass`].
+    pub fn add_pass<T: ModuleTransformPass + 'static>(&mut self, pass: T) {
+        self.passes.push(Box::new(pass));
+    }
 }
 
 impl ModuleTransformPass for ModulePassManager {
@@ -74,7 +90,17 @@ impl FunctionToModulePassAdapter {
 }
 
 impl ModuleTransformPass for FunctionToModulePassAdapter {
-    fn run(&mut self, _: &mut Module, _: &ModuleAnalysisManager) -> PreservedAnalyses {
-        todo!()
+    fn run(&mut self, module: &mut Module, am: &ModuleAnalysisManager) -> PreservedAnalyses {
+        let fam = am.get::<FunctionAnalysisManagerModuleProxy>(module);
+        let mut preserved = PreservedAnalyses::all();
+
+        for func in module.functions() {
+            let func = module.function_mut(func);
+            let other = self.pass.run(func, &fam.borrow());
+
+            preserved = preserved.intersect(other);
+        }
+
+        preserved
     }
 }
