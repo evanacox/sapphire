@@ -73,7 +73,9 @@ jobs:
           version: latest
 
       - name: Run cargo tarpaulin
-        run: cargo tarpaulin --run-types Tests,Doctests -- --test-threads 1
+        run: cargo tarpaulin --run-types Tests,Doctests --verbose --all-features --workspace --out Xml -- --test-threads 1
 
       - name: Upload to codecov.io
         uses: codecov/codecov-action@v3
+        with:
+          fail_ci_if_error: true
