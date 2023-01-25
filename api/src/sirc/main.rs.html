@@ -37,10 +37,9 @@
 <a href="#34" id="34">34</a>
 <a href="#35" id="35">35</a>
 <a href="#36" id="36">36</a>
-<a href="#37" id="37">37</a>
 </pre><pre class="rust"><code><span class="comment">//======---------------------------------------------------------------======//
 //                                                                           //
-// Copyright 2022 Evan Cox &lt;evanacox00@gmail.com&gt;. All rights reserved.      //
+// Copyright 2022-2023 Evan Cox &lt;evanacox00@gmail.com&gt;. All rights reserved. //
 //                                                                           //
 // Use of this source code is governed by a BSD-style license that can be    //
 // found in the LICENSE.txt file at the root of this project, or at the      //
@@ -48,14 +47,13 @@
 //                                                                           //
 //======---------------------------------------------------------------======//
 
-</span><span class="kw">use </span>sapphire::analysis;
-<span class="kw">use </span>sapphire::cli;
+</span><span class="kw">use </span>sapphire::cli;
 <span class="kw">use </span>std::fs;
 
 <span class="kw">fn </span>main() {
     <span class="kw">let </span>(<span class="kw">_</span>, base) = cli::tool_with(
         <span class="string">&quot;static compiler for Sapphire IR&quot;</span>,
-        <span class="string">&quot;Usage: sirc [options] &lt;input ir&gt; &quot;</span>,
+        <span class="string">&quot;Usage: sirc [options] &lt;input ir&gt;&quot;</span>,
         cli::emit_machine_format(),
     )
     .run();
@@ -67,7 +65,7 @@
 
         <span class="kw">match </span>sapphire::parse_sir(<span class="kw-2">&amp;</span>filename, <span class="kw-2">&amp;</span>source) {
             <span class="prelude-val">Ok</span>(module) =&gt; {
-                analysis::print_module(<span class="kw-2">&amp;</span>module);
+                <span class="macro">dbg!</span>(module);
             }
             <span class="prelude-val">Err</span>(e) =&gt; {
                 <span class="macro">eprintln!</span>(<span class="string">&quot;failed to parse: {e}&quot;</span>);

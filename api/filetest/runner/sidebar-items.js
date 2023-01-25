@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":[["PAD_TO_START_OF_LINE",""],["SUBTESTS",""]],"fn":[["pool_for_jobs",""],["prettify_diff",""],["prettify_failure",""],["print_failure",""],["print_subtest_header",""],["print_subtest_result",""],["print_summary",""],["run_all",""],["run_subtest",""],["run_tests",""],["test_results",""]]};
+window.SIDEBAR_ITEMS = {"constant":[["SUBTESTS",""]],"fn":[["pool_for_jobs",""],["run_all",""],["run_subtest",""],["run_tests",""]]};

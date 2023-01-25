@@ -254,9 +254,18 @@
 <a href="#251" id="251">251</a>
 <a href="#252" id="252">252</a>
 <a href="#253" id="253">253</a>
+<a href="#254" id="254">254</a>
+<a href="#255" id="255">255</a>
+<a href="#256" id="256">256</a>
+<a href="#257" id="257">257</a>
+<a href="#258" id="258">258</a>
+<a href="#259" id="259">259</a>
+<a href="#260" id="260">260</a>
+<a href="#261" id="261">261</a>
+<a href="#262" id="262">262</a>
 </pre><pre class="rust"><code><span class="comment">//======---------------------------------------------------------------======//
 //                                                                           //
-// Copyright 2022 Evan Cox &lt;evanacox00@gmail.com&gt;. All rights reserved.      //
+// Copyright 2022-2023 Evan Cox &lt;evanacox00@gmail.com&gt;. All rights reserved. //
 //                                                                           //
 // Use of this source code is governed by a BSD-style license that can be    //
 // found in the LICENSE.txt file at the root of this project, or at the      //
@@ -265,7 +274,7 @@
 //======---------------------------------------------------------------======//
 
 </span><span class="kw">use </span><span class="kw">crate</span>::dense_arena_key;
-<span class="kw">use </span><span class="kw">crate</span>::ir::{DataFlowGraph, Layout, Type};
+<span class="kw">use </span><span class="kw">crate</span>::ir::{DataFlowGraph, Layout, ModuleContext, Type};
 <span class="kw">use </span><span class="kw">crate</span>::utility::PackedOption;
 <span class="kw">use </span>bitflags::bitflags;
 <span class="kw">use </span>smallvec::SmallVec;
@@ -439,6 +448,7 @@
     name: String,
     sig: Signature,
     func: Func,
+    context: ModuleContext,
     definition: <span class="prelude-ty">Option</span>&lt;FunctionDefinition&gt;,
 }
 
@@ -447,11 +457,12 @@
     ///
     /// This is equivalent to &quot;declaring&quot; a function, as a declared function is
     /// just a function without a body.
-    </span><span class="kw">pub fn </span>new(name: String, sig: Signature, func: Func) -&gt; <span class="self">Self </span>{
+    </span><span class="kw">pub fn </span>new(name: String, sig: Signature, func: Func, ctx: ModuleContext) -&gt; <span class="self">Self </span>{
         <span class="self">Self </span>{
             name,
             sig,
             func,
+            context: ctx,
             definition: <span class="prelude-val">None</span>,
         }
     }
@@ -501,6 +512,13 @@
     </span><span class="attr">#[inline]
     </span><span class="kw">pub fn </span>func(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Func {
         <span class="self">self</span>.func
+    }
+
+    <span class="doccomment">/// Gets the module context associated with the module that contains
+    /// this function, allowing the type and string pools to be accessed directly.
+    </span><span class="attr">#[inline]
+    </span><span class="kw">pub fn </span>ctx(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>ModuleContext {
+        <span class="kw-2">&amp;</span><span class="self">self</span>.context
     }
 
     <span class="kw">pub</span>(<span class="kw">in </span><span class="kw">crate</span>::ir) <span class="kw">fn </span>replace_definition(<span class="kw-2">&amp;mut </span><span class="self">self</span>, def: FunctionDefinition) {

@@ -1,0 +1,278 @@
+<!DOCTYPE HTML>
+<html lang="en" class="sidebar-visible no-js light">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>filetest - Sapphire</title>
+
+
+        <!-- Custom HTML head -->
+        
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff" />
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="../highlight.css">
+        <link rel="stylesheet" href="../tomorrow-night.css">
+        <link rel="stylesheet" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+        <!-- MathJax -->
+        <script async src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    </head>
+    <body>
+        <!-- Provide site root to javascript -->
+        <script>
+            var path_to_root = "../";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "light";
+        </script>
+
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                var theme = localStorage.getItem('mdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            var theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            var html = document.querySelector('html');
+            html.classList.remove('no-js')
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add('js');
+        </script>
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            var html = document.querySelector('html');
+            var sidebar = 'hidden';
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            }
+            html.classList.remove('sidebar-visible');
+            html.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <div class="sidebar-scrollbox">
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="../index.html">Preface</a></li><li class="chapter-item expanded "><a href="../sir.html"><strong aria-hidden="true">1.</strong> Sapphire IR</a></li><li class="chapter-item expanded "><a href="../internals/index.html"><strong aria-hidden="true">2.</strong> Compiler Internals</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../internals/parser.html"><strong aria-hidden="true">2.1.</strong> SIR Parser</a></li><li class="chapter-item expanded "><a href="../internals/sir-repr.html"><strong aria-hidden="true">2.2.</strong> SIR Representation</a></li></ol></li><li class="chapter-item expanded "><a href="../tools/index.html"><strong aria-hidden="true">3.</strong> Tools</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../tools/filetest.html" class="active"><strong aria-hidden="true">3.1.</strong> filetest</a></li><li class="chapter-item expanded "><a href="../tools/sirc.html"><strong aria-hidden="true">3.2.</strong> sirc</a></li></ol></li></ol>
+            </div>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky bordered">
+                    <div class="left-buttons">
+                        <button id="sidebar-toggle" class="icon-button" type="button" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </button>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Sapphire</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/evanacox/sapphire/tree/master/docs" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="filetest-file-driven-test-runner"><a class="header" href="#filetest-file-driven-test-runner"><code>filetest</code>: File-driven Test Runner</a></h1>
+<p>This is a very similar (albeit extremely cut-down) tool to <code>FileCheck</code> from LLVM. It's a simple, fast way of writing
+data-driven regression tests for the compiler. </p>
+<h2 id="tests-and-runners"><a class="header" href="#tests-and-runners">Tests and Runners</a></h2>
+<p>Tests are defined in terms of &quot;subtests&quot; and &quot;cases&quot; for those subtests. Subtests are subsets of
+the complete list of test cases that are run through a specific &quot;runner&quot; that is built into 
+<code>filetest</code>. These runners are written in the <code>runners/</code> subdirectory of <code>filetest/</code>, and are
+enabled in <code>runner.rs</code>.</p>
+<blockquote>
+<p>Note: The reason it is built this way is to allow better access to compiler APIs in regression tests,
+as writing the runners in Rust gives full access to both the Sapphire API and the Rust language.</p>
+<p>This tool may end up changing to more of a command-based model where tests are defined in terms of commands
+to execute that output data to be matched on, but as of right now runners are hard-coded. </p>
+</blockquote>
+<p>Runners operate on a subset of the total list of test cases, each subdirectory in the <code>tests/</code> directory
+is considered to correspond to a subtest. <code>tests/parse/</code> =&gt; <code>parse</code> subtest, <code>tests/domtree/</code> =&gt; <code>domtree</code>
+subtest, etc. These are automatically discovered when <code>filetest</code> is executed. </p>
+<h2 id="format"><a class="header" href="#format">Format</a></h2>
+<p><code>filetest</code> works with the idea of &quot;checks,&quot; and it provides several types of checks
+that can be useful in different circumstances.</p>
+<p>All <code>filetest</code> test cases (files) must start with a header of the following format:</p>
+<pre><code class="language-llvm">; &lt;CHECK TYPE&gt;
+</code></pre>
+<p>where <code>&lt;CHECK TYPE&gt;</code> is one of the following:</p>
+<ul>
+<li><code>STANDARD</code>: Normal <code>CHECK</code> directive style, the output should contain the content of each CHECK line</li>
+<li><code>MATCH-ENTIRE</code>: The output of a given test should exactly match the rest of the file (starting at the beginning of the next line)</li>
+<li><code>MATCH-SECTION</code>: The output should contain a given output</li>
+</ul>
+<p>Note that the entire file is still given as input for the test, comments are not stripped out. This
+should not matter for your test. </p>
+<h2 id="check-types"><a class="header" href="#check-types">Check Types</a></h2>
+<h3 id="standard"><a class="header" href="#standard"><code>STANDARD</code></a></h3>
+<p>This is very similar to <code>CHECK</code> directives in LLVM's <code>FileCheck</code>. Any line that (after whitespace
+is trimmed from the beginning) follows the following format is considered to be a <code>CHECK</code> directive:</p>
+<pre><code class="language-llvm">; CHECK: &lt;check content&gt;
+</code></pre>
+<p>Each of these checks must appear <strong>in order</strong> in the output of the test, although they may
+have other lines inserted between them. Consider the following tests:</p>
+<div class="table-wrapper"><table><thead><tr><th>Test Case</th><th>Output</th></tr></thead><tbody>
+<tr><td><code>llvm&lt;br/&gt;; STANDARD&lt;br/&gt;; CHECK: a&lt;br/&gt;; CHECK: b</code></td><td><code>whatever&lt;br/&gt;a&lt;br/&gt;whatever&lt;br/&gt;b</code></td></tr>
+</tbody></table>
+</div>
+<p>This would be considered to pass the test. While <code>a</code> and <code>b</code> are not one-after-the-other in the test's output,
+they are in the correct order relative to one another, and they are both present. </p>
+<div class="table-wrapper"><table><thead><tr><th>Test Case</th><th>Output</th></tr></thead><tbody>
+<tr><td><code>llvm&lt;br/&gt;; STANDARD&lt;br/&gt;; CHECK: a&lt;br/&gt;; CHECK: b</code></td><td><code>whatever&lt;br/&gt;b&lt;br/&gt;whatever&lt;br/&gt;a</code></td></tr>
+</tbody></table>
+</div>
+<p>This would be considered to not pass the test. While <code>a</code> and <code>b</code> are both present in the output, they
+are not in the correct relative order.</p>
+<p>If it is necessary to not have anything between checks, use <code>MATCH-SECTION</code>.</p>
+<h3 id="match-entire"><a class="header" href="#match-entire"><code>MATCH-ENTIRE</code></a></h3>
+<p>This directive is simple. It takes everything in the file after the <code>; MATCH-ENTIRE</code> directive
+and expects the output to match this exactly. This is really only used for the parser regression tests
+where the parser/writer should output the same thing that was input. </p>
+<pre><code class="language-llvm">; MATCH-ENTIRE
+fn i32 @main(i32, ptr) {
+entry(i32 %argc, ptr %argv):
+  %0 = iconst i32 0
+  ret i32 %0
+}
+</code></pre>
+<h3 id="match-section"><a class="header" href="#match-section"><code>MATCH-SECTION</code></a></h3>
+<p>This directive allows defining an exact textual structure that should appear somewhere in the output. After
+the <code>MATCH-SECTION</code> directive, an empty <code>;</code> line denotes the beginning and the end of the section to
+look for in the output.</p>
+<pre><code class="language-llvm">; MATCH-SECTION
+;
+; fn void @test() {
+; entry:
+;   ret void
+; }
+;
+fn void @test() {
+entry:
+  ret void
+}
+</code></pre>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../tools/index.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next" href="../tools/sirc.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../tools/index.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next" href="../tools/sirc.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+    </body>
+</html>

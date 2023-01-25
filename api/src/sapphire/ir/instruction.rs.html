@@ -1420,9 +1420,16 @@
 <a href="#1417" id="1417">1417</a>
 <a href="#1418" id="1418">1418</a>
 <a href="#1419" id="1419">1419</a>
+<a href="#1420" id="1420">1420</a>
+<a href="#1421" id="1421">1421</a>
+<a href="#1422" id="1422">1422</a>
+<a href="#1423" id="1423">1423</a>
+<a href="#1424" id="1424">1424</a>
+<a href="#1425" id="1425">1425</a>
+<a href="#1426" id="1426">1426</a>
 </pre><pre class="rust"><code><span class="comment">//======---------------------------------------------------------------======//
 //                                                                           //
-// Copyright 2022 Evan Cox &lt;evanacox00@gmail.com&gt;. All rights reserved.      //
+// Copyright 2022-2023 Evan Cox &lt;evanacox00@gmail.com&gt;. All rights reserved. //
 //                                                                           //
 // Use of this source code is governed by a BSD-style license that can be    //
 // found in the LICENSE.txt file at the root of this project, or at the      //
@@ -1781,6 +1788,13 @@
         <span class="self">Self </span>{
             data: TinyArray::from_small_vec(vals),
         }
+    }
+
+    <span class="doccomment">/// Shorthand for `Self::new(target, &amp;[])`. Meant for branching straight
+    /// to a block without any parameters being passed.
+    </span><span class="attr">#[inline(always)]
+    </span><span class="kw">pub fn </span>to(target: Block) -&gt; <span class="self">Self </span>{
+        <span class="self">Self</span>::new(target, <span class="kw-2">&amp;</span>[])
     }
 
     <span class="doccomment">/// Same as [`Self::new`] but specifically when there&#39;s a pre-existing vec

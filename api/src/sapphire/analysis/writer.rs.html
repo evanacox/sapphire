@@ -1429,37 +1429,9 @@
 <a href="#1426" id="1426">1426</a>
 <a href="#1427" id="1427">1427</a>
 <a href="#1428" id="1428">1428</a>
-<a href="#1429" id="1429">1429</a>
-<a href="#1430" id="1430">1430</a>
-<a href="#1431" id="1431">1431</a>
-<a href="#1432" id="1432">1432</a>
-<a href="#1433" id="1433">1433</a>
-<a href="#1434" id="1434">1434</a>
-<a href="#1435" id="1435">1435</a>
-<a href="#1436" id="1436">1436</a>
-<a href="#1437" id="1437">1437</a>
-<a href="#1438" id="1438">1438</a>
-<a href="#1439" id="1439">1439</a>
-<a href="#1440" id="1440">1440</a>
-<a href="#1441" id="1441">1441</a>
-<a href="#1442" id="1442">1442</a>
-<a href="#1443" id="1443">1443</a>
-<a href="#1444" id="1444">1444</a>
-<a href="#1445" id="1445">1445</a>
-<a href="#1446" id="1446">1446</a>
-<a href="#1447" id="1447">1447</a>
-<a href="#1448" id="1448">1448</a>
-<a href="#1449" id="1449">1449</a>
-<a href="#1450" id="1450">1450</a>
-<a href="#1451" id="1451">1451</a>
-<a href="#1452" id="1452">1452</a>
-<a href="#1453" id="1453">1453</a>
-<a href="#1454" id="1454">1454</a>
-<a href="#1455" id="1455">1455</a>
-<a href="#1456" id="1456">1456</a>
 </pre><pre class="rust"><code><span class="comment">//======---------------------------------------------------------------======//
 //                                                                           //
-// Copyright 2022 Evan Cox &lt;evanacox00@gmail.com&gt;. All rights reserved.      //
+// Copyright 2022-2023 Evan Cox &lt;evanacox00@gmail.com&gt;. All rights reserved. //
 //                                                                           //
 // Use of this source code is governed by a BSD-style license that can be    //
 // found in the LICENSE.txt file at the root of this project, or at the      //
@@ -1469,11 +1441,11 @@
 
 </span><span class="kw">use </span><span class="kw">crate</span>::arena::SecondaryMap;
 <span class="kw">use </span><span class="kw">crate</span>::ir::<span class="kw-2">*</span>;
-<span class="kw">use </span><span class="kw">crate</span>::passes::{ModuleAnalysisManager, ModuleAnalysisPass};
+<span class="kw">use </span><span class="kw">crate</span>::pass::{ModuleAnalysisManager, ModuleAnalysisPass};
 <span class="kw">use </span><span class="kw">crate</span>::utility::{Str, StringPool};
 <span class="kw">use </span>std::any::TypeId;
-<span class="kw">use </span>std::io;
 <span class="kw">use </span>std::ops::Range;
+<span class="kw">use </span>std::sync::RwLockReadGuard;
 
 <span class="doccomment">/// A simple SIR -&gt; text pass that takes in an entire module, turns it into
 /// textual SIR, and then maps each IR entity to a range of text referring to it.
@@ -1492,6 +1464,8 @@
     <span class="kw">fn </span>from(module: <span class="kw-2">&amp;</span>Module) -&gt; <span class="self">Self </span>{
         <span class="kw">let </span><span class="kw-2">mut </span>writer_impl = WriterImpl {
             module,
+            pool_guard: module.context().types(),
+            string_guard: module.context().strings(),
             state: ModuleWriter {
                 whole: String::default(),
                 val_ranges: SecondaryMap::default(),
@@ -1559,6 +1533,9 @@
 ///
 /// This analysis needs to be run in the standard way for a correct [`ModuleWriter`]
 /// to be produced, the result yielded by the analysis can then be queried as desired.
+///
+/// Note that this analysis is not intended to be run in the hot path of the compiler, it
+/// maintains a lock on the type pool while running.
 </span><span class="kw">pub struct </span>ModuleStringifyAnalysis;
 
 <span class="kw">impl </span>ModuleAnalysisPass <span class="kw">for </span>ModuleStringifyAnalysis {
@@ -1570,43 +1547,6 @@
 
     <span class="kw">fn </span>run(<span class="kw-2">&amp;mut </span><span class="self">self</span>, module: <span class="kw-2">&amp;</span>Module, <span class="kw">_</span>: <span class="kw-2">&amp;</span>ModuleAnalysisManager) -&gt; <span class="self">Self</span>::Result {
         ModuleWriter::from(module)
-    }
-}
-
-<span class="doccomment">/// This is an analysis that writes out a textual representation of a module
-/// to a
-///
-/// This analysis needs to be run in the standard way for a correct [`ModuleWriter`]
-/// to be produced, the result yielded by the analysis can then be queried as desired.
-</span><span class="kw">pub struct </span>ModuleWriterAnalysis {
-    out: Box&lt;<span class="kw">dyn </span>io::Write&gt;,
-}
-
-<span class="kw">impl </span>ModuleWriterAnalysis {
-    <span class="doccomment">/// Creates an instance of the pass with a given writer.
-    ///
-    /// This writer will be where the module is printed out when the analysis
-    /// is run over the IR.
-    </span><span class="kw">pub fn </span>with_writer&lt;T: io::Write + <span class="lifetime">&#39;static</span>&gt;(writer: T) -&gt; <span class="self">Self </span>{
-        <span class="self">Self </span>{
-            out: Box::new(writer),
-        }
-    }
-}
-
-<span class="kw">impl </span>ModuleAnalysisPass <span class="kw">for </span>ModuleWriterAnalysis {
-    <span class="kw">type </span><span class="prelude-ty">Result </span>= ();
-
-    <span class="kw">fn </span>expects_preserved(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span><span class="lifetime">&#39;static </span>[TypeId] {
-        <span class="kw-2">&amp;</span>[]
-    }
-
-    <span class="kw">fn </span>run(<span class="kw-2">&amp;mut </span><span class="self">self</span>, module: <span class="kw-2">&amp;</span>Module, am: <span class="kw-2">&amp;</span>ModuleAnalysisManager) -&gt; <span class="self">Self</span>::Result {
-        <span class="kw">let </span>writer = am.get::&lt;ModuleStringifyAnalysis&gt;(module);
-
-        <span class="self">self</span>.out
-            .write_all(writer.module().as_bytes())
-            .expect(<span class="string">&quot;unable to write module to writer&quot;</span>)
     }
 }
 
@@ -1722,6 +1662,8 @@
 
 <span class="kw">struct </span>WriterImpl&lt;<span class="lifetime">&#39;m</span>&gt; {
     module: <span class="kw-2">&amp;</span><span class="lifetime">&#39;m </span>Module,
+    pool_guard: RwLockReadGuard&lt;<span class="lifetime">&#39;m</span>, TypePool&gt;,
+    string_guard: RwLockReadGuard&lt;<span class="lifetime">&#39;m</span>, StringPool&gt;,
     state: ModuleWriter,
     values: SecondaryMap&lt;Value, ValueName&gt;,
     next: u32,
@@ -1729,15 +1671,15 @@
 
 <span class="kw">impl</span>&lt;<span class="lifetime">&#39;m</span>&gt; WriterImpl&lt;<span class="lifetime">&#39;m</span>&gt; {
     <span class="kw">fn </span>ty(<span class="kw-2">&amp;</span><span class="self">self</span>, ty: Type) -&gt; String {
-        stringify_ty(<span class="self">self</span>.module.type_pool(), ty)
+        stringify_ty(<span class="kw-2">&amp;</span><span class="self">self</span>.pool_guard, ty)
     }
 
     <span class="kw">fn </span>ty_void(<span class="kw-2">&amp;</span><span class="self">self</span>, ty: <span class="prelude-ty">Option</span>&lt;Type&gt;) -&gt; String {
-        stringify_return_ty(<span class="self">self</span>.module.type_pool(), ty)
+        stringify_return_ty(<span class="kw-2">&amp;</span><span class="self">self</span>.pool_guard, ty)
     }
 
     <span class="kw">fn </span>param_tys(<span class="kw-2">&amp;</span><span class="self">self</span>, sig: <span class="kw-2">&amp;</span>Signature) -&gt; String {
-        stringify_signature_params(<span class="self">self</span>.module.type_pool(), sig)
+        stringify_signature_params(<span class="kw-2">&amp;</span><span class="self">self</span>.pool_guard, sig)
     }
 
     <span class="kw">fn </span>func_name(<span class="kw-2">&amp;</span><span class="self">self</span>, func: Func) -&gt; String {
@@ -1814,7 +1756,8 @@
 
     <span class="kw">fn </span>block_target(<span class="kw-2">&amp;mut </span><span class="self">self</span>, block: <span class="kw-2">&amp;</span>BlockWithParams, def: <span class="kw-2">&amp;</span>FunctionDefinition) -&gt; String {
         <span class="kw">let </span>bb = block.block();
-        <span class="kw">let </span>name = <span class="self">self</span>.module().resolve_string(def.dfg.block(bb).name());
+        <span class="kw">let </span>pool = <span class="self">self</span>.module().context().strings();
+        <span class="kw">let </span>name = pool.get(def.dfg.block(bb).name()).unwrap();
 
         <span class="kw">if </span>block.args().is_empty() {
             name.to_owned()
@@ -1838,7 +1781,7 @@
             <span class="prelude-val">None </span>=&gt; <span class="self">self</span>.insert_name(val, def),
         };
 
-        name.into_string(<span class="self">self</span>.module().string_pool())
+        name.into_string(<span class="kw-2">&amp;</span><span class="self">self</span>.string_guard)
     }
 
     <span class="kw">fn </span>insert_name(<span class="kw-2">&amp;mut </span><span class="self">self</span>, val: Value, def: <span class="kw-2">&amp;</span>FunctionDefinition) -&gt; ValueName {
@@ -1931,7 +1874,7 @@
         {
             <span class="kw">let </span>bb = def.dfg.block(block);
 
-            <span class="self">self</span>.state.whole += <span class="self">self</span>.module().resolve_string(bb.name());
+            <span class="self">self</span>.state.whole += <span class="self">self</span>.string_guard.get(bb.name()).unwrap();
 
             <span class="kw">if </span>!bb.params().is_empty() {
                 <span class="self">self</span>.state.whole += <span class="string">&quot;(&quot;</span>;
@@ -2008,7 +1951,7 @@
 
         <span class="kw">let </span>ret = <span class="self">self</span>.ty_void(data.result_ty());
         <span class="kw">let </span>signature = def.dfg.signature(data.sig());
-        <span class="kw">let </span>sig = stringify_signature_params(<span class="self">self</span>.module().type_pool(), signature);
+        <span class="kw">let </span>sig = stringify_signature_params(<span class="kw-2">&amp;</span><span class="self">self</span>.pool_guard, signature);
         <span class="kw">let </span>callee = <span class="self">self</span>.name_ty(data.callee(), def);
         <span class="kw">let </span>args = <span class="self">self</span>.args(data.args(), def);
 
@@ -2031,7 +1974,7 @@
             ICmpOp::ULE =&gt; <span class="string">&quot;ule&quot;</span>,
         };
 
-        <span class="kw">let </span>ty = stringify_ty(<span class="self">self</span>.module().type_pool(), def.dfg.ty(data.lhs()));
+        <span class="kw">let </span>ty = stringify_ty(<span class="kw-2">&amp;</span><span class="self">self</span>.pool_guard, def.dfg.ty(data.lhs()));
         <span class="kw">let </span>lhs = <span class="self">self</span>.name(data.lhs(), def);
         <span class="kw">let </span>rhs = <span class="self">self</span>.name(data.rhs(), def);
 
@@ -2058,7 +2001,7 @@
             FCmpOp::ULE =&gt; <span class="string">&quot;ule&quot;</span>,
         };
 
-        <span class="kw">let </span>ty = stringify_ty(<span class="self">self</span>.module().type_pool(), def.dfg.ty(data.lhs()));
+        <span class="kw">let </span>ty = stringify_ty(<span class="kw-2">&amp;</span><span class="self">self</span>.pool_guard, def.dfg.ty(data.lhs()));
         <span class="kw">let </span>lhs = <span class="self">self</span>.name(data.lhs(), def);
         <span class="kw">let </span>rhs = <span class="self">self</span>.name(data.rhs(), def);
 
@@ -2068,7 +2011,7 @@
     <span class="kw">fn </span>visit_sel(<span class="kw-2">&amp;mut </span><span class="self">self</span>, inst: Inst, data: <span class="kw-2">&amp;</span>SelInst, def: <span class="kw-2">&amp;</span>FunctionDefinition) {
         <span class="self">self</span>.result(inst, def);
 
-        <span class="kw">let </span>ty = stringify_ty(<span class="self">self</span>.module().type_pool(), def.dfg.ty(data.if_true()));
+        <span class="kw">let </span>ty = stringify_ty(<span class="kw-2">&amp;</span><span class="self">self</span>.pool_guard, def.dfg.ty(data.if_true()));
         <span class="kw">let </span>cond = <span class="self">self</span>.name(data.condition(), def);
         <span class="kw">let </span>lhs = <span class="self">self</span>.name(data.if_true(), def);
         <span class="kw">let </span>rhs = <span class="self">self</span>.name(data.if_false(), def);
@@ -2391,64 +2334,65 @@
         {
             <span class="kw">let </span>pool = module.type_pool();
 
-            <span class="macro">assert_eq!</span>(writer.ty(pool, Type::bool()), <span class="string">&quot;bool&quot;</span>);
-            <span class="macro">assert_eq!</span>(writer.ty(pool, Type::ptr()), <span class="string">&quot;ptr&quot;</span>);
-            <span class="macro">assert_eq!</span>(writer.ty(pool, Type::i8()), <span class="string">&quot;i8&quot;</span>);
-            <span class="macro">assert_eq!</span>(writer.ty(pool, Type::i16()), <span class="string">&quot;i16&quot;</span>);
-            <span class="macro">assert_eq!</span>(writer.ty(pool, Type::i32()), <span class="string">&quot;i32&quot;</span>);
-            <span class="macro">assert_eq!</span>(writer.ty(pool, Type::i64()), <span class="string">&quot;i64&quot;</span>);
-            <span class="macro">assert_eq!</span>(writer.ty(pool, Type::f32()), <span class="string">&quot;f32&quot;</span>);
-            <span class="macro">assert_eq!</span>(writer.ty(pool, Type::f64()), <span class="string">&quot;f64&quot;</span>);
+            <span class="macro">assert_eq!</span>(writer.ty(<span class="kw-2">&amp;</span>pool, Type::bool()), <span class="string">&quot;bool&quot;</span>);
+            <span class="macro">assert_eq!</span>(writer.ty(<span class="kw-2">&amp;</span>pool, Type::ptr()), <span class="string">&quot;ptr&quot;</span>);
+            <span class="macro">assert_eq!</span>(writer.ty(<span class="kw-2">&amp;</span>pool, Type::i8()), <span class="string">&quot;i8&quot;</span>);
+            <span class="macro">assert_eq!</span>(writer.ty(<span class="kw-2">&amp;</span>pool, Type::i16()), <span class="string">&quot;i16&quot;</span>);
+            <span class="macro">assert_eq!</span>(writer.ty(<span class="kw-2">&amp;</span>pool, Type::i32()), <span class="string">&quot;i32&quot;</span>);
+            <span class="macro">assert_eq!</span>(writer.ty(<span class="kw-2">&amp;</span>pool, Type::i64()), <span class="string">&quot;i64&quot;</span>);
+            <span class="macro">assert_eq!</span>(writer.ty(<span class="kw-2">&amp;</span>pool, Type::f32()), <span class="string">&quot;f32&quot;</span>);
+            <span class="macro">assert_eq!</span>(writer.ty(<span class="kw-2">&amp;</span>pool, Type::f64()), <span class="string">&quot;f64&quot;</span>);
         }
 
         {
-            <span class="kw">let </span>i8_512 = Type::array(module.type_pool_mut(), Type::i8(), <span class="number">512</span>);
-            <span class="macro">assert_eq!</span>(writer.ty(module.type_pool(), i8_512), <span class="string">&quot;[i8; 512]&quot;</span>);
+            <span class="kw">let </span>i8_512 = Type::array(<span class="kw-2">&amp;mut </span>module.type_pool_mut(), Type::i8(), <span class="number">512</span>);
+            <span class="macro">assert_eq!</span>(writer.ty(<span class="kw-2">&amp;</span>module.type_pool(), i8_512), <span class="string">&quot;[i8; 512]&quot;</span>);
 
-            <span class="kw">let </span>i8_512_16 = Type::array(module.type_pool_mut(), i8_512, <span class="number">16</span>);
-            <span class="macro">assert_eq!</span>(writer.ty(module.type_pool(), i8_512_16), <span class="string">&quot;[[i8; 512]; 16]&quot;</span>);
+            <span class="kw">let </span>i8_512_16 = Type::array(<span class="kw-2">&amp;mut </span>module.type_pool_mut(), i8_512, <span class="number">16</span>);
+            <span class="macro">assert_eq!</span>(writer.ty(<span class="kw-2">&amp;</span>module.type_pool(), i8_512_16), <span class="string">&quot;[[i8; 512]; 16]&quot;</span>);
 
-            <span class="kw">let </span>ptr_0 = Type::array(module.type_pool_mut(), Type::ptr(), <span class="number">0</span>);
-            <span class="macro">assert_eq!</span>(writer.ty(module.type_pool(), ptr_0), <span class="string">&quot;[ptr; 0]&quot;</span>);
+            <span class="kw">let </span>ptr_0 = Type::array(<span class="kw-2">&amp;mut </span>module.type_pool_mut(), Type::ptr(), <span class="number">0</span>);
+            <span class="macro">assert_eq!</span>(writer.ty(<span class="kw-2">&amp;</span>module.type_pool(), ptr_0), <span class="string">&quot;[ptr; 0]&quot;</span>);
 
-            <span class="kw">let </span>unit = Type::structure(module.type_pool_mut(), <span class="kw-2">&amp;</span>[]);
-            <span class="kw">let </span>unit_42 = Type::array(module.type_pool_mut(), unit, <span class="number">42</span>);
-            <span class="macro">assert_eq!</span>(writer.ty(module.type_pool(), unit_42), <span class="string">&quot;[{}; 42]&quot;</span>);
+            <span class="kw">let </span>unit = Type::structure(<span class="kw-2">&amp;mut </span>module.type_pool_mut(), <span class="kw-2">&amp;</span>[]);
+            <span class="kw">let </span>unit_42 = Type::array(<span class="kw-2">&amp;mut </span>module.type_pool_mut(), unit, <span class="number">42</span>);
+            <span class="macro">assert_eq!</span>(writer.ty(<span class="kw-2">&amp;</span>module.type_pool(), unit_42), <span class="string">&quot;[{}; 42]&quot;</span>);
 
-            <span class="kw">let </span>slice = Type::structure(module.type_pool_mut(), <span class="kw-2">&amp;</span>[Type::ptr(), Type::i64()]);
-            <span class="kw">let </span>slice_64 = Type::array(module.type_pool_mut(), slice, <span class="number">64</span>);
-            <span class="kw">let </span>struct_slice_64 = Type::structure(module.type_pool_mut(), <span class="kw-2">&amp;</span>[slice_64]);
-            <span class="kw">let </span>struct_slice_64_732 = Type::array(module.type_pool_mut(), struct_slice_64, <span class="number">732</span>);
+            <span class="kw">let </span>slice = Type::structure(<span class="kw-2">&amp;mut </span>module.type_pool_mut(), <span class="kw-2">&amp;</span>[Type::ptr(), Type::i64()]);
+            <span class="kw">let </span>slice_64 = Type::array(<span class="kw-2">&amp;mut </span>module.type_pool_mut(), slice, <span class="number">64</span>);
+            <span class="kw">let </span>struct_slice_64 = Type::structure(<span class="kw-2">&amp;mut </span>module.type_pool_mut(), <span class="kw-2">&amp;</span>[slice_64]);
+            <span class="kw">let </span>struct_slice_64_732 =
+                Type::array(<span class="kw-2">&amp;mut </span>module.type_pool_mut(), struct_slice_64, <span class="number">732</span>);
             <span class="macro">assert_eq!</span>(
-                writer.ty(module.type_pool(), struct_slice_64_732),
+                writer.ty(<span class="kw-2">&amp;</span>module.type_pool(), struct_slice_64_732),
                 <span class="string">&quot;[{ [{ ptr, i64 }; 64] }; 732]&quot;
             </span>);
         }
 
         {
-            <span class="kw">let </span>unit = Type::structure(module.type_pool_mut(), <span class="kw-2">&amp;</span>[]);
-            <span class="macro">assert_eq!</span>(writer.ty(module.type_pool(), unit), <span class="string">&quot;{}&quot;</span>);
+            <span class="kw">let </span>unit = Type::structure(<span class="kw-2">&amp;mut </span>module.type_pool_mut(), <span class="kw-2">&amp;</span>[]);
+            <span class="macro">assert_eq!</span>(writer.ty(<span class="kw-2">&amp;</span>module.type_pool(), unit), <span class="string">&quot;{}&quot;</span>);
 
-            <span class="kw">let </span>single = Type::structure(module.type_pool_mut(), <span class="kw-2">&amp;</span>[Type::bool()]);
-            <span class="macro">assert_eq!</span>(writer.ty(module.type_pool(), single), <span class="string">&quot;{ bool }&quot;</span>);
+            <span class="kw">let </span>single = Type::structure(<span class="kw-2">&amp;mut </span>module.type_pool_mut(), <span class="kw-2">&amp;</span>[Type::bool()]);
+            <span class="macro">assert_eq!</span>(writer.ty(<span class="kw-2">&amp;</span>module.type_pool(), single), <span class="string">&quot;{ bool }&quot;</span>);
 
-            <span class="kw">let </span>double = Type::structure(module.type_pool_mut(), <span class="kw-2">&amp;</span>[Type::f32(), Type::f64()]);
-            <span class="macro">assert_eq!</span>(writer.ty(module.type_pool(), double), <span class="string">&quot;{ f32, f64 }&quot;</span>);
+            <span class="kw">let </span>double = Type::structure(<span class="kw-2">&amp;mut </span>module.type_pool_mut(), <span class="kw-2">&amp;</span>[Type::f32(), Type::f64()]);
+            <span class="macro">assert_eq!</span>(writer.ty(<span class="kw-2">&amp;</span>module.type_pool(), double), <span class="string">&quot;{ f32, f64 }&quot;</span>);
 
             <span class="kw">let </span>quadruple = Type::structure(
-                module.type_pool_mut(),
+                <span class="kw-2">&amp;mut </span>module.type_pool_mut(),
                 <span class="kw-2">&amp;</span>[Type::i16(), Type::i64(), Type::i32(), Type::i8()],
             );
             <span class="macro">assert_eq!</span>(
-                writer.ty(module.type_pool(), quadruple),
+                writer.ty(<span class="kw-2">&amp;</span>module.type_pool(), quadruple),
                 <span class="string">&quot;{ i16, i64, i32, i8 }&quot;
             </span>);
 
             <span class="kw">let </span>triple2 = Type::structure(
-                module.type_pool_mut(),
+                <span class="kw-2">&amp;mut </span>module.type_pool_mut(),
                 <span class="kw-2">&amp;</span>[Type::f64(), Type::f64(), Type::f64()],
             );
-            <span class="macro">assert_eq!</span>(writer.ty(module.type_pool(), triple2), <span class="string">&quot;{ f64, f64, f64 }&quot;</span>);
+            <span class="macro">assert_eq!</span>(writer.ty(<span class="kw-2">&amp;</span>module.type_pool(), triple2), <span class="string">&quot;{ f64, f64, f64 }&quot;</span>);
         }
     }
 
@@ -2552,12 +2496,12 @@ entry:
     </span><span class="kw">fn </span>test_write_single_block_valid() {
         <span class="kw">let </span><span class="kw-2">mut </span>module = Module::new(<span class="string">&quot;test&quot;</span>);
         <span class="kw">let </span>sig = {
-            <span class="kw">let </span>pool = module.type_pool_mut();
+            <span class="kw">let </span><span class="kw-2">mut </span>pool = module.type_pool_mut();
 
             SigBuilder::new()
                 .ret(<span class="prelude-val">Some</span>(Type::f64()))
                 .params(<span class="kw-2">&amp;</span>[Type::structure(
-                    pool,
+                    <span class="kw-2">&amp;mut </span>pool,
                     <span class="kw-2">&amp;</span>[Type::f64(), Type::f64(), Type::f64()],
                 )])
                 .build()

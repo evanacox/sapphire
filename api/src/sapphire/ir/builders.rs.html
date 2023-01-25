@@ -342,23 +342,9 @@
 <a href="#339" id="339">339</a>
 <a href="#340" id="340">340</a>
 <a href="#341" id="341">341</a>
-<a href="#342" id="342">342</a>
-<a href="#343" id="343">343</a>
-<a href="#344" id="344">344</a>
-<a href="#345" id="345">345</a>
-<a href="#346" id="346">346</a>
-<a href="#347" id="347">347</a>
-<a href="#348" id="348">348</a>
-<a href="#349" id="349">349</a>
-<a href="#350" id="350">350</a>
-<a href="#351" id="351">351</a>
-<a href="#352" id="352">352</a>
-<a href="#353" id="353">353</a>
-<a href="#354" id="354">354</a>
-<a href="#355" id="355">355</a>
 </pre><pre class="rust"><code><span class="comment">//======---------------------------------------------------------------======//
 //                                                                           //
-// Copyright 2022 Evan Cox &lt;evanacox00@gmail.com&gt;. All rights reserved.      //
+// Copyright 2022-2023 Evan Cox &lt;evanacox00@gmail.com&gt;. All rights reserved. //
 //                                                                           //
 // Use of this source code is governed by a BSD-style license that can be    //
 // found in the LICENSE.txt file at the root of this project, or at the      //
@@ -367,7 +353,7 @@
 //======---------------------------------------------------------------======//
 
 </span><span class="kw">use </span><span class="kw">crate</span>::ir::<span class="kw-2">*</span>;
-<span class="kw">use </span><span class="kw">crate</span>::utility::{PackedOption, StringPool, TinyArray};
+<span class="kw">use </span><span class="kw">crate</span>::utility::{PackedOption, Str, TinyArray};
 <span class="kw">use </span>smallvec::SmallVec;
 
 <span class="doccomment">/// Helper type for building a [`Signature`].
@@ -526,10 +512,10 @@
     }
 
     <span class="doccomment">/// Gets the name of a block that has been inserted into the function
-    </span><span class="kw">pub fn </span>block_name(<span class="kw-2">&amp;</span><span class="self">self</span>, block: Block) -&gt; <span class="kw-2">&amp;</span>str {
+    </span><span class="kw">pub fn </span>block_name(<span class="kw-2">&amp;</span><span class="self">self</span>, block: Block) -&gt; Str {
         <span class="macro">debug_assert!</span>(<span class="self">self</span>.def.layout.is_block_inserted(block));
 
-        <span class="self">self</span>.module.resolve_string(<span class="self">self</span>.def.dfg.block(block).name())
+        <span class="self">self</span>.def.dfg.block(block).name()
     }
 
     <span class="doccomment">/// Gets the block parameters of a given block.
@@ -650,24 +636,10 @@
         <span class="self">self</span>.def.dfg.inst_to_result(inst)
     }
 
-    <span class="doccomment">/// Allows access to the [`TypePool`] of the module that the builder is borrowing.
-    </span><span class="kw">pub fn </span>type_pool(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>TypePool {
-        <span class="self">self</span>.module.type_pool()
-    }
-
-    <span class="doccomment">/// Allows mutable access to the [`TypePool`] of the module that the builder is borrowing.
-    </span><span class="kw">pub fn </span>type_pool_mut(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;mut </span>TypePool {
-        <span class="self">self</span>.module.type_pool_mut()
-    }
-
-    <span class="doccomment">/// Allows access to the [`TypePool`] of the module that the builder is borrowing.
-    </span><span class="kw">pub fn </span>string_pool(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>StringPool {
-        <span class="self">self</span>.module.string_pool()
-    }
-
-    <span class="doccomment">/// Allows mutable access to the [`TypePool`] of the module that the builder is borrowing.
-    </span><span class="kw">pub fn </span>string_pool_mut(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;mut </span>StringPool {
-        <span class="self">self</span>.module.string_pool_mut()
+    <span class="doccomment">/// Gets the context associated with a given builder. This is
+    /// the context that is owned by the module containing this function.
+    </span><span class="kw">pub fn </span>ctx(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>ModuleContext {
+        <span class="self">self</span>.module.context()
     }
 
     <span class="doccomment">/// Resolves a [`Func`] into a real function object.

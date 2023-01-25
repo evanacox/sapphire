@@ -2242,9 +2242,35 @@
 <a href="#2239" id="2239">2239</a>
 <a href="#2240" id="2240">2240</a>
 <a href="#2241" id="2241">2241</a>
+<a href="#2242" id="2242">2242</a>
+<a href="#2243" id="2243">2243</a>
+<a href="#2244" id="2244">2244</a>
+<a href="#2245" id="2245">2245</a>
+<a href="#2246" id="2246">2246</a>
+<a href="#2247" id="2247">2247</a>
+<a href="#2248" id="2248">2248</a>
+<a href="#2249" id="2249">2249</a>
+<a href="#2250" id="2250">2250</a>
+<a href="#2251" id="2251">2251</a>
+<a href="#2252" id="2252">2252</a>
+<a href="#2253" id="2253">2253</a>
+<a href="#2254" id="2254">2254</a>
+<a href="#2255" id="2255">2255</a>
+<a href="#2256" id="2256">2256</a>
+<a href="#2257" id="2257">2257</a>
+<a href="#2258" id="2258">2258</a>
+<a href="#2259" id="2259">2259</a>
+<a href="#2260" id="2260">2260</a>
+<a href="#2261" id="2261">2261</a>
+<a href="#2262" id="2262">2262</a>
+<a href="#2263" id="2263">2263</a>
+<a href="#2264" id="2264">2264</a>
+<a href="#2265" id="2265">2265</a>
+<a href="#2266" id="2266">2266</a>
+<a href="#2267" id="2267">2267</a>
 </pre><pre class="rust"><code><span class="comment">//======---------------------------------------------------------------======//
 //                                                                           //
-// Copyright 2022 Evan Cox &lt;evanacox00@gmail.com&gt;. All rights reserved.      //
+// Copyright 2022-2023 Evan Cox &lt;evanacox00@gmail.com&gt;. All rights reserved. //
 //                                                                           //
 // Use of this source code is governed by a BSD-style license that can be    //
 // found in the LICENSE.txt file at the root of this project, or at the      //
@@ -2428,7 +2454,7 @@
 
         <span class="kw">let </span><span class="kw-2">mut </span>pairs = pair.into_inner();
         <span class="kw">let </span>proto = pairs.next_or(<span class="string">&quot;expected a function prototype&quot;</span>);
-        <span class="kw">let </span>(name, sig) = <span class="self">self</span>.parse_func_proto(proto, module.type_pool_mut())<span class="question-mark">?</span>;
+        <span class="kw">let </span>(name, sig) = <span class="self">self</span>.parse_func_proto(proto, <span class="kw-2">&amp;mut </span>module.context().types_mut())<span class="question-mark">?</span>;
         <span class="kw">let </span>key = module.declare_function(<span class="kw-2">&amp;</span>name, sig);
 
         <span class="prelude-val">Ok</span>((key, pairs.next()))
@@ -2607,7 +2633,9 @@
         <span class="kw">if let </span><span class="prelude-val">Some</span>(params) = pairs.next() {
             <span class="comment">// we take a pair for the name here instead of a LocalIdent, because we need
             // the debuginfo just as much as we need the actual name.
-            </span><span class="kw">for </span>(ty, ident) <span class="kw">in </span><span class="self">self</span>.parse_operand_list(params, builder.type_pool_mut())<span class="question-mark">? </span>{
+            </span><span class="kw">let </span>pairs = <span class="self">self</span>.parse_operand_list(params, <span class="kw-2">&amp;mut </span>builder.ctx().types_mut())<span class="question-mark">?</span>;
+
+            <span class="kw">for </span>(ty, ident) <span class="kw">in </span>pairs {
                 <span class="kw">let </span>(ident, debug) = <span class="self">self</span>.preprocess_block_param_local(ident, builder)<span class="question-mark">?</span>;
                 <span class="kw">let </span>param = builder.append_block_param(block, ty, debug);
 
@@ -2634,7 +2662,9 @@
         <span class="kw">if let </span><span class="prelude-val">Some</span>(params) = pairs.next() {
             <span class="comment">// we take a pair for the name here instead of a LocalIdent, because we need
             // the debuginfo just as much as we need the actual name.
-            </span><span class="kw">for </span>(<span class="kw">_</span>, ident) <span class="kw">in </span><span class="self">self</span>.parse_operand_list(params, builder.type_pool_mut())<span class="question-mark">? </span>{
+            </span><span class="kw">let </span>pairs = <span class="self">self</span>.parse_operand_list(params, <span class="kw-2">&amp;mut </span>builder.ctx().types_mut())<span class="question-mark">?</span>;
+
+            <span class="kw">for </span>(<span class="kw">_</span>, ident) <span class="kw">in </span>pairs {
                 <span class="self">self</span>.verify_block_param_local(ident, builder)<span class="question-mark">?</span>;
             }
         }
@@ -2724,7 +2754,7 @@
         <span class="kw">let </span>result = <span class="self">self</span>.parse_optional_result(<span class="kw-2">&amp;mut </span>pairs, builder)<span class="question-mark">?</span>;
         <span class="kw">let </span>ty = <span class="self">self</span>.parse_ty_or_void(
             pairs.next_or(<span class="string">&quot;expected ty or void&quot;</span>),
-            builder.type_pool_mut(),
+            <span class="kw-2">&amp;mut </span>builder.ctx().types_mut(),
         )<span class="question-mark">?</span>;
 
         <span class="kw">let </span>func = <span class="self">self</span>.parse_func_name(pairs.next_or(<span class="string">&quot;expected func name&quot;</span>), builder)<span class="question-mark">?</span>;
@@ -2734,10 +2764,10 @@
             (<span class="prelude-val">Some</span>(t1), <span class="prelude-val">Some</span>(t2)) <span class="kw">if </span>t1 != t2 =&gt; {
                 <span class="kw">let </span>msg = <span class="macro">format!</span>(
                     <span class="string">&quot;mismatched return type, expected &#39;{}&#39; but got &#39;{}&#39;. signature of &#39;{}&#39; is &#39;{}&#39;&quot;</span>,
-                    stringify_ty(builder.type_pool(), t1),
-                    stringify_ty(builder.type_pool(), t2),
+                    stringify_ty(<span class="kw-2">&amp;</span>builder.ctx().types(), t1),
+                    stringify_ty(<span class="kw-2">&amp;</span>builder.ctx().types(), t2),
                     builder.function(func).name(),
-                    stringify_signature(builder.type_pool(), <span class="kw-2">&amp;</span>signature)
+                    stringify_signature(<span class="kw-2">&amp;</span>builder.ctx().types(), <span class="kw-2">&amp;</span>signature)
                 );
 
                 <span class="kw">return </span><span class="prelude-val">Err</span>(string_into_err(pair.as_span(), msg));
@@ -2856,7 +2886,7 @@
             vec.push(val);
         }
 
-        <span class="kw">if </span>count != expected &amp;&amp; !vararg {
+        <span class="kw">if </span>count &lt; expected {
             <span class="kw">return </span>missing(count, expected, builder);
         }
 
@@ -2880,31 +2910,51 @@
         <span class="kw">let </span>span = pair.as_span();
 
         <span class="kw">let </span>mismatch = |val, t1, t2, builder: <span class="kw-2">&amp;</span>FuncBuilder&lt;<span class="lifetime">&#39;_</span>&gt;| {
-            <span class="kw">let </span>name = builder.block_name(block);
-            <span class="kw">let </span>ty1 = stringify_ty(builder.type_pool(), t1);
-            <span class="kw">let </span>ty2 = stringify_ty(builder.type_pool(), t2);
-            <span class="kw">let </span>err = string_into_err(span, <span class="macro">format!</span>(
-                <span class="string">&quot;while parsing args for block &#39;{name}&#39;, mismatched types for value &#39;{val}&#39;, expected &#39;{ty1}&#39; but got &#39;{ty2}&#39;&quot;</span>,
-            ));
+            <span class="kw">let </span>ty1 = stringify_ty(<span class="kw-2">&amp;</span>builder.ctx().types(), t1);
+            <span class="kw">let </span>ty2 = stringify_ty(<span class="kw-2">&amp;</span>builder.ctx().types(), t2);
+            <span class="kw">let </span>err = string_into_err(
+                span,
+                <span class="macro">format!</span>(
+                <span class="string">&quot;while parsing args for block &#39;{}&#39;, mismatched types for value &#39;{val}&#39;, expected &#39;{ty1}&#39; but got &#39;{ty2}&#39;&quot;</span>,
+                builder.ctx().strings().get(builder.block_name(block)).unwrap()),
+            );
 
             <span class="prelude-val">Err</span>(err)
         };
 
         <span class="kw">let </span>unexpected = |val, builder: <span class="kw-2">&amp;</span>FuncBuilder&lt;<span class="lifetime">&#39;_</span>&gt;| {
-            <span class="kw">let </span>name = builder.block_name(block);
             <span class="kw">let </span>err = string_into_err(
                 span,
-                <span class="macro">format!</span>(<span class="string">&quot;while parsing args for block &#39;{name}&#39;, unexpected parameter &#39;{val}&#39;&quot;</span>,),
+                <span class="macro">format!</span>(
+                    <span class="string">&quot;while parsing args for block &#39;{}&#39;, unexpected parameter &#39;{val}&#39;&quot;</span>,
+                    builder
+                        .ctx()
+                        .strings()
+                        .get(builder.block_name(block))
+                        .unwrap()
+                ),
             );
 
             <span class="prelude-val">Err</span>(err)
         };
 
         <span class="kw">let </span>missing = |count, expected, builder: <span class="kw-2">&amp;</span>FuncBuilder&lt;<span class="lifetime">&#39;_</span>&gt;| {
-            <span class="kw">let </span>name = builder.block_name(block);
-            <span class="kw">let </span>err = string_into_err(span, <span class="macro">format!</span>(
-                <span class="string">&quot;not enough arguments given for block &#39;{name}&#39;, got {count} args but expected {expected}&quot;
-            </span>));
+            <span class="comment">//
+            // seems I found a bug in `rustfmt`, it breaks with three positional arguments here.
+            // the weirdo format-in-format is so the auto-formatter doesn&#39;t crash
+            //
+            </span><span class="kw">let </span>rest = <span class="macro">format!</span>(<span class="string">&quot;should have gotten &#39;{expected}&#39; but got &#39;{count}&#39;&quot;</span>);
+            <span class="kw">let </span>err = string_into_err(
+                span,
+                <span class="macro">format!</span>(
+                    <span class="string">&quot;not enough arguments given for block &#39;{}&#39;, {rest}&quot;</span>,
+                    builder
+                        .ctx()
+                        .strings()
+                        .get(builder.block_name(block))
+                        .unwrap()
+                ),
+            );
 
             <span class="prelude-val">Err</span>(err)
         };
@@ -2934,10 +2984,10 @@
         <span class="kw">let </span>mismatch = |name, t1, t2, builder: <span class="kw-2">&amp;</span>FuncBuilder&lt;<span class="lifetime">&#39;_</span>&gt;| {
             <span class="kw">let </span>msg = <span class="macro">format!</span>(
                         <span class="string">&quot;while parsing args for function with signature &#39;{}&#39;, mismatched types for value &#39;{}&#39;, expected &#39;{}&#39; but got &#39;{}&#39;&quot;</span>,
-                        stringify_signature(builder.type_pool(), sig),
+                        stringify_signature(<span class="kw-2">&amp;</span>builder.ctx().types(), sig),
                         name,
-                        stringify_ty(builder.type_pool(), t1),
-                        stringify_ty(builder.type_pool(), t2)
+                        stringify_ty(<span class="kw-2">&amp;</span>builder.ctx().types(), t1),
+                        stringify_ty(<span class="kw-2">&amp;</span>builder.ctx().types(), t2)
                     );
 
             <span class="kw">let </span>err = string_into_err(span, msg);
@@ -2948,7 +2998,7 @@
         <span class="kw">let </span>unexpected = |name, builder: <span class="kw-2">&amp;</span>FuncBuilder&lt;<span class="lifetime">&#39;_</span>&gt;| {
             <span class="kw">let </span>msg = <span class="macro">format!</span>(
                 <span class="string">&quot;while parsing args for function with signature &#39;{}&#39;, unexpected parameter &#39;{}&#39;&quot;</span>,
-                stringify_signature(builder.type_pool(), sig),
+                stringify_signature(<span class="kw-2">&amp;</span>builder.ctx().types(), sig),
                 name,
             );
 
@@ -2958,7 +3008,7 @@
         };
 
         <span class="kw">let </span>missing = |count, expected, builder: <span class="kw-2">&amp;</span>FuncBuilder&lt;<span class="lifetime">&#39;_</span>&gt;| {
-            <span class="kw">let </span>sig = stringify_signature(builder.type_pool(), sig);
+            <span class="kw">let </span>sig = stringify_signature(<span class="kw-2">&amp;</span>builder.ctx().types(), sig);
             <span class="kw">let </span>msg = <span class="macro">format!</span>(
                 <span class="string">&quot;while parsing args for function with signature &#39;{sig}&#39;, \
 expected {expected} arguments but got {count}&quot;
@@ -3028,12 +3078,12 @@ expected {expected} arguments but got {count}&quot;
         <span class="kw">let </span><span class="kw-2">mut </span>inner = inner.into_inner();
         <span class="kw">let </span>ret = <span class="self">self</span>.parse_ty_or_void(
             inner.next_or(<span class="string">&quot;expected ty or void&quot;</span>),
-            builder.type_pool_mut(),
+            <span class="kw-2">&amp;mut </span>builder.ctx().types_mut(),
         )<span class="question-mark">?</span>;
 
         <span class="kw">let </span>(params, variadic) = <span class="self">self</span>.parse_param_list(
             inner.next_or(<span class="string">&quot;expected param list&quot;</span>),
-            builder.type_pool_mut(),
+            <span class="kw-2">&amp;mut </span>builder.ctx().types_mut(),
         )<span class="question-mark">?</span>;
 
         <span class="kw">let </span>params: SmallVec&lt;[(Type, ParamAttributes); <span class="number">2</span>]&gt; = params
@@ -3119,7 +3169,10 @@ expected {expected} arguments but got {count}&quot;
 
         <span class="kw">let </span><span class="kw-2">mut </span>inner = pair.into_inner();
         <span class="kw">let </span>(ident, info) = <span class="self">self</span>.parse_result(inner.next_or(<span class="string">&quot;expected result&quot;</span>), builder)<span class="question-mark">?</span>;
-        <span class="kw">let </span>ty = <span class="self">self</span>.parse_ty(inner.next_or(<span class="string">&quot;expected type&quot;</span>), builder.type_pool_mut())<span class="question-mark">?</span>;
+        <span class="kw">let </span>ty = <span class="self">self</span>.parse_ty(
+            inner.next_or(<span class="string">&quot;expected type&quot;</span>),
+            <span class="kw-2">&amp;mut </span>builder.ctx().types_mut(),
+        )<span class="question-mark">?</span>;
         <span class="kw">let _ </span>= inner.next_or(<span class="string">&quot;expected bool_ty&quot;</span>);
         <span class="kw">let </span>condition_pair = inner.next_or(<span class="string">&quot;expected local&quot;</span>);
         <span class="kw">let </span>if_true_pair = inner.next_or(<span class="string">&quot;expected local&quot;</span>);
@@ -3350,7 +3403,7 @@ expected {expected} arguments but got {count}&quot;
         <span class="kw">let </span>ty_pair = inner.next_or(<span class="string">&quot;expected type&quot;</span>);
 
         <span class="kw">let </span>(name, info) = <span class="self">self</span>.parse_result(result, builder)<span class="question-mark">?</span>;
-        <span class="kw">let </span>ty = <span class="self">self</span>.parse_ty(ty_pair, builder.type_pool_mut())<span class="question-mark">?</span>;
+        <span class="kw">let </span>ty = <span class="self">self</span>.parse_ty(ty_pair, <span class="kw-2">&amp;mut </span>builder.ctx().types_mut())<span class="question-mark">?</span>;
 
         <span class="self">self</span>.append_val(builder, name).alloca(ty, info);
 
@@ -3371,7 +3424,7 @@ expected {expected} arguments but got {count}&quot;
         <span class="kw">let </span>val_pair = inner.next_or(<span class="string">&quot;expected value&quot;</span>);
 
         <span class="kw">let </span>(name, info) = <span class="self">self</span>.parse_result(result, builder)<span class="question-mark">?</span>;
-        <span class="kw">let </span>ty = <span class="self">self</span>.parse_ty(ty_pair, builder.type_pool_mut())<span class="question-mark">?</span>;
+        <span class="kw">let </span>ty = <span class="self">self</span>.parse_ty(ty_pair, <span class="kw-2">&amp;mut </span>builder.ctx().types_mut())<span class="question-mark">?</span>;
         <span class="kw">let </span>operand = <span class="self">self</span>.parse_existing_local_of_ty(val_pair, Type::ptr(), builder)<span class="question-mark">?</span>;
 
         <span class="self">self</span>.append_val(builder, name).load(ty, operand, info);
@@ -3417,7 +3470,7 @@ expected {expected} arguments but got {count}&quot;
         <span class="kw">let </span>offset_pair = inner.next_or(<span class="string">&quot;expected local&quot;</span>);
 
         <span class="kw">let </span>(name, info) = <span class="self">self</span>.parse_result(result, builder)<span class="question-mark">?</span>;
-        <span class="kw">let </span>ty = <span class="self">self</span>.parse_ty(ty_pair, builder.type_pool_mut())<span class="question-mark">?</span>;
+        <span class="kw">let </span>ty = <span class="self">self</span>.parse_ty(ty_pair, <span class="kw-2">&amp;mut </span>builder.ctx().types_mut())<span class="question-mark">?</span>;
         <span class="kw">let </span>offset_ty = <span class="self">self</span>.parse_int_ty(int_ty)<span class="question-mark">?</span>;
         <span class="kw">let </span>base = <span class="self">self</span>.parse_existing_local_of_ty(base_pair, Type::ptr(), builder)<span class="question-mark">?</span>;
         <span class="kw">let </span>offset = <span class="self">self</span>.parse_existing_local_of_ty(offset_pair, offset_ty, builder)<span class="question-mark">?</span>;
@@ -3483,10 +3536,10 @@ expected {expected} arguments but got {count}&quot;
         idx_span: Span&lt;<span class="lifetime">&#39;_</span>&gt;,
         builder: <span class="kw-2">&amp;</span>FuncBuilder&lt;<span class="lifetime">&#39;_</span>&gt;,
     ) -&gt; ParseResult&lt;()&gt; {
-        <span class="kw">let </span>(in_bounds, expected) = <span class="self">Self</span>::agg_ty_properties(agg, idx, builder.type_pool());
+        <span class="kw">let </span>(in_bounds, expected) = <span class="self">Self</span>::agg_ty_properties(agg, idx, <span class="kw-2">&amp;</span>builder.ctx().types());
 
         <span class="self">Self</span>::check_agg_within_bounds(in_bounds, idx_span)<span class="question-mark">?</span>;
-        <span class="self">Self</span>::check_agg_correct_ty(expected, got, idx_span, builder.type_pool())<span class="question-mark">?</span>;
+        <span class="self">Self</span>::check_agg_correct_ty(expected, got, idx_span, <span class="kw-2">&amp;</span>builder.ctx().types())<span class="question-mark">?</span>;
 
         <span class="prelude-val">Ok</span>(())
     }
@@ -3507,8 +3560,8 @@ expected {expected} arguments but got {count}&quot;
         <span class="kw">let </span>idx_span = idx_pair.as_span();
 
         <span class="kw">let </span>(name, info) = <span class="self">self</span>.parse_result(result, builder)<span class="question-mark">?</span>;
-        <span class="kw">let </span>out_ty = <span class="self">self</span>.parse_ty(out_ty_pair, builder.type_pool_mut())<span class="question-mark">?</span>;
-        <span class="kw">let </span>agg_ty = <span class="self">self</span>.parse_array_or_struct_ty(agg_ty_pair, builder.type_pool_mut())<span class="question-mark">?</span>;
+        <span class="kw">let </span>out_ty = <span class="self">self</span>.parse_ty(out_ty_pair, <span class="kw-2">&amp;mut </span>builder.ctx().types_mut())<span class="question-mark">?</span>;
+        <span class="kw">let </span>agg_ty = <span class="self">self</span>.parse_array_or_struct_ty(agg_ty_pair, <span class="kw-2">&amp;mut </span>builder.ctx().types_mut())<span class="question-mark">?</span>;
         <span class="kw">let </span>agg = <span class="self">self</span>.parse_existing_local_of_ty(agg_pair, agg_ty, builder)<span class="question-mark">?</span>;
         <span class="kw">let </span>idx = <span class="self">self</span>.parse_int_lit(<span class="number">64</span>, idx_pair)<span class="question-mark">?</span>;
 
@@ -3536,7 +3589,7 @@ expected {expected} arguments but got {count}&quot;
         <span class="kw">let </span>idx_span = idx_pair.as_span();
 
         <span class="kw">let </span>(name, info) = <span class="self">self</span>.parse_result(result, builder)<span class="question-mark">?</span>;
-        <span class="kw">let </span>agg_ty = <span class="self">self</span>.parse_array_or_struct_ty(agg_ty_pair, builder.type_pool_mut())<span class="question-mark">?</span>;
+        <span class="kw">let </span>agg_ty = <span class="self">self</span>.parse_array_or_struct_ty(agg_ty_pair, <span class="kw-2">&amp;mut </span>builder.ctx().types_mut())<span class="question-mark">?</span>;
         <span class="kw">let </span>agg = <span class="self">self</span>.parse_existing_local_of_ty(agg_pair, agg_ty, builder)<span class="question-mark">?</span>;
         <span class="kw">let </span>to_insert = <span class="self">self</span>.parse_operand(operand_pair, builder)<span class="question-mark">?</span>;
         <span class="kw">let </span>idx = <span class="self">self</span>.parse_int_lit(<span class="number">64</span>, idx_pair)<span class="question-mark">?</span>;
@@ -3565,11 +3618,11 @@ expected {expected} arguments but got {count}&quot;
         <span class="kw">let </span>idx_span = idx_pair.as_span();
 
         <span class="kw">let </span>(name, info) = <span class="self">self</span>.parse_result(result, builder)<span class="question-mark">?</span>;
-        <span class="kw">let </span>agg_ty = <span class="self">self</span>.parse_array_or_struct_ty(agg_ty_pair, builder.type_pool_mut())<span class="question-mark">?</span>;
+        <span class="kw">let </span>agg_ty = <span class="self">self</span>.parse_array_or_struct_ty(agg_ty_pair, <span class="kw-2">&amp;mut </span>builder.ctx().types_mut())<span class="question-mark">?</span>;
         <span class="kw">let </span>base = <span class="self">self</span>.parse_existing_local_of_ty(base_pair, Type::ptr(), builder)<span class="question-mark">?</span>;
         <span class="kw">let </span>idx = <span class="self">self</span>.parse_int_lit(<span class="number">64</span>, idx_pair)<span class="question-mark">?</span>;
 
-        <span class="kw">let </span>(in_bounds, <span class="kw">_</span>) = <span class="self">Self</span>::agg_ty_properties(agg_ty, idx, builder.type_pool());
+        <span class="kw">let </span>(in_bounds, <span class="kw">_</span>) = <span class="self">Self</span>::agg_ty_properties(agg_ty, idx, <span class="kw-2">&amp;</span>builder.ctx().types());
 
         <span class="self">Self</span>::check_agg_within_bounds(in_bounds, idx_span)<span class="question-mark">?</span>;
 
@@ -3907,7 +3960,7 @@ expected {expected} arguments but got {count}&quot;
         <span class="kw">let </span>ty_pair = inner.next_or(<span class="string">&quot;expected ty&quot;</span>);
 
         <span class="kw">let </span>(name, info) = <span class="self">self</span>.parse_result(result_pair, builder)<span class="question-mark">?</span>;
-        <span class="kw">let </span>ty = <span class="self">self</span>.parse_ty(ty_pair, builder.type_pool_mut())<span class="question-mark">?</span>;
+        <span class="kw">let </span>ty = <span class="self">self</span>.parse_ty(ty_pair, <span class="kw-2">&amp;mut </span>builder.ctx().types_mut())<span class="question-mark">?</span>;
 
         <span class="self">self</span>.append_val(builder, name).undef(ty, info);
 
@@ -3926,7 +3979,7 @@ expected {expected} arguments but got {count}&quot;
         <span class="kw">let </span>ty_pair = inner.next_or(<span class="string">&quot;expected ty&quot;</span>);
 
         <span class="kw">let </span>(name, info) = <span class="self">self</span>.parse_result(result_pair, builder)<span class="question-mark">?</span>;
-        <span class="kw">let </span>ty = <span class="self">self</span>.parse_ty(ty_pair, builder.type_pool_mut())<span class="question-mark">?</span>;
+        <span class="kw">let </span>ty = <span class="self">self</span>.parse_ty(ty_pair, <span class="kw-2">&amp;mut </span>builder.ctx().types_mut())<span class="question-mark">?</span>;
 
         <span class="self">self</span>.append_val(builder, name).null(ty, info);
 
@@ -3954,7 +4007,7 @@ expected {expected} arguments but got {count}&quot;
 
         <span class="kw">let </span><span class="kw-2">mut </span>pairs = pair.into_inner();
         <span class="kw">let </span>ty_pair = pairs.next_or(<span class="string">&quot;expected type&quot;</span>);
-        <span class="kw">let </span>ty = <span class="self">self</span>.parse_ty(ty_pair, builder.type_pool_mut())<span class="question-mark">?</span>;
+        <span class="kw">let </span>ty = <span class="self">self</span>.parse_ty(ty_pair, <span class="kw-2">&amp;mut </span>builder.ctx().types_mut())<span class="question-mark">?</span>;
         <span class="kw">let </span>name_pair = pairs.next_or(<span class="string">&quot;expected name with type&quot;</span>);
 
         <span class="self">self</span>.parse_existing_local_of_ty(name_pair, ty, builder)
@@ -4007,7 +4060,7 @@ expected {expected} arguments but got {count}&quot;
             <span class="kw">if </span>!ty.is_bool_or_int() {
                 <span class="kw">let </span>msg = <span class="macro">format!</span>(
                     <span class="string">&quot;unexpected type for value, expected &#39;bool&#39; or integer but got &#39;{}&#39;&quot;</span>,
-                    stringify_ty(builder.type_pool(), ty)
+                    stringify_ty(<span class="kw-2">&amp;</span>builder.ctx().types(), ty)
                 );
 
                 <span class="kw">return </span><span class="prelude-val">Err</span>(string_into_err(span, msg));
@@ -4030,7 +4083,7 @@ expected {expected} arguments but got {count}&quot;
             <span class="kw">if </span>!ty.is_int() {
                 <span class="kw">let </span>msg = <span class="macro">format!</span>(
                     <span class="string">&quot;unexpected type for value, expected integer but got &#39;{}&#39;&quot;</span>,
-                    stringify_ty(builder.type_pool(), ty)
+                    stringify_ty(<span class="kw-2">&amp;</span>builder.ctx().types(), ty)
                 );
 
                 <span class="kw">return </span><span class="prelude-val">Err</span>(string_into_err(span, msg));
@@ -4053,7 +4106,7 @@ expected {expected} arguments but got {count}&quot;
             <span class="kw">if </span>!ty.is_float() {
                 <span class="kw">let </span>msg = <span class="macro">format!</span>(
                     <span class="string">&quot;unexpected type for value, expected float but got &#39;{}&#39;&quot;</span>,
-                    stringify_ty(builder.type_pool(), ty)
+                    stringify_ty(<span class="kw-2">&amp;</span>builder.ctx().types(), ty)
                 );
 
                 <span class="kw">return </span><span class="prelude-val">Err</span>(string_into_err(span, msg));
@@ -4099,8 +4152,8 @@ expected {expected} arguments but got {count}&quot;
         <span class="kw">let </span>val = <span class="self">self</span>.parse_existing_local(pair, builder)<span class="question-mark">?</span>;
 
         <span class="kw">if </span>ty != builder.ty(val) {
-            <span class="kw">let </span>expected = stringify_ty(builder.type_pool(), ty);
-            <span class="kw">let </span>got = stringify_ty(builder.type_pool(), builder.ty(val));
+            <span class="kw">let </span>expected = stringify_ty(<span class="kw-2">&amp;</span>builder.ctx().types(), ty);
+            <span class="kw">let </span>got = stringify_ty(<span class="kw-2">&amp;</span>builder.ctx().types(), builder.ty(val));
             <span class="kw">let </span>err = <span class="macro">format!</span>(
                 <span class="string">&quot;mismatched types for value &#39;{}&#39;, expected &#39;{}&#39; but got &#39;{}&#39;&quot;</span>,
                 name_span.as_str(),
@@ -4160,7 +4213,7 @@ expected {expected} arguments but got {count}&quot;
                 <span class="prelude-val">Ok</span>((LocalIdent::Num(num), info))
             }
             <span class="prelude-val">Err</span>(<span class="kw">_</span>) =&gt; {
-                <span class="kw">let </span>key = builder.string_pool_mut().insert(<span class="kw-2">&amp;</span>real);
+                <span class="kw">let </span>key = builder.ctx().strings_mut().insert(<span class="kw-2">&amp;</span>real);
                 <span class="kw">let </span>info = pair_into_info(pair, <span class="self">self</span>.filename, <span class="prelude-val">Some</span>(key));
 
                 <span class="prelude-val">Ok</span>((LocalIdent::Name(key), info))
@@ -4476,8 +4529,7 @@ expected {expected} arguments but got {count}&quot;
 <span class="doccomment">/// Parses a SIR source file into a module, or returns the first
 /// error that occurred while parsing.
 ///
-/// Multiple errors are not collected for performance reasons, this is
-/// an IR meant to be used by compiler people.
+/// Multiple errors are not collected for performance reasons.
 </span><span class="kw">pub fn </span>parse_sir(filename: <span class="kw-2">&amp;</span>str, source: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;Module, Box&lt;<span class="kw">dyn </span>Error&gt;&gt; {
     <span class="kw">let </span>result = generated::SIRReader::parse(Rule::sir, source)<span class="question-mark">?</span>;
 

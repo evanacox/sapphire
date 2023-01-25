@@ -158,9 +158,81 @@
 <a href="#155" id="155">155</a>
 <a href="#156" id="156">156</a>
 <a href="#157" id="157">157</a>
+<a href="#158" id="158">158</a>
+<a href="#159" id="159">159</a>
+<a href="#160" id="160">160</a>
+<a href="#161" id="161">161</a>
+<a href="#162" id="162">162</a>
+<a href="#163" id="163">163</a>
+<a href="#164" id="164">164</a>
+<a href="#165" id="165">165</a>
+<a href="#166" id="166">166</a>
+<a href="#167" id="167">167</a>
+<a href="#168" id="168">168</a>
+<a href="#169" id="169">169</a>
+<a href="#170" id="170">170</a>
+<a href="#171" id="171">171</a>
+<a href="#172" id="172">172</a>
+<a href="#173" id="173">173</a>
+<a href="#174" id="174">174</a>
+<a href="#175" id="175">175</a>
+<a href="#176" id="176">176</a>
+<a href="#177" id="177">177</a>
+<a href="#178" id="178">178</a>
+<a href="#179" id="179">179</a>
+<a href="#180" id="180">180</a>
+<a href="#181" id="181">181</a>
+<a href="#182" id="182">182</a>
+<a href="#183" id="183">183</a>
+<a href="#184" id="184">184</a>
+<a href="#185" id="185">185</a>
+<a href="#186" id="186">186</a>
+<a href="#187" id="187">187</a>
+<a href="#188" id="188">188</a>
+<a href="#189" id="189">189</a>
+<a href="#190" id="190">190</a>
+<a href="#191" id="191">191</a>
+<a href="#192" id="192">192</a>
+<a href="#193" id="193">193</a>
+<a href="#194" id="194">194</a>
+<a href="#195" id="195">195</a>
+<a href="#196" id="196">196</a>
+<a href="#197" id="197">197</a>
+<a href="#198" id="198">198</a>
+<a href="#199" id="199">199</a>
+<a href="#200" id="200">200</a>
+<a href="#201" id="201">201</a>
+<a href="#202" id="202">202</a>
+<a href="#203" id="203">203</a>
+<a href="#204" id="204">204</a>
+<a href="#205" id="205">205</a>
+<a href="#206" id="206">206</a>
+<a href="#207" id="207">207</a>
+<a href="#208" id="208">208</a>
+<a href="#209" id="209">209</a>
+<a href="#210" id="210">210</a>
+<a href="#211" id="211">211</a>
+<a href="#212" id="212">212</a>
+<a href="#213" id="213">213</a>
+<a href="#214" id="214">214</a>
+<a href="#215" id="215">215</a>
+<a href="#216" id="216">216</a>
+<a href="#217" id="217">217</a>
+<a href="#218" id="218">218</a>
+<a href="#219" id="219">219</a>
+<a href="#220" id="220">220</a>
+<a href="#221" id="221">221</a>
+<a href="#222" id="222">222</a>
+<a href="#223" id="223">223</a>
+<a href="#224" id="224">224</a>
+<a href="#225" id="225">225</a>
+<a href="#226" id="226">226</a>
+<a href="#227" id="227">227</a>
+<a href="#228" id="228">228</a>
+<a href="#229" id="229">229</a>
 </pre><pre class="rust"><code><span class="comment">//======---------------------------------------------------------------======//
 //                                                                           //
-// Copyright 2022 Evan Cox &lt;evanacox00@gmail.com&gt;. All rights reserved.      //
+// Copyright 2022-2023 Evan Cox &lt;evanacox00@gmail.com&gt;. All rights reserved. //
 //                                                                           //
 // Use of this source code is governed by a BSD-style license that can be    //
 // found in the LICENSE.txt file at the root of this project, or at the      //
@@ -173,6 +245,7 @@
 <span class="kw">use </span><span class="kw">crate</span>::utility::{Str, StringPool};
 <span class="kw">use </span>ahash::AHashMap;
 <span class="kw">use </span>std::collections::HashMap;
+<span class="kw">use </span>std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 <span class="attr">#[cfg(feature = <span class="string">&quot;enable-serde&quot;</span>)]
 </span><span class="kw">use </span>serde::{Deserialize, Serialize};
@@ -189,6 +262,92 @@
 #[cfg_attr(feature = <span class="string">&quot;enable-serde&quot;</span>, derive(Serialize, Deserialize))]
 </span><span class="kw">pub struct </span>ModuleIdentity(usize);
 
+<span class="attr">#[derive(Debug)]
+#[cfg_attr(feature = <span class="string">&quot;enable-serde&quot;</span>, derive(Serialize, Deserialize))]
+</span><span class="kw">struct </span>InnerModuleContext {
+    types: RwLock&lt;TypePool&gt;,
+    strings: RwLock&lt;StringPool&gt;,
+}
+
+<span class="kw">impl </span>InnerModuleContext {
+    <span class="kw">fn </span>with_strings(pool: StringPool) -&gt; <span class="self">Self </span>{
+        <span class="self">Self </span>{
+            types: RwLock::default(),
+            strings: RwLock::new(pool),
+        }
+    }
+}
+
+<span class="kw">impl </span>Clone <span class="kw">for </span>InnerModuleContext {
+    <span class="kw">fn </span>clone(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="self">Self </span>{
+        <span class="kw">let </span>types = <span class="self">self</span>.types.read().unwrap();
+        <span class="kw">let </span>strings = <span class="self">self</span>.strings.read().unwrap();
+
+        <span class="self">Self </span>{
+            types: RwLock::new(types.clone()),
+            strings: RwLock::new(strings.clone()),
+        }
+    }
+}
+
+<span class="doccomment">/// Models shared ownership of the state that is shared between all entities in a module.
+///
+/// This state contains all of the types and all of the strings in a given module,
+/// and since different passes may need to access/mutate that data (possibly simultaneously),
+/// this type exists.
+///
+/// Internally, this is an [`Arc`] referring to [`RwLock`]s that hold a [`TypePool`]
+/// and a [`StringPool`].
+</span><span class="attr">#[derive(Debug, Clone)]
+#[cfg_attr(feature = <span class="string">&quot;enable-serde&quot;</span>, derive(Serialize, Deserialize))]
+</span><span class="kw">pub struct </span>ModuleContext {
+    data: Arc&lt;InnerModuleContext&gt;,
+}
+
+<span class="kw">impl </span>ModuleContext {
+    <span class="kw">fn </span>with_strings(pool: StringPool) -&gt; <span class="self">Self </span>{
+        <span class="self">Self </span>{
+            data: Arc::new(InnerModuleContext::with_strings(pool)),
+        }
+    }
+
+    <span class="doccomment">/// Returns a guard that allows the type pool to be read.
+    ///
+    /// Since the underlying lock is a [`RwLock`], this is usually going to be
+    /// able to lock immediately.
+    </span><span class="kw">pub fn </span>types(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; RwLockReadGuard&lt;<span class="lifetime">&#39;_</span>, TypePool&gt; {
+        <span class="self">self</span>.data.types.read().expect(<span class="string">&quot;lock was poisoned&quot;</span>)
+    }
+
+    <span class="doccomment">/// Returns a guard that allows the type pool to be written to.
+    ///
+    /// Since the underlying lock is a [`RwLock`], this can cause any other
+    /// threads waiting to read to stall. Make sure that the guard is only
+    /// held for the minimum amount necessary, i.e. try to avoid making multiple
+    /// calls to this and instead batch writes where possible.
+    </span><span class="kw">pub fn </span>types_mut(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; RwLockWriteGuard&lt;<span class="lifetime">&#39;_</span>, TypePool&gt; {
+        <span class="self">self</span>.data.types.write().expect(<span class="string">&quot;lock was poisoned&quot;</span>)
+    }
+
+    <span class="doccomment">/// Returns a guard that allows the string pool to be read.
+    ///
+    /// Since the underlying lock is a [`RwLock`], this is usually going to be
+    /// able to lock immediately.
+    </span><span class="kw">pub fn </span>strings(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; RwLockReadGuard&lt;<span class="lifetime">&#39;_</span>, StringPool&gt; {
+        <span class="self">self</span>.data.strings.read().expect(<span class="string">&quot;lock was poisoned&quot;</span>)
+    }
+
+    <span class="doccomment">/// Returns a guard that allows the string pool to be written to.
+    ///
+    /// Since the underlying lock is a [`RwLock`], this can cause any other
+    /// threads waiting to read to stall. Make sure that the guard is only
+    /// held for the minimum amount necessary, i.e. try to avoid making multiple
+    /// calls to this and instead batch writes where possible.
+    </span><span class="kw">pub fn </span>strings_mut(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; RwLockWriteGuard&lt;<span class="lifetime">&#39;_</span>, StringPool&gt; {
+        <span class="self">self</span>.data.strings.write().expect(<span class="string">&quot;lock was poisoned&quot;</span>)
+    }
+}
+
 <span class="doccomment">/// Contains all the data necessary for a single module of SIR.
 ///
 /// This models all of the information that would be represented inside of
@@ -198,8 +357,7 @@
 </span><span class="kw">pub struct </span>Module {
     identity: Box&lt;u8&gt;,
     name_ref: Str,
-    types: TypePool,
-    strings: StringPool,
+    context: ModuleContext,
     functions: ArenaMap&lt;Func, Function&gt;,
     names: HashMap&lt;String, Func, ahash::RandomState&gt;,
 }
@@ -216,8 +374,7 @@
         <span class="self">Self </span>{
             identity: Box::new(<span class="number">0</span>),
             name_ref,
-            types: TypePool::default(),
-            strings: pool,
+            context: ModuleContext::with_strings(pool),
             functions: ArenaMap::default(),
             names: AHashMap::default().into(),
         }
@@ -253,7 +410,8 @@
         <span class="macro">debug_assert!</span>(<span class="macro">matches!</span>(<span class="self">self</span>.find_function_by_name(name), <span class="prelude-val">None</span>));
 
         <span class="kw">let </span>name = name.to_owned();
-        <span class="kw">let </span>new = Function::new(name.clone(), sig, <span class="self">self</span>.functions.next_key());
+        <span class="kw">let </span>ctx = <span class="self">self</span>.context.clone();
+        <span class="kw">let </span>new = Function::new(name.clone(), sig, <span class="self">self</span>.functions.next_key(), ctx);
         <span class="kw">let </span>func = <span class="self">self</span>.functions.insert(new);
 
         <span class="self">self</span>.names.insert(name, func);
@@ -275,39 +433,25 @@
         <span class="self">self</span>.functions.keys()
     }
 
-    <span class="doccomment">/// Gets the [`TypePool`] in use for all the functions inside of a module.
-    </span><span class="kw">pub fn </span>type_pool(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>TypePool {
-        <span class="kw-2">&amp;</span><span class="self">self</span>.types
+    <span class="doccomment">/// Gets the [`ModuleContext`] owned by this module. This can be cloned as necessary.
+    </span><span class="kw">pub fn </span>context(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>ModuleContext {
+        <span class="kw-2">&amp;</span><span class="self">self</span>.context
     }
 
-    <span class="doccomment">/// Gets the [`TypePool`] in use for all the functions inside of a module.
-    </span><span class="kw">pub fn </span>type_pool_mut(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;mut </span>TypePool {
-        <span class="kw-2">&amp;mut </span><span class="self">self</span>.types
+    <span class="doccomment">/// Convenience method for quickly inserting a string into the module
+    /// and getting a [`Str`] that refers to it.
+    </span><span class="kw">pub fn </span>insert_string(<span class="kw-2">&amp;</span><span class="self">self</span>, string: <span class="kw-2">&amp;</span>str) -&gt; Str {
+        <span class="self">self</span>.context.strings_mut().insert(string)
     }
 
-    <span class="doccomment">/// Gets the [`TypePool`] in use for all the functions inside of a module.
-    </span><span class="kw">pub fn </span>string_pool(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>StringPool {
-        <span class="kw-2">&amp;</span><span class="self">self</span>.strings
+    <span class="doccomment">/// Shorthand for getting the [`TypePool`] for a given module.
+    </span><span class="kw">pub fn </span>type_pool_mut(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; RwLockWriteGuard&lt;<span class="lifetime">&#39;_</span>, TypePool&gt; {
+        <span class="self">self</span>.context.data.types.write().expect(<span class="string">&quot;lock was poisoned&quot;</span>)
     }
 
-    <span class="doccomment">/// Gets the [`TypePool`] in use for all the functions inside of a module.
-    </span><span class="kw">pub fn </span>string_pool_mut(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;mut </span>StringPool {
-        <span class="kw-2">&amp;mut </span><span class="self">self</span>.strings
-    }
-
-    <span class="doccomment">/// Convenience method for `self.string_pool_mut().insert(str)`.
-    </span><span class="kw">pub fn </span>insert_string(<span class="kw-2">&amp;mut </span><span class="self">self</span>, string: <span class="kw-2">&amp;</span>str) -&gt; Str {
-        <span class="self">self</span>.strings.insert(string)
-    }
-
-    <span class="doccomment">/// Convenience method for `self.string_pool_mut()[str]`.
-    </span><span class="kw">pub fn </span>resolve_string(<span class="kw-2">&amp;</span><span class="self">self</span>, str: Str) -&gt; <span class="kw-2">&amp;</span>str {
-        <span class="kw-2">&amp;</span><span class="self">self</span>.strings[str]
-    }
-
-    <span class="doccomment">/// Gets the user-given name of the module.
-    </span><span class="kw">pub fn </span>name(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>str {
-        <span class="self">self</span>.resolve_string(<span class="self">self</span>.name_ref)
+    <span class="doccomment">/// Shorthand for getting the [`TypePool`] for a given module.
+    </span><span class="kw">pub fn </span>type_pool(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; RwLockReadGuard&lt;<span class="lifetime">&#39;_</span>, TypePool&gt; {
+        <span class="self">self</span>.context.data.types.read().expect(<span class="string">&quot;lock was poisoned&quot;</span>)
     }
 
     <span class="doccomment">/// Gets a [`ModuleIdentity`] that refers to the object.

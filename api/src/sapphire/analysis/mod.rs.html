@@ -25,9 +25,11 @@
 <a href="#22" id="22">22</a>
 <a href="#23" id="23">23</a>
 <a href="#24" id="24">24</a>
+<a href="#25" id="25">25</a>
+<a href="#26" id="26">26</a>
 </pre><pre class="rust"><code><span class="comment">//======---------------------------------------------------------------======//
 //                                                                           //
-// Copyright 2022 Evan Cox &lt;evanacox00@gmail.com&gt;. All rights reserved.      //
+// Copyright 2022-2023 Evan Cox &lt;evanacox00@gmail.com&gt;. All rights reserved. //
 //                                                                           //
 // Use of this source code is governed by a BSD-style license that can be    //
 // found in the LICENSE.txt file at the root of this project, or at the      //
@@ -41,12 +43,14 @@
 //! the [`ModuleAnalysisPass`] traits, and range from debug passes to analyses
 //! that are critical for correctness.
 //!
-//! [`FunctionAnalysisPass`]: crate::passes::FunctionAnalysisPass
-//! [`ModuleAnalysisPass`]: crate::passes::ModuleAnalysisPass
+//! [`FunctionAnalysisPass`]: crate::pass::FunctionAnalysisPass
+//! [`ModuleAnalysisPass`]: crate::pass::ModuleAnalysisPass
 
-</span><span class="kw">mod </span>flowgraph;
+</span><span class="kw">mod </span>dominators;
+<span class="kw">mod </span>flowgraph;
 <span class="kw">mod </span>writer;
 
+<span class="kw">pub use </span>dominators::<span class="kw-2">*</span>;
 <span class="kw">pub use </span>flowgraph::<span class="kw-2">*</span>;
 <span class="kw">pub use </span>writer::<span class="kw-2">*</span>;
 </code></pre></div>

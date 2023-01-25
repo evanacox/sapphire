@@ -346,11 +346,9 @@
 <a href="#343" id="343">343</a>
 <a href="#344" id="344">344</a>
 <a href="#345" id="345">345</a>
-<a href="#346" id="346">346</a>
-<a href="#347" id="347">347</a>
 </pre><pre class="rust"><code><span class="comment">//======---------------------------------------------------------------======//
 //                                                                           //
-// Copyright 2022 Evan Cox &lt;evanacox00@gmail.com&gt;. All rights reserved.      //
+// Copyright 2022-2023 Evan Cox &lt;evanacox00@gmail.com&gt;. All rights reserved. //
 //                                                                           //
 // Use of this source code is governed by a BSD-style license that can be    //
 // found in the LICENSE.txt file at the root of this project, or at the      //
@@ -664,8 +662,7 @@
         assert_tokens(
             <span class="kw-2">&amp;</span>pool,
             <span class="kw-2">&amp;</span>[
-                <span class="comment">// should just be an empty sequence with a specified length
-                </span>Token::Seq { len: <span class="prelude-val">Some</span>(<span class="number">1</span>) },
+                Token::Seq { len: <span class="prelude-val">Some</span>(<span class="number">1</span>) },
                 Token::Str(DEBUG_FAKE_INVALID),
                 Token::SeqEnd,
             ],
@@ -684,8 +681,7 @@
         assert_tokens(
             <span class="kw-2">&amp;</span>pool,
             <span class="kw-2">&amp;</span>[
-                <span class="comment">// should just be an empty sequence with a specified length
-                </span>Token::Seq { len: <span class="prelude-val">Some</span>(<span class="number">4</span>) },
+                Token::Seq { len: <span class="prelude-val">Some</span>(<span class="number">4</span>) },
                 Token::Str(DEBUG_FAKE_INVALID),
                 Token::Str(<span class="string">&quot;one&quot;</span>),
                 Token::Str(<span class="string">&quot;two&quot;</span>),

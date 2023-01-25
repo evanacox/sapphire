@@ -1,0 +1,72 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Defines the pass infrastructure used by the middle-end of the compiler."><meta name="keywords" content="rust, rustlang, rust-lang, pass"><title>sapphire::pass - Rust</title><link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/SourceSerif4-Regular-1f7d512b176f0f72.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/FiraSans-Regular-018c141bf0843ffd.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/FiraSans-Medium-8f9a781e4970d388.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/SourceSerif4-Bold-124a1ca42af929b6.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2"><link rel="stylesheet" href="../../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../../static.files/rustdoc-6d262342be62306e.css" id="mainThemeStyle"><link rel="stylesheet" id="themeStyle" href="../../static.files/light-5f7299aa2b503fb1.css"><link rel="stylesheet" disabled href="../../static.files/dark-dfb18ef8114bb428.css"><link rel="stylesheet" disabled href="../../static.files/ayu-4047a6aaddd3789d.css"><script id="default-settings" ></script><script src="../../static.files/storage-d43fa987303ecbbb.js"></script><script defer src="../../static.files/main-3367e395607fafc1.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-13285aec31fa243e.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-16x16-8b506e7a72182f1c.png"><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-2c020d218678b618.svg"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.6.0/katex.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.6.0/katex.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.6.0/contrib/auto-render.min.js"></script>
+</head><body class="rustdoc mod"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle">&#9776;</button><a class="logo-container" href="../../sapphire/index.html"><img class="rust-logo" src="../../static.files/rust-logo-151179464ae7ed46.svg" alt="logo"></a><h2></h2></nav><nav class="sidebar"><a class="logo-container" href="../../sapphire/index.html"><img class="rust-logo" src="../../static.files/rust-logo-151179464ae7ed46.svg" alt="logo"></a><h2 class="location"><a href="#">Module pass</a></h2><div class="sidebar-elems"><section><ul class="block"><li><a href="#macros">Macros</a></li><li><a href="#structs">Structs</a></li><li><a href="#traits">Traits</a></li><li><a href="#types">Type Definitions</a></li></ul></section></div></nav><main><div class="width-limiter"><nav class="sub"><form class="search-form"><span></span><input class="search-input" name="search" aria-label="Run search in the documentation" autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"><div id="help-button" title="help" tabindex="-1"><a href="../../help.html">?</a></div><div id="settings-menu" tabindex="-1"><a href="../../settings.html" title="settings"><img width="22" height="22" alt="Change settings" src="../../static.files/wheel-5ec35bf9ca753509.svg"></a></div></form></nav><section id="main-content" class="content"><div class="main-heading"><h1>Module <a href="../index.html">sapphire</a>::<wbr><a class="mod" href="#">pass</a><button id="copy-path" onclick="copy_path(this)" title="Copy item path to clipboard"><img src="../../static.files/clipboard-7571035ce49a181d.svg" width="19" height="18" alt="Copy item path"></button></h1><span class="out-of-band"><a class="srclink" href="../../src/sapphire/pass/mod.rs.html#11-87">source</a> · <button id="toggle-all-docs" title="collapse all docs">[<span>&#x2212;</span>]</button></span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Defines the pass infrastructure used by the middle-end of the compiler.</p>
+<p>Passes are broken down into two categories:</p>
+<ol>
+<li>Transformations</li>
+<li>Analyses</li>
+</ol>
+<p>These two types of passes are used in very different ways, so different
+infrastructure is defined for both. But, both follow the same basic
+pattern.</p>
+<p>Passes at their core are just objects that take in IR and possibly
+return results, and are effectively a slightly more complex version
+of the following interface:</p>
+
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">struct </span>Pass { <span class="comment">/* ... */ </span>}
+
+<span class="kw">impl </span>Pass {
+    <span class="kw">fn </span>run(<span class="kw-2">&amp;mut </span><span class="self">self</span>, ir: <span class="kw-2">&amp;mut </span>Module) { <span class="comment">/* ... */ </span>}
+}</code></pre></div>
+<p>Of course it’s a bit more complicated than that, but at their core,
+every single pass boils down to roughly that pattern.</p>
+<h2 id="function-vs-module-passes"><a href="#function-vs-module-passes">Function vs. Module Passes</a></h2>
+<p>Passes can either operate over an entire module, or they can
+operate on a single function (the smallest useful unit of IR in SIR).
+There are different traits to implement depending on what exactly
+a given pass needs to do.</p>
+<p>Practically, the only difference is how much IR is visible, and
+which analysis manager is given by default.</p>
+<h2 id="transform-passes"><a href="#transform-passes">Transform Passes</a></h2>
+<p>Transform passes are the core of the middle-end of Sapphire.
+Logically, they are pure functions that map input IR -&gt; output IR.</p>
+<p>Since passes can be more complicated internally than that, they
+are allowed to take a <code>&amp;mut self</code> to manipulate internal state
+during the run (and potentially across runs), they should always
+act as-if they were pure functions. Multiple runs of the same
+pass over the same IR should produce the same output, regardless
+of how many times the pass is ran.</p>
+<p>Analyses can be invalidated by transformations, so all
+passes that possibly transform IR have to return a set of analyses
+that they preserve. This could be an empty set, it could be a
+subset of analyses (e.g. a peephole optimization pass that
+didn’t touch any <code>condbr</code>s could preserve any CFG-related
+analyses), or every analysis (basically only safe if no IR was
+actually changed).</p>
+<p>The main two traits used here are <a href="trait.ModuleTransformPass.html" title="ModuleTransformPass"><code>ModuleTransformPass</code></a> and
+<a href="trait.FunctionTransformPass.html" title="FunctionTransformPass"><code>FunctionTransformPass</code></a>.</p>
+<h2 id="analysis-passes--analysis-managers"><a href="#analysis-passes--analysis-managers">Analysis Passes &amp; Analysis Managers</a></h2>
+<p>Analysis passes are not able to modify IR, they are only able to
+observe the IR and use other analyses. They also produce a result
+of some sort that can be used in other passes (including other
+analysis passes).</p>
+<p>These analyses are available through an analysis manager of some
+sort, depending on the type of pass this is either a
+<a href="struct.FunctionAnalysisManager.html" title="FunctionAnalysisManager"><code>FunctionAnalysisManager</code></a> or a <a href="struct.ModuleAnalysisManager.html" title="ModuleAnalysisManager"><code>ModuleAnalysisManager</code></a>. Both
+of these store the results of analyses and will recompute analyses
+lazily whenever they are invalidated.</p>
+</div></details><h2 id="macros" class="small-section-header"><a href="#macros">Macros</a></h2><div class="item-table"><div class="item-row"><div class="item-left module-item"><a class="macro" href="macro.analysis_preserved.html" title="sapphire::pass::analysis_preserved macro">analysis_preserved</a></div><div class="item-right docblock-short">Allows an analysis to define any other analysis that it depends on.</div></div></div><h2 id="structs" class="small-section-header"><a href="#structs">Structs</a></h2><div class="item-table"><div class="item-row"><div class="item-left module-item"><a class="struct" href="struct.FunctionAnalysisManager.html" title="sapphire::pass::FunctionAnalysisManager struct">FunctionAnalysisManager</a></div><div class="item-right docblock-short">A lazy analysis manager for a single function in SIR.</div></div><div class="item-row"><div class="item-left module-item"><a class="struct" href="struct.FunctionAnalysisManagerModuleProxy.html" title="sapphire::pass::FunctionAnalysisManagerModuleProxy struct">FunctionAnalysisManagerModuleProxy</a></div><div class="item-right docblock-short">Wrapper type that maps the function analysis manager into an
+“analysis” that can be requested by module analyses.</div></div><div class="item-row"><div class="item-left module-item"><a class="struct" href="struct.FunctionPassManager.html" title="sapphire::pass::FunctionPassManager struct">FunctionPassManager</a></div><div class="item-right docblock-short">Manages running a set of passes over individual functions in the IR.</div></div><div class="item-row"><div class="item-left module-item"><a class="struct" href="struct.FunctionToModulePassAdapter.html" title="sapphire::pass::FunctionToModulePassAdapter struct">FunctionToModulePassAdapter</a></div><div class="item-right docblock-short">Adapts a function transform pass to a module pass that runs the given
+function pass over every function in the module.</div></div><div class="item-row"><div class="item-left module-item"><a class="struct" href="struct.ModuleAnalysisManager.html" title="sapphire::pass::ModuleAnalysisManager struct">ModuleAnalysisManager</a></div><div class="item-right docblock-short">A lazy analysis manager for a module of SIR.</div></div><div class="item-row"><div class="item-left module-item"><a class="struct" href="struct.ModulePassManager.html" title="sapphire::pass::ModulePassManager struct">ModulePassManager</a></div><div class="item-right docblock-short">Manages running a set of passes over IR.</div></div><div class="item-row"><div class="item-left module-item"><a class="struct" href="struct.PreservedAnalyses.html" title="sapphire::pass::PreservedAnalyses struct">PreservedAnalyses</a></div><div class="item-right docblock-short">Models the set of analyses that a given transformation pass
+preserves.</div></div></div><h2 id="traits" class="small-section-header"><a href="#traits">Traits</a></h2><div class="item-table"><div class="item-row"><div class="item-left module-item"><a class="trait" href="trait.FunctionAnalysisPass.html" title="sapphire::pass::FunctionAnalysisPass trait">FunctionAnalysisPass</a></div><div class="item-right docblock-short">An analysis that runs over an entire function.</div></div><div class="item-row"><div class="item-left module-item"><a class="trait" href="trait.FunctionTransformPass.html" title="sapphire::pass::FunctionTransformPass trait">FunctionTransformPass</a></div><div class="item-right docblock-short">Defines a transformation over a single SIR function.</div></div><div class="item-row"><div class="item-left module-item"><a class="trait" href="trait.ModuleAnalysisPass.html" title="sapphire::pass::ModuleAnalysisPass trait">ModuleAnalysisPass</a></div><div class="item-right docblock-short">An analysis pass that runs over an entire module.</div></div><div class="item-row"><div class="item-left module-item"><a class="trait" href="trait.ModuleTransformPass.html" title="sapphire::pass::ModuleTransformPass trait">ModuleTransformPass</a></div><div class="item-right docblock-short">Models a pass that possibly performs a transformation over an entire SIR module.</div></div></div><h2 id="types" class="small-section-header"><a href="#types">Type Definitions</a></h2><div class="item-table"><div class="item-row"><div class="item-left module-item"><a class="type" href="type.FAMProxy.html" title="sapphire::pass::FAMProxy type">FAMProxy</a></div><div class="item-right docblock-short">Alias for the underlying FAM type.</div></div></div></section></div></main><script>
+renderMathInElement(document.body, {
+    delimiters: [
+        {left: "$$", right: "$$", display: true},
+        {left: "\\[", right: "\\]", display: true},
+        {left: "\\(", right: "\\)", display: false},
+        {left: "$", right: "$", display: false}
+    ]
+});
+</script>
+<div id="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="sapphire" data-themes="" data-resource-suffix="" data-rustdoc-version="1.69.0-nightly (c8e6a9e8b 2023-01-23)" data-search-js="search-98d53477a794af0b.js" data-settings-js="settings-c3c521c753752a1a.js" data-settings-css="settings-08ddfdda51b8ee2e.css" ></div></body></html>

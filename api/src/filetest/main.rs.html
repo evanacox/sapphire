@@ -62,9 +62,16 @@
 <a href="#59" id="59">59</a>
 <a href="#60" id="60">60</a>
 <a href="#61" id="61">61</a>
+<a href="#62" id="62">62</a>
+<a href="#63" id="63">63</a>
+<a href="#64" id="64">64</a>
+<a href="#65" id="65">65</a>
+<a href="#66" id="66">66</a>
+<a href="#67" id="67">67</a>
+<a href="#68" id="68">68</a>
 </pre><pre class="rust"><code><span class="comment">//======---------------------------------------------------------------======//
 //                                                                           //
-// Copyright 2022 Evan Cox &lt;evanacox00@gmail.com&gt;. All rights reserved.      //
+// Copyright 2022-2023 Evan Cox &lt;evanacox00@gmail.com&gt;. All rights reserved. //
 //                                                                           //
 // Use of this source code is governed by a BSD-style license that can be    //
 // found in the LICENSE.txt file at the root of this project, or at the      //
@@ -73,9 +80,11 @@
 //======---------------------------------------------------------------======//
 
 </span><span class="kw">mod </span>discovery;
-<span class="kw">mod </span>parse;
+<span class="kw">mod </span>display;
 <span class="kw">mod </span>runner;
+<span class="kw">mod </span>runners;
 <span class="kw">mod </span>subtest;
+<span class="kw">mod </span>testcase;
 
 <span class="kw">use </span><span class="kw">crate</span>::runner::{run_all, run_subtest};
 <span class="kw">use </span>bpaf::Parser;
@@ -122,6 +131,11 @@
 <span class="attr">#[test]
 </span><span class="kw">fn </span>test_parse() {
     <span class="macro">assert!</span>(<span class="macro">matches!</span>(run_subtest(<span class="string">&quot;parse&quot;</span>, <span class="prelude-val">Some</span>(<span class="number">1</span>)), <span class="prelude-val">Ok</span>(())));
+}
+
+<span class="attr">#[test]
+</span><span class="kw">fn </span>test_domtree() {
+    <span class="macro">assert!</span>(<span class="macro">matches!</span>(run_subtest(<span class="string">&quot;domtree&quot;</span>, <span class="prelude-val">Some</span>(<span class="number">1</span>)), <span class="prelude-val">Ok</span>(())))
 }
 </code></pre></div>
 </section></main><script>

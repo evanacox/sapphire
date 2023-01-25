@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":[["TestFailure",""]],"struct":[["Subtest",""],["TestDetails",""]]};
+window.SIDEBAR_ITEMS = {"enum":[["TestResult",""]],"struct":[["Subtest",""],["TestDetails",""]]};

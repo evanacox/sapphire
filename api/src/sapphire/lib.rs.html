@@ -37,24 +37,14 @@
 <a href="#34" id="34">34</a>
 <a href="#35" id="35">35</a>
 <a href="#36" id="36">36</a>
-<a href="#37" id="37">37</a>
-<a href="#38" id="38">38</a>
-<a href="#39" id="39">39</a>
-<a href="#40" id="40">40</a>
 </pre><pre class="rust"><code><span class="comment">//======---------------------------------------------------------------======//
-// Copyright (c) 2022 Evan Cox &lt;evanacox00@gmail.com&gt;.                       //
 //                                                                           //
-// Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);           //
-// you may not use this file except in compliance with the License.          //
-// You may obtain a copy of the License at                                   //
+// Copyright 2022-2023 Evan Cox &lt;evanacox00@gmail.com&gt;. All rights reserved. //
 //                                                                           //
-//     http://www.apache.org/licenses/LICENSE-2.0                            //
+// Use of this source code is governed by a BSD-style license that can be    //
+// found in the LICENSE.txt file at the root of this project, or at the      //
+// following link: https://opensource.org/licenses/BSD-3-Clause              //
 //                                                                           //
-// Unless required by applicable law or agreed to in writing, software       //
-// distributed under the License is distributed on an &quot;AS IS&quot; BASIS,         //
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  //
-// See the License for the specific language governing permissions and       //
-// limitations under the License.                                            //
 //======---------------------------------------------------------------======//
 
 </span><span class="attr">#![allow(dead_code)]
@@ -77,8 +67,10 @@
 <span class="kw">pub mod </span>arena;
 <span class="kw">pub mod </span>cli;
 <span class="kw">pub mod </span>ir;
-<span class="kw">pub mod </span>passes;
+<span class="kw">pub mod </span>pass;
+<span class="kw">pub mod </span>transforms;
 <span class="kw">pub mod </span>utility;
+<span class="kw">pub mod </span>vm;
 
 <span class="kw">pub use </span>reader::parse_sir;
 </code></pre></div>

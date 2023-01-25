@@ -461,17 +461,9 @@
 <a href="#458" id="458">458</a>
 <a href="#459" id="459">459</a>
 <a href="#460" id="460">460</a>
-<a href="#461" id="461">461</a>
-<a href="#462" id="462">462</a>
-<a href="#463" id="463">463</a>
-<a href="#464" id="464">464</a>
-<a href="#465" id="465">465</a>
-<a href="#466" id="466">466</a>
-<a href="#467" id="467">467</a>
-<a href="#468" id="468">468</a>
 </pre><pre class="rust"><code><span class="comment">//======---------------------------------------------------------------======//
 //                                                                           //
-// Copyright 2022 Evan Cox &lt;evanacox00@gmail.com&gt;. All rights reserved.      //
+// Copyright 2022-2023 Evan Cox &lt;evanacox00@gmail.com&gt;. All rights reserved. //
 //                                                                           //
 // Use of this source code is governed by a BSD-style license that can be    //
 // found in the LICENSE.txt file at the root of this project, or at the      //
@@ -479,47 +471,112 @@
 //                                                                           //
 //======---------------------------------------------------------------======//
 
-</span><span class="kw">use </span><span class="kw">crate</span>::arena::ArenaMap;
+</span><span class="kw">use </span><span class="kw">crate</span>::arena::SecondaryMap;
 <span class="kw">use </span><span class="kw">crate</span>::dense_arena_key;
 <span class="kw">use </span><span class="kw">crate</span>::ir::{Block, Cursor, FuncView, Function};
-<span class="kw">use </span><span class="kw">crate</span>::passes::{FunctionAnalysisManager, FunctionAnalysisPass};
-<span class="kw">use </span><span class="kw">crate</span>::utility::{SaHashMap, SaHashSet};
+<span class="kw">use </span><span class="kw">crate</span>::pass::{FunctionAnalysisManager, FunctionAnalysisPass};
+<span class="kw">use </span><span class="kw">crate</span>::utility::SaHashSet;
 <span class="kw">use </span>smallvec::SmallVec;
 <span class="kw">use </span>std::any::TypeId;
-<span class="kw">use </span>std::collections::hash_map::Entry;
+
+<span class="doccomment">/// Models successor/predecessor information about the control-flow graph of
+/// a given function.
+</span><span class="kw">pub struct </span>ControlFlowGraph {
+    <span class="comment">// if a block isn&#39;t present here, it wasn&#39;t reachable from the entry node
+    // and is therefore dead.
+    </span>nodes: SecondaryMap&lt;Block, CFGNodeData&gt;,
+}
+
+<span class="kw">impl </span>ControlFlowGraph {
+    <span class="doccomment">/// Directly computes flowgraph information for a given function.
+    ///
+    /// This should not be used directly in normal compiler passes, this should be
+    /// requested from the [`FunctionAnalysisManager`]
+    /// through [`ControlFlowGraphAnalysis`].
+    </span><span class="kw">pub fn </span>compute(func: <span class="kw-2">&amp;</span>Function) -&gt; <span class="self">Self </span>{
+        <span class="self">Self </span>{
+            nodes: CFGComputer::new(func).compute(),
+        }
+    }
+
+    <span class="doccomment">/// Returns an iterator over the predecessors for a given block.
+    </span><span class="kw">pub fn </span>predecessors(<span class="kw-2">&amp;</span><span class="self">self</span>, block: Block) -&gt; <span class="kw">impl </span>Iterator&lt;Item = Block&gt; + <span class="lifetime">&#39;_ </span>{
+        <span class="kw">let </span>node = <span class="self">self</span>.data_of(block);
+
+        node.predecessors.iter().copied()
+    }
+
+    <span class="doccomment">/// Returns an iterator over the successors for a given block.
+    </span><span class="kw">pub fn </span>successors(<span class="kw-2">&amp;</span><span class="self">self</span>, block: Block) -&gt; <span class="kw">impl </span>Iterator&lt;Item = Block&gt; + <span class="lifetime">&#39;_ </span>{
+        <span class="kw">let </span>node = <span class="self">self</span>.data_of(block);
+
+        node.successors.iter().copied()
+    }
+
+    <span class="doccomment">/// Checks if a given block `pred` is a predecessor of `block`
+    </span><span class="kw">pub fn </span>is_pred_of(<span class="kw-2">&amp;</span><span class="self">self</span>, block: Block, pred: Block) -&gt; bool {
+        <span class="kw">let </span>node = <span class="self">self</span>.data_of(block);
+
+        node.predecessors.contains(<span class="kw-2">&amp;</span>pred)
+    }
+
+    <span class="doccomment">/// Checks if a given block `pred` is a successor of `block`
+    </span><span class="kw">pub fn </span>is_succ_of(<span class="kw-2">&amp;</span><span class="self">self</span>, block: Block, succ: Block) -&gt; bool {
+        <span class="kw">let </span>node = <span class="self">self</span>.data_of(block);
+
+        node.successors.contains(<span class="kw-2">&amp;</span>succ)
+    }
+
+    <span class="kw">fn </span>data_of(<span class="kw-2">&amp;</span><span class="self">self</span>, block: Block) -&gt; <span class="kw-2">&amp;</span>CFGNodeData {
+        <span class="kw-2">&amp;</span><span class="self">self</span>.nodes[block]
+    }
+}
+
+<span class="doccomment">/// An analysis pass that wraps up a [`ControlFlowGraph`] into
+/// something that can actually be used inside of transform passes.
+</span><span class="kw">pub struct </span>ControlFlowGraphAnalysis;
+
+<span class="kw">impl </span>FunctionAnalysisPass <span class="kw">for </span>ControlFlowGraphAnalysis {
+    <span class="kw">type </span><span class="prelude-ty">Result </span>= ControlFlowGraph;
+
+    <span class="kw">fn </span>expects_preserved(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span><span class="lifetime">&#39;static </span>[TypeId] {
+        <span class="kw-2">&amp;</span>[]
+    }
+
+    <span class="kw">fn </span>run(<span class="kw-2">&amp;mut </span><span class="self">self</span>, func: <span class="kw-2">&amp;</span>Function, <span class="kw">_</span>: <span class="kw-2">&amp;</span>FunctionAnalysisManager) -&gt; <span class="self">Self</span>::Result {
+        ControlFlowGraph::compute(func)
+    }
+}
 
 <span class="macro">dense_arena_key! </span>{
     <span class="kw">struct </span>CFGNode;
 }
 
-<span class="kw">struct </span>CFGNodeData {
+<span class="attr">#[derive(Debug)]
+</span><span class="kw">struct </span>CFGNodeData {
     predecessors: SaHashSet&lt;Block&gt;,
     successors: SaHashSet&lt;Block&gt;,
 }
 
 <span class="kw">struct </span>CFGComputer&lt;<span class="lifetime">&#39;f</span>&gt; {
-    nodes: ArenaMap&lt;CFGNode, CFGNodeData&gt;,
-    lookup: SaHashMap&lt;Block, CFGNode&gt;,
-    seen: SaHashSet&lt;Block&gt;,
+    nodes: SecondaryMap&lt;Block, CFGNodeData&gt;,
     cursor: FuncView&lt;<span class="lifetime">&#39;f</span>&gt;,
 }
 
 <span class="kw">impl</span>&lt;<span class="lifetime">&#39;f</span>&gt; CFGComputer&lt;<span class="lifetime">&#39;f</span>&gt; {
     <span class="kw">fn </span>new(func: <span class="kw-2">&amp;</span><span class="lifetime">&#39;f </span>Function) -&gt; <span class="self">Self </span>{
         <span class="self">Self </span>{
-            nodes: ArenaMap::default(),
-            lookup: SaHashMap::default(),
-            seen: SaHashSet::default(),
+            nodes: SecondaryMap::default(),
             cursor: FuncView::over(func),
         }
     }
 
-    <span class="kw">fn </span>compute(<span class="kw-2">mut </span><span class="self">self</span>) -&gt; (ArenaMap&lt;CFGNode, CFGNodeData&gt;, SaHashMap&lt;Block, CFGNode&gt;) {
+    <span class="kw">fn </span>compute(<span class="kw-2">mut </span><span class="self">self</span>) -&gt; SecondaryMap&lt;Block, CFGNodeData&gt; {
         <span class="kw">while let </span><span class="prelude-val">Some</span>(block) = <span class="self">self</span>.cursor.next_block() {
             <span class="self">self</span>.compute_block(block);
         }
 
-        (<span class="self">self</span>.nodes, <span class="self">self</span>.lookup)
+        <span class="self">self</span>.nodes
     }
 
     <span class="kw">fn </span>compute_block(<span class="kw-2">&amp;mut </span><span class="self">self</span>, block: Block) {
@@ -557,90 +614,17 @@
     }
 
     <span class="kw">fn </span>node_of(<span class="kw-2">&amp;mut </span><span class="self">self</span>, block: Block) -&gt; <span class="kw-2">&amp;mut </span>CFGNodeData {
-        <span class="kw">match </span><span class="self">self</span>.lookup.entry(block) {
-            Entry::Occupied(slot) =&gt; <span class="kw-2">&amp;mut </span><span class="self">self</span>.nodes[<span class="kw-2">*</span>slot.get()],
-            Entry::Vacant(slot) =&gt; {
-                <span class="kw">let </span>node = <span class="self">self</span>.nodes.insert(CFGNodeData {
+        <span class="kw">if </span>!<span class="self">self</span>.nodes.contains(block) {
+            <span class="self">self</span>.nodes.insert(
+                block,
+                CFGNodeData {
                     predecessors: SaHashSet::default(),
                     successors: SaHashSet::default(),
-                });
-
-                slot.insert(node);
-
-                <span class="kw-2">&amp;mut </span><span class="self">self</span>.nodes[node]
-            }
+                },
+            );
         }
-    }
-}
 
-<span class="doccomment">/// Models successor/predecessor information about the control-flow graph of
-/// a given function.
-</span><span class="kw">pub struct </span>ControlFlowGraph {
-    nodes: ArenaMap&lt;CFGNode, CFGNodeData&gt;,
-    lookup: SaHashMap&lt;Block, CFGNode&gt;,
-}
-
-<span class="kw">impl </span>ControlFlowGraph {
-    <span class="doccomment">/// Directly computes flowgraph information for a given function.
-    ///
-    /// This should not be used directly in normal compiler passes, this should be
-    /// requested from the [`FunctionAnalysisManager`]
-    /// through [`CFGAnalysis`].
-    </span><span class="kw">pub fn </span>compute(func: <span class="kw-2">&amp;</span>Function) -&gt; <span class="self">Self </span>{
-        <span class="kw">let </span>computer = CFGComputer::new(func);
-        <span class="kw">let </span>(nodes, lookup) = computer.compute();
-
-        <span class="self">Self </span>{ nodes, lookup }
-    }
-
-    <span class="doccomment">/// Returns an iterator over the predecessors for a given block.
-    </span><span class="kw">pub fn </span>predecessors(<span class="kw-2">&amp;</span><span class="self">self</span>, block: Block) -&gt; <span class="kw">impl </span>Iterator&lt;Item = Block&gt; + <span class="lifetime">&#39;_ </span>{
-        <span class="kw">let </span>node = <span class="self">self</span>.data_of(block);
-
-        node.predecessors.iter().copied()
-    }
-
-    <span class="doccomment">/// Returns an iterator over the successors for a given block.
-    </span><span class="kw">pub fn </span>successors(<span class="kw-2">&amp;</span><span class="self">self</span>, block: Block) -&gt; <span class="kw">impl </span>Iterator&lt;Item = Block&gt; + <span class="lifetime">&#39;_ </span>{
-        <span class="kw">let </span>node = <span class="self">self</span>.data_of(block);
-
-        node.successors.iter().copied()
-    }
-
-    <span class="doccomment">/// Checks if a given block `pred` is a predecessor of `block`
-    </span><span class="kw">pub fn </span>is_pred_of(<span class="kw-2">&amp;</span><span class="self">self</span>, block: Block, pred: Block) -&gt; bool {
-        <span class="kw">let </span>node = <span class="self">self</span>.data_of(block);
-
-        node.predecessors.contains(<span class="kw-2">&amp;</span>pred)
-    }
-
-    <span class="doccomment">/// Checks if a given block `pred` is a successor of `block`
-    </span><span class="kw">pub fn </span>is_succ_of(<span class="kw-2">&amp;</span><span class="self">self</span>, block: Block, succ: Block) -&gt; bool {
-        <span class="kw">let </span>node = <span class="self">self</span>.data_of(block);
-
-        node.successors.contains(<span class="kw-2">&amp;</span>succ)
-    }
-
-    <span class="kw">fn </span>data_of(<span class="kw-2">&amp;</span><span class="self">self</span>, block: Block) -&gt; <span class="kw-2">&amp;</span>CFGNodeData {
-        <span class="kw">let </span>idx = <span class="self">self</span>.lookup[<span class="kw-2">&amp;</span>block];
-
-        <span class="kw-2">&amp;</span><span class="self">self</span>.nodes[idx]
-    }
-}
-
-<span class="doccomment">/// An analysis pass that wraps up a [`ControlFlowGraph`] into
-/// something that can actually be used inside of transform passes.
-</span><span class="kw">pub struct </span>CFGAnalysis;
-
-<span class="kw">impl </span>FunctionAnalysisPass <span class="kw">for </span>CFGAnalysis {
-    <span class="kw">type </span><span class="prelude-ty">Result </span>= ControlFlowGraph;
-
-    <span class="kw">fn </span>expects_preserved(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span><span class="lifetime">&#39;static </span>[TypeId] {
-        <span class="kw-2">&amp;</span>[]
-    }
-
-    <span class="kw">fn </span>run(<span class="kw-2">&amp;mut </span><span class="self">self</span>, func: <span class="kw-2">&amp;</span>Function, <span class="kw">_</span>: <span class="kw-2">&amp;</span>FunctionAnalysisManager) -&gt; <span class="self">Self</span>::Result {
-        ControlFlowGraph::compute(func)
+        <span class="kw-2">&amp;mut </span><span class="self">self</span>.nodes[block]
     }
 }
 
