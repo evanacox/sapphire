@@ -9,13 +9,21 @@
 //======---------------------------------------------------------------======//
 
 use sapphire::analysis;
+use sapphire::analysis::{
+    ControlFlowGraphAnalysis, DominatorTreeAnalysis, ModuleStringifyAnalysis, ModuleWriterAnalysis,
+    PrintDominatorTreeAnalysis,
+};
 use sapphire::cli;
+use sapphire::pass::{
+    FunctionAnalysisManager, FunctionAnalysisManagerModuleProxy, ModuleAnalysisManager,
+    ModulePassManager,
+};
 use std::fs;
 
 fn main() {
     let (_, base) = cli::tool_with(
         "static compiler for Sapphire IR",
-        "Usage: sirc [options] <input ir> ",
+        "Usage: sirc [options] <input ir>",
         cli::emit_machine_format(),
     )
     .run();
@@ -27,7 +35,7 @@ fn main() {
 
         match sapphire::parse_sir(&filename, &source) {
             Ok(module) => {
-                analysis::print_module(&module);
+                let mut mpm = ModulePassManager::new();
             }
             Err(e) => {
                 eprintln!("failed to parse: {e}");

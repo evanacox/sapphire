@@ -20,7 +20,8 @@
 //! pattern.
 //!
 //! Passes at their core are just objects that take in IR and possibly
-//! return results:
+//! return results, and are effectively a slightly more complex version
+//! of the following interface:
 //!
 //! ```
 //! # use sapphire::ir::Module;

@@ -9,13 +9,13 @@
 //======---------------------------------------------------------------======//
 
 use crate::display;
-use crate::runners::parse_subtest;
+use crate::runners::{domtree_subtest, parse_subtest};
 use crate::subtest::Subtest;
 use std::io;
 use std::time::Duration;
 use threadpool::ThreadPool;
 
-const SUBTESTS: [Subtest; 1] = [parse_subtest()];
+const SUBTESTS: [Subtest; 2] = [parse_subtest(), domtree_subtest()];
 
 fn pool_for_jobs(jobs: Option<usize>) -> ThreadPool {
     match jobs {
@@ -67,6 +67,7 @@ pub fn run_subtest(name: &str, jobs: Option<usize>) -> io::Result<()> {
 
     match name {
         "parse" => run_tests(&SUBTESTS[0..1], &mut pool),
+        "domtree" => run_tests(&SUBTESTS[1..2], &mut pool),
         _ => unreachable!(),
     }
 }

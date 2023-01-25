@@ -8,16 +8,18 @@
 //                                                                           //
 //======---------------------------------------------------------------======//
 
-use crate::subtest::{Subtest, TestResult};
-use sapphire::analysis;
+//! Defines the "transform" passes in SIR's infrastructure.
+//!
+//! These are the passes that can (potentially) modify SIR, and don't
+//! actually logically yield a result.
+//!
+//! Some of these "transforms" are not actually transformations (e.g.
+//! the verify pass is a "transform pass" even though it manipulates no IR),
+//! but most of them are. All of them logically yield no result except
+//! the IR that exists after they run.
 
-fn parser_output(name: &str, content: &str) -> TestResult {
-    match sapphire::parse_sir(name, content) {
-        Ok(module) => TestResult::Output(analysis::stringify_module(&module)),
-        Err(err) => TestResult::CompileError(format!("{err}")),
-    }
-}
+mod printers;
+mod verify;
 
-pub const fn parse_subtest() -> Subtest {
-    Subtest::new("parse", parser_output)
-}
+pub use printers::*;
+pub use verify::*;

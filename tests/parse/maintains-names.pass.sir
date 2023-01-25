@@ -1,0 +1,6 @@
+; MATCH-ENTIRE
+fn i32 @main(i32, ptr) {
+entry(i32 %argc, ptr %argv):
+  %x = iconst i32 0
+  ret i32 %x
+}

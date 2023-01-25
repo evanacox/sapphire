@@ -61,3 +61,8 @@ fn main() -> ExitCode {
 fn test_parse() {
     assert!(matches!(run_subtest("parse", Some(1)), Ok(())));
 }
+
+#[test]
+fn test_domtree() {
+    assert!(matches!(run_subtest("domtree", Some(1)), Ok(())))
+}

@@ -9,7 +9,7 @@
 //======---------------------------------------------------------------======//
 
 use crate::ir::*;
-use crate::utility::{PackedOption, StringPool, TinyArray};
+use crate::utility::{PackedOption, Str, TinyArray};
 use smallvec::SmallVec;
 
 /// Helper type for building a [`Signature`].
@@ -168,10 +168,10 @@ impl<'m> FuncBuilder<'m> {
     }
 
     /// Gets the name of a block that has been inserted into the function
-    pub fn block_name(&self, block: Block) -> &str {
+    pub fn block_name(&self, block: Block) -> Str {
         debug_assert!(self.def.layout.is_block_inserted(block));
 
-        self.module.resolve_string(self.def.dfg.block(block).name())
+        self.def.dfg.block(block).name()
     }
 
     /// Gets the block parameters of a given block.
@@ -292,24 +292,10 @@ impl<'m> FuncBuilder<'m> {
         self.def.dfg.inst_to_result(inst)
     }
 
-    /// Allows access to the [`TypePool`] of the module that the builder is borrowing.
-    pub fn type_pool(&self) -> &TypePool {
-        self.module.type_pool()
-    }
-
-    /// Allows mutable access to the [`TypePool`] of the module that the builder is borrowing.
-    pub fn type_pool_mut(&mut self) -> &mut TypePool {
-        self.module.type_pool_mut()
-    }
-
-    /// Allows access to the [`TypePool`] of the module that the builder is borrowing.
-    pub fn string_pool(&self) -> &StringPool {
-        self.module.string_pool()
-    }
-
-    /// Allows mutable access to the [`TypePool`] of the module that the builder is borrowing.
-    pub fn string_pool_mut(&mut self) -> &mut StringPool {
-        self.module.string_pool_mut()
+    /// Gets the context associated with a given builder. This is
+    /// the context that is owned by the module containing this function.
+    pub fn ctx(&self) -> &ModuleContext {
+        self.module.context()
     }
 
     /// Resolves a [`Func`] into a real function object.

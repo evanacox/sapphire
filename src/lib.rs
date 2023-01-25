@@ -34,7 +34,9 @@ pub mod analysis;
 pub mod arena;
 pub mod cli;
 pub mod ir;
-pub mod passes;
+pub mod pass;
+pub mod transforms;
 pub mod utility;
+pub mod vm;
 
 pub use reader::parse_sir;

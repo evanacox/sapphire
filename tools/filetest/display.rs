@@ -44,9 +44,9 @@ fn prettify_diff(expected: &str, got: &str) -> String {
         result += &format!("{:3} |", line + 1);
 
         let line = match diff {
-            diff::Result::Left(l) => Red.paint(format!("-{l}")).to_string(),
-            diff::Result::Both(l, _) => format!(" {l}"),
-            diff::Result::Right(r) => Green.paint(format!("+{r}")).to_string(),
+            diff::Result::Left(l) => Red.paint(format!("- {l}")).to_string(),
+            diff::Result::Both(l, _) => format!("  {l}"),
+            diff::Result::Right(r) => Green.paint(format!("+ {r}")).to_string(),
         };
 
         result += &line;

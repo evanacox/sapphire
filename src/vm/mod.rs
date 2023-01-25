@@ -8,16 +8,16 @@
 //                                                                           //
 //======---------------------------------------------------------------======//
 
-use crate::subtest::{Subtest, TestResult};
-use sapphire::analysis;
+//! Provides APIs for the execution of SIR.
+//!
+//! This module defines the abstract interface of an "engine" that executes
+//! some given SIR, and implementations of that abstract interface.
+//!
+//! An interpreter and a JIT will eventually be implemented with this
+//! interface.
 
-fn parser_output(name: &str, content: &str) -> TestResult {
-    match sapphire::parse_sir(name, content) {
-        Ok(module) => TestResult::Output(analysis::stringify_module(&module)),
-        Err(err) => TestResult::CompileError(format!("{err}")),
-    }
-}
+mod engine;
+mod runtime;
 
-pub const fn parse_subtest() -> Subtest {
-    Subtest::new("parse", parser_output)
-}
+pub use engine::*;
+pub use runtime::*;

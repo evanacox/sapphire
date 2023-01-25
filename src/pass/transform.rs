@@ -9,12 +9,12 @@
 //======---------------------------------------------------------------======//
 
 use crate::ir::{Function, Module};
-use crate::passes::{FunctionAnalysisManager, ModuleAnalysisManager, PreservedAnalyses};
+use crate::pass::{FunctionAnalysisManager, ModuleAnalysisManager, PreservedAnalyses};
 
 /// Models a pass that possibly performs a transformation over an entire SIR module.
 ///
 /// While the pass may not actually modify the IR, it has the ability to, and needs to
-/// declare what it changed (if anything) through [`PreservedAnalyses`](crate::passes::PreservedAnalyses).
+/// declare what it changed (if anything) through [`PreservedAnalyses`](crate::pass::PreservedAnalyses).
 pub trait ModuleTransformPass {
     /// Performs the transformation over a given SIR module.
     ///
@@ -27,7 +27,7 @@ pub trait ModuleTransformPass {
 /// Defines a transformation over a single SIR function.
 ///
 /// While the pass may not actually modify the IR, it has the ability to, and needs to
-/// declare what it changed (if anything) through [`PreservedAnalyses`](crate::passes::PreservedAnalyses).
+/// declare what it changed (if anything) through [`PreservedAnalyses`](crate::pass::PreservedAnalyses).
 pub trait FunctionTransformPass {
     /// Performs the transformation over a given SIR function.
     ///
