@@ -6,7 +6,7 @@ Cranelift compiler in [Wasmtime](https://wasmtime.dev/).
 Both of those are much better projects to look at for modern optimizing compilers than this is, you
 can find the actual source code at the following:
 
-- [LLVM Core](https://github.com/llvm/llvm-project/tree/main/llvm), in the `llvm/` subdir of the LLVM monorepo
+- [LLVM](https://github.com/llvm/llvm-project/tree/main/llvm), in the `llvm/` subdir of the LLVM monorepo
 - [Cranelift](https://github.com/bytecodealliance/wasmtime/tree/main/cranelift), in the `cranelift/` subdir of Wasmtime
 
 ## API Documentation

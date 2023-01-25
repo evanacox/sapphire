@@ -1,6 +1,6 @@
 //======---------------------------------------------------------------======//
 //                                                                           //
-// Copyright 2022 Evan Cox <evanacox00@gmail.com>. All rights reserved.      //
+// Copyright 2022-2023 Evan Cox <evanacox00@gmail.com>. All rights reserved. //
 //                                                                           //
 // Use of this source code is governed by a BSD-style license that can be    //
 // found in the LICENSE.txt file at the root of this project, or at the      //
@@ -14,11 +14,13 @@
 //! the [`ModuleAnalysisPass`] traits, and range from debug passes to analyses
 //! that are critical for correctness.
 //!
-//! [`FunctionAnalysisPass`]: crate::passes::FunctionAnalysisPass
-//! [`ModuleAnalysisPass`]: crate::passes::ModuleAnalysisPass
+//! [`FunctionAnalysisPass`]: crate::pass::FunctionAnalysisPass
+//! [`ModuleAnalysisPass`]: crate::pass::ModuleAnalysisPass
 
+mod dominators;
 mod flowgraph;
 mod writer;
 
+pub use dominators::*;
 pub use flowgraph::*;
 pub use writer::*;

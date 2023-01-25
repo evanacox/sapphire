@@ -1,6 +1,6 @@
 //======---------------------------------------------------------------======//
 //                                                                           //
-// Copyright 2022 Evan Cox <evanacox00@gmail.com>. All rights reserved.      //
+// Copyright 2022-2023 Evan Cox <evanacox00@gmail.com>. All rights reserved. //
 //                                                                           //
 // Use of this source code is governed by a BSD-style license that can be    //
 // found in the LICENSE.txt file at the root of this project, or at the      //
@@ -9,9 +9,11 @@
 //======---------------------------------------------------------------======//
 
 mod discovery;
-mod parse;
+mod display;
 mod runner;
+mod runners;
 mod subtest;
+mod testcase;
 
 use crate::runner::{run_all, run_subtest};
 use bpaf::Parser;
@@ -58,4 +60,9 @@ fn main() -> ExitCode {
 #[test]
 fn test_parse() {
     assert!(matches!(run_subtest("parse", Some(1)), Ok(())));
+}
+
+#[test]
+fn test_domtree() {
+    assert!(matches!(run_subtest("domtree", Some(1)), Ok(())))
 }

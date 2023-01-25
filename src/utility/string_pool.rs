@@ -1,6 +1,6 @@
 //======---------------------------------------------------------------======//
 //                                                                           //
-// Copyright 2022 Evan Cox <evanacox00@gmail.com>. All rights reserved.      //
+// Copyright 2022-2023 Evan Cox <evanacox00@gmail.com>. All rights reserved. //
 //                                                                           //
 // Use of this source code is governed by a BSD-style license that can be    //
 // found in the LICENSE.txt file at the root of this project, or at the      //
@@ -314,7 +314,6 @@ mod tests {
         assert_tokens(
             &pool,
             &[
-                // should just be an empty sequence with a specified length
                 Token::Seq { len: Some(1) },
                 Token::Str(DEBUG_FAKE_INVALID),
                 Token::SeqEnd,
@@ -334,7 +333,6 @@ mod tests {
         assert_tokens(
             &pool,
             &[
-                // should just be an empty sequence with a specified length
                 Token::Seq { len: Some(4) },
                 Token::Str(DEBUG_FAKE_INVALID),
                 Token::Str("one"),

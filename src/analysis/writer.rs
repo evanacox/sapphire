@@ -1,6 +1,6 @@
 //======---------------------------------------------------------------======//
 //                                                                           //
-// Copyright 2022 Evan Cox <evanacox00@gmail.com>. All rights reserved.      //
+// Copyright 2022-2023 Evan Cox <evanacox00@gmail.com>. All rights reserved. //
 //                                                                           //
 // Use of this source code is governed by a BSD-style license that can be    //
 // found in the LICENSE.txt file at the root of this project, or at the      //
@@ -10,11 +10,11 @@
 
 use crate::arena::SecondaryMap;
 use crate::ir::*;
-use crate::passes::{ModuleAnalysisManager, ModuleAnalysisPass};
+use crate::pass::{ModuleAnalysisManager, ModuleAnalysisPass};
 use crate::utility::{Str, StringPool};
 use std::any::TypeId;
-use std::io;
 use std::ops::Range;
+use std::sync::RwLockReadGuard;
 
 /// A simple SIR -> text pass that takes in an entire module, turns it into
 /// textual SIR, and then maps each IR entity to a range of text referring to it.
@@ -33,6 +33,8 @@ impl ModuleWriter {
     fn from(module: &Module) -> Self {
         let mut writer_impl = WriterImpl {
             module,
+            pool_guard: module.context().types(),
+            string_guard: module.context().strings(),
             state: ModuleWriter {
                 whole: String::default(),
                 val_ranges: SecondaryMap::default(),
@@ -100,6 +102,9 @@ pub fn stringify_module(module: &Module) -> String {
 ///
 /// This analysis needs to be run in the standard way for a correct [`ModuleWriter`]
 /// to be produced, the result yielded by the analysis can then be queried as desired.
+///
+/// Note that this analysis is not intended to be run in the hot path of the compiler, it
+/// maintains a lock on the type pool while running.
 pub struct ModuleStringifyAnalysis;
 
 impl ModuleAnalysisPass for ModuleStringifyAnalysis {
@@ -111,43 +116,6 @@ impl ModuleAnalysisPass for ModuleStringifyAnalysis {
 
     fn run(&mut self, module: &Module, _: &ModuleAnalysisManager) -> Self::Result {
         ModuleWriter::from(module)
-    }
-}
-
-/// This is an analysis that writes out a textual representation of a module
-/// to a
-///
-/// This analysis needs to be run in the standard way for a correct [`ModuleWriter`]
-/// to be produced, the result yielded by the analysis can then be queried as desired.
-pub struct ModuleWriterAnalysis {
-    out: Box<dyn io::Write>,
-}
-
-impl ModuleWriterAnalysis {
-    /// Creates an instance of the pass with a given writer.
-    ///
-    /// This writer will be where the module is printed out when the analysis
-    /// is run over the IR.
-    pub fn with_writer<T: io::Write + 'static>(writer: T) -> Self {
-        Self {
-            out: Box::new(writer),
-        }
-    }
-}
-
-impl ModuleAnalysisPass for ModuleWriterAnalysis {
-    type Result = ();
-
-    fn expects_preserved(&self) -> &'static [TypeId] {
-        &[]
-    }
-
-    fn run(&mut self, module: &Module, am: &ModuleAnalysisManager) -> Self::Result {
-        let writer = am.get::<ModuleStringifyAnalysis>(module);
-
-        self.out
-            .write_all(writer.module().as_bytes())
-            .expect("unable to write module to writer")
     }
 }
 
@@ -263,6 +231,8 @@ enum ValueName {
 
 struct WriterImpl<'m> {
     module: &'m Module,
+    pool_guard: RwLockReadGuard<'m, TypePool>,
+    string_guard: RwLockReadGuard<'m, StringPool>,
     state: ModuleWriter,
     values: SecondaryMap<Value, ValueName>,
     next: u32,
@@ -270,15 +240,15 @@ struct WriterImpl<'m> {
 
 impl<'m> WriterImpl<'m> {
     fn ty(&self, ty: Type) -> String {
-        stringify_ty(self.module.type_pool(), ty)
+        stringify_ty(&self.pool_guard, ty)
     }
 
     fn ty_void(&self, ty: Option<Type>) -> String {
-        stringify_return_ty(self.module.type_pool(), ty)
+        stringify_return_ty(&self.pool_guard, ty)
     }
 
     fn param_tys(&self, sig: &Signature) -> String {
-        stringify_signature_params(self.module.type_pool(), sig)
+        stringify_signature_params(&self.pool_guard, sig)
     }
 
     fn func_name(&self, func: Func) -> String {
@@ -355,7 +325,8 @@ impl<'m> WriterImpl<'m> {
 
     fn block_target(&mut self, block: &BlockWithParams, def: &FunctionDefinition) -> String {
         let bb = block.block();
-        let name = self.module().resolve_string(def.dfg.block(bb).name());
+        let pool = self.module().context().strings();
+        let name = pool.get(def.dfg.block(bb).name()).unwrap();
 
         if block.args().is_empty() {
             name.to_owned()
@@ -379,7 +350,7 @@ impl<'m> WriterImpl<'m> {
             None => self.insert_name(val, def),
         };
 
-        name.into_string(self.module().string_pool())
+        name.into_string(&self.string_guard)
     }
 
     fn insert_name(&mut self, val: Value, def: &FunctionDefinition) -> ValueName {
@@ -472,7 +443,7 @@ impl<'m> SIRVisitor<'m> for WriterImpl<'m> {
         {
             let bb = def.dfg.block(block);
 
-            self.state.whole += self.module().resolve_string(bb.name());
+            self.state.whole += self.string_guard.get(bb.name()).unwrap();
 
             if !bb.params().is_empty() {
                 self.state.whole += "(";
@@ -549,7 +520,7 @@ impl<'m> SIRVisitor<'m> for WriterImpl<'m> {
 
         let ret = self.ty_void(data.result_ty());
         let signature = def.dfg.signature(data.sig());
-        let sig = stringify_signature_params(self.module().type_pool(), signature);
+        let sig = stringify_signature_params(&self.pool_guard, signature);
         let callee = self.name_ty(data.callee(), def);
         let args = self.args(data.args(), def);
 
@@ -572,7 +543,7 @@ impl<'m> SIRVisitor<'m> for WriterImpl<'m> {
             ICmpOp::ULE => "ule",
         };
 
-        let ty = stringify_ty(self.module().type_pool(), def.dfg.ty(data.lhs()));
+        let ty = stringify_ty(&self.pool_guard, def.dfg.ty(data.lhs()));
         let lhs = self.name(data.lhs(), def);
         let rhs = self.name(data.rhs(), def);
 
@@ -599,7 +570,7 @@ impl<'m> SIRVisitor<'m> for WriterImpl<'m> {
             FCmpOp::ULE => "ule",
         };
 
-        let ty = stringify_ty(self.module().type_pool(), def.dfg.ty(data.lhs()));
+        let ty = stringify_ty(&self.pool_guard, def.dfg.ty(data.lhs()));
         let lhs = self.name(data.lhs(), def);
         let rhs = self.name(data.rhs(), def);
 
@@ -609,7 +580,7 @@ impl<'m> SIRVisitor<'m> for WriterImpl<'m> {
     fn visit_sel(&mut self, inst: Inst, data: &SelInst, def: &FunctionDefinition) {
         self.result(inst, def);
 
-        let ty = stringify_ty(self.module().type_pool(), def.dfg.ty(data.if_true()));
+        let ty = stringify_ty(&self.pool_guard, def.dfg.ty(data.if_true()));
         let cond = self.name(data.condition(), def);
         let lhs = self.name(data.if_true(), def);
         let rhs = self.name(data.if_false(), def);
@@ -932,64 +903,65 @@ mod tests {
         {
             let pool = module.type_pool();
 
-            assert_eq!(writer.ty(pool, Type::bool()), "bool");
-            assert_eq!(writer.ty(pool, Type::ptr()), "ptr");
-            assert_eq!(writer.ty(pool, Type::i8()), "i8");
-            assert_eq!(writer.ty(pool, Type::i16()), "i16");
-            assert_eq!(writer.ty(pool, Type::i32()), "i32");
-            assert_eq!(writer.ty(pool, Type::i64()), "i64");
-            assert_eq!(writer.ty(pool, Type::f32()), "f32");
-            assert_eq!(writer.ty(pool, Type::f64()), "f64");
+            assert_eq!(writer.ty(&pool, Type::bool()), "bool");
+            assert_eq!(writer.ty(&pool, Type::ptr()), "ptr");
+            assert_eq!(writer.ty(&pool, Type::i8()), "i8");
+            assert_eq!(writer.ty(&pool, Type::i16()), "i16");
+            assert_eq!(writer.ty(&pool, Type::i32()), "i32");
+            assert_eq!(writer.ty(&pool, Type::i64()), "i64");
+            assert_eq!(writer.ty(&pool, Type::f32()), "f32");
+            assert_eq!(writer.ty(&pool, Type::f64()), "f64");
         }
 
         {
-            let i8_512 = Type::array(module.type_pool_mut(), Type::i8(), 512);
-            assert_eq!(writer.ty(module.type_pool(), i8_512), "[i8; 512]");
+            let i8_512 = Type::array(&mut module.type_pool_mut(), Type::i8(), 512);
+            assert_eq!(writer.ty(&module.type_pool(), i8_512), "[i8; 512]");
 
-            let i8_512_16 = Type::array(module.type_pool_mut(), i8_512, 16);
-            assert_eq!(writer.ty(module.type_pool(), i8_512_16), "[[i8; 512]; 16]");
+            let i8_512_16 = Type::array(&mut module.type_pool_mut(), i8_512, 16);
+            assert_eq!(writer.ty(&module.type_pool(), i8_512_16), "[[i8; 512]; 16]");
 
-            let ptr_0 = Type::array(module.type_pool_mut(), Type::ptr(), 0);
-            assert_eq!(writer.ty(module.type_pool(), ptr_0), "[ptr; 0]");
+            let ptr_0 = Type::array(&mut module.type_pool_mut(), Type::ptr(), 0);
+            assert_eq!(writer.ty(&module.type_pool(), ptr_0), "[ptr; 0]");
 
-            let unit = Type::structure(module.type_pool_mut(), &[]);
-            let unit_42 = Type::array(module.type_pool_mut(), unit, 42);
-            assert_eq!(writer.ty(module.type_pool(), unit_42), "[{}; 42]");
+            let unit = Type::structure(&mut module.type_pool_mut(), &[]);
+            let unit_42 = Type::array(&mut module.type_pool_mut(), unit, 42);
+            assert_eq!(writer.ty(&module.type_pool(), unit_42), "[{}; 42]");
 
-            let slice = Type::structure(module.type_pool_mut(), &[Type::ptr(), Type::i64()]);
-            let slice_64 = Type::array(module.type_pool_mut(), slice, 64);
-            let struct_slice_64 = Type::structure(module.type_pool_mut(), &[slice_64]);
-            let struct_slice_64_732 = Type::array(module.type_pool_mut(), struct_slice_64, 732);
+            let slice = Type::structure(&mut module.type_pool_mut(), &[Type::ptr(), Type::i64()]);
+            let slice_64 = Type::array(&mut module.type_pool_mut(), slice, 64);
+            let struct_slice_64 = Type::structure(&mut module.type_pool_mut(), &[slice_64]);
+            let struct_slice_64_732 =
+                Type::array(&mut module.type_pool_mut(), struct_slice_64, 732);
             assert_eq!(
-                writer.ty(module.type_pool(), struct_slice_64_732),
+                writer.ty(&module.type_pool(), struct_slice_64_732),
                 "[{ [{ ptr, i64 }; 64] }; 732]"
             );
         }
 
         {
-            let unit = Type::structure(module.type_pool_mut(), &[]);
-            assert_eq!(writer.ty(module.type_pool(), unit), "{}");
+            let unit = Type::structure(&mut module.type_pool_mut(), &[]);
+            assert_eq!(writer.ty(&module.type_pool(), unit), "{}");
 
-            let single = Type::structure(module.type_pool_mut(), &[Type::bool()]);
-            assert_eq!(writer.ty(module.type_pool(), single), "{ bool }");
+            let single = Type::structure(&mut module.type_pool_mut(), &[Type::bool()]);
+            assert_eq!(writer.ty(&module.type_pool(), single), "{ bool }");
 
-            let double = Type::structure(module.type_pool_mut(), &[Type::f32(), Type::f64()]);
-            assert_eq!(writer.ty(module.type_pool(), double), "{ f32, f64 }");
+            let double = Type::structure(&mut module.type_pool_mut(), &[Type::f32(), Type::f64()]);
+            assert_eq!(writer.ty(&module.type_pool(), double), "{ f32, f64 }");
 
             let quadruple = Type::structure(
-                module.type_pool_mut(),
+                &mut module.type_pool_mut(),
                 &[Type::i16(), Type::i64(), Type::i32(), Type::i8()],
             );
             assert_eq!(
-                writer.ty(module.type_pool(), quadruple),
+                writer.ty(&module.type_pool(), quadruple),
                 "{ i16, i64, i32, i8 }"
             );
 
             let triple2 = Type::structure(
-                module.type_pool_mut(),
+                &mut module.type_pool_mut(),
                 &[Type::f64(), Type::f64(), Type::f64()],
             );
-            assert_eq!(writer.ty(module.type_pool(), triple2), "{ f64, f64, f64 }");
+            assert_eq!(writer.ty(&module.type_pool(), triple2), "{ f64, f64, f64 }");
         }
     }
 
@@ -1093,12 +1065,12 @@ entry:
     fn test_write_single_block_valid() {
         let mut module = Module::new("test");
         let sig = {
-            let pool = module.type_pool_mut();
+            let mut pool = module.type_pool_mut();
 
             SigBuilder::new()
                 .ret(Some(Type::f64()))
                 .params(&[Type::structure(
-                    pool,
+                    &mut pool,
                     &[Type::f64(), Type::f64(), Type::f64()],
                 )])
                 .build()

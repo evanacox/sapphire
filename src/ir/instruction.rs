@@ -1,6 +1,6 @@
 //======---------------------------------------------------------------======//
 //                                                                           //
-// Copyright 2022 Evan Cox <evanacox00@gmail.com>. All rights reserved.      //
+// Copyright 2022-2023 Evan Cox <evanacox00@gmail.com>. All rights reserved. //
 //                                                                           //
 // Use of this source code is governed by a BSD-style license that can be    //
 // found in the LICENSE.txt file at the root of this project, or at the      //
@@ -359,6 +359,13 @@ impl BlockWithParams {
         Self {
             data: TinyArray::from_small_vec(vals),
         }
+    }
+
+    /// Shorthand for `Self::new(target, &[])`. Meant for branching straight
+    /// to a block without any parameters being passed.
+    #[inline(always)]
+    pub fn to(target: Block) -> Self {
+        Self::new(target, &[])
     }
 
     /// Same as [`Self::new`] but specifically when there's a pre-existing vec

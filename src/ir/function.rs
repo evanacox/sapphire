@@ -1,6 +1,6 @@
 //======---------------------------------------------------------------======//
 //                                                                           //
-// Copyright 2022 Evan Cox <evanacox00@gmail.com>. All rights reserved.      //
+// Copyright 2022-2023 Evan Cox <evanacox00@gmail.com>. All rights reserved. //
 //                                                                           //
 // Use of this source code is governed by a BSD-style license that can be    //
 // found in the LICENSE.txt file at the root of this project, or at the      //
@@ -9,7 +9,7 @@
 //======---------------------------------------------------------------======//
 
 use crate::dense_arena_key;
-use crate::ir::{DataFlowGraph, Layout, Type};
+use crate::ir::{DataFlowGraph, Layout, ModuleContext, Type};
 use crate::utility::PackedOption;
 use bitflags::bitflags;
 use smallvec::SmallVec;
@@ -183,6 +183,7 @@ pub struct Function {
     name: String,
     sig: Signature,
     func: Func,
+    context: ModuleContext,
     definition: Option<FunctionDefinition>,
 }
 
@@ -191,11 +192,12 @@ impl Function {
     ///
     /// This is equivalent to "declaring" a function, as a declared function is
     /// just a function without a body.
-    pub fn new(name: String, sig: Signature, func: Func) -> Self {
+    pub fn new(name: String, sig: Signature, func: Func, ctx: ModuleContext) -> Self {
         Self {
             name,
             sig,
             func,
+            context: ctx,
             definition: None,
         }
     }
@@ -245,6 +247,13 @@ impl Function {
     #[inline]
     pub fn func(&self) -> Func {
         self.func
+    }
+
+    /// Gets the module context associated with the module that contains
+    /// this function, allowing the type and string pools to be accessed directly.
+    #[inline]
+    pub fn ctx(&self) -> &ModuleContext {
+        &self.context
     }
 
     pub(in crate::ir) fn replace_definition(&mut self, def: FunctionDefinition) {

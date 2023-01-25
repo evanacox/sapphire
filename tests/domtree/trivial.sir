@@ -1,0 +1,12 @@
+; MATCH-SECTION
+;
+; entry
+; └── exit
+;
+fn void @test() {
+entry:
+  br exit
+
+exit:
+  ret void
+}

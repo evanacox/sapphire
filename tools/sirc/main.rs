@@ -1,6 +1,6 @@
 //======---------------------------------------------------------------======//
 //                                                                           //
-// Copyright 2022 Evan Cox <evanacox00@gmail.com>. All rights reserved.      //
+// Copyright 2022-2023 Evan Cox <evanacox00@gmail.com>. All rights reserved. //
 //                                                                           //
 // Use of this source code is governed by a BSD-style license that can be    //
 // found in the LICENSE.txt file at the root of this project, or at the      //
@@ -8,14 +8,13 @@
 //                                                                           //
 //======---------------------------------------------------------------======//
 
-use sapphire::analysis;
 use sapphire::cli;
 use std::fs;
 
 fn main() {
     let (_, base) = cli::tool_with(
         "static compiler for Sapphire IR",
-        "Usage: sirc [options] <input ir> ",
+        "Usage: sirc [options] <input ir>",
         cli::emit_machine_format(),
     )
     .run();
@@ -27,7 +26,7 @@ fn main() {
 
         match sapphire::parse_sir(&filename, &source) {
             Ok(module) => {
-                analysis::print_module(&module);
+                dbg!(module);
             }
             Err(e) => {
                 eprintln!("failed to parse: {e}");

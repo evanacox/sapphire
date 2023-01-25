@@ -1,6 +1,6 @@
 //======---------------------------------------------------------------======//
 //                                                                           //
-// Copyright 2022 Evan Cox <evanacox00@gmail.com>. All rights reserved.      //
+// Copyright 2022-2023 Evan Cox <evanacox00@gmail.com>. All rights reserved. //
 //                                                                           //
 // Use of this source code is governed by a BSD-style license that can be    //
 // found in the LICENSE.txt file at the root of this project, or at the      //
@@ -107,6 +107,20 @@ pub trait Cursor: Sized {
         } else {
             None
         }
+    }
+
+    /// Tries to get the possible branch targets for the terminator of the current block.
+    /// If there is no current block or the current block's last instruction is not a
+    /// terminator, returns `None`.
+    fn current_block_terminator_targets(&self) -> Option<&[BlockWithParams]> {
+        let block = match self.current_block() {
+            Some(bb) => bb,
+            None => return None,
+        };
+
+        self.layout()
+            .block_last_inst(block)
+            .and_then(|inst| self.dfg().branch_info(inst))
     }
 
     /// Moves the position to `Before(block)`.

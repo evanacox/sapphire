@@ -1,6 +1,6 @@
 //======---------------------------------------------------------------======//
 //                                                                           //
-// Copyright 2022 Evan Cox <evanacox00@gmail.com>. All rights reserved.      //
+// Copyright 2022-2023 Evan Cox <evanacox00@gmail.com>. All rights reserved. //
 //                                                                           //
 // Use of this source code is governed by a BSD-style license that can be    //
 // found in the LICENSE.txt file at the root of this project, or at the      //
@@ -8,47 +8,112 @@
 //                                                                           //
 //======---------------------------------------------------------------======//
 
-use crate::arena::ArenaMap;
+use crate::arena::SecondaryMap;
 use crate::dense_arena_key;
 use crate::ir::{Block, Cursor, FuncView, Function};
-use crate::passes::{FunctionAnalysisManager, FunctionAnalysisPass};
-use crate::utility::{SaHashMap, SaHashSet};
+use crate::pass::{FunctionAnalysisManager, FunctionAnalysisPass};
+use crate::utility::SaHashSet;
 use smallvec::SmallVec;
 use std::any::TypeId;
-use std::collections::hash_map::Entry;
+
+/// Models successor/predecessor information about the control-flow graph of
+/// a given function.
+pub struct ControlFlowGraph {
+    // if a block isn't present here, it wasn't reachable from the entry node
+    // and is therefore dead.
+    nodes: SecondaryMap<Block, CFGNodeData>,
+}
+
+impl ControlFlowGraph {
+    /// Directly computes flowgraph information for a given function.
+    ///
+    /// This should not be used directly in normal compiler passes, this should be
+    /// requested from the [`FunctionAnalysisManager`]
+    /// through [`ControlFlowGraphAnalysis`].
+    pub fn compute(func: &Function) -> Self {
+        Self {
+            nodes: CFGComputer::new(func).compute(),
+        }
+    }
+
+    /// Returns an iterator over the predecessors for a given block.
+    pub fn predecessors(&self, block: Block) -> impl Iterator<Item = Block> + '_ {
+        let node = self.data_of(block);
+
+        node.predecessors.iter().copied()
+    }
+
+    /// Returns an iterator over the successors for a given block.
+    pub fn successors(&self, block: Block) -> impl Iterator<Item = Block> + '_ {
+        let node = self.data_of(block);
+
+        node.successors.iter().copied()
+    }
+
+    /// Checks if a given block `pred` is a predecessor of `block`
+    pub fn is_pred_of(&self, block: Block, pred: Block) -> bool {
+        let node = self.data_of(block);
+
+        node.predecessors.contains(&pred)
+    }
+
+    /// Checks if a given block `pred` is a successor of `block`
+    pub fn is_succ_of(&self, block: Block, succ: Block) -> bool {
+        let node = self.data_of(block);
+
+        node.successors.contains(&succ)
+    }
+
+    fn data_of(&self, block: Block) -> &CFGNodeData {
+        &self.nodes[block]
+    }
+}
+
+/// An analysis pass that wraps up a [`ControlFlowGraph`] into
+/// something that can actually be used inside of transform passes.
+pub struct ControlFlowGraphAnalysis;
+
+impl FunctionAnalysisPass for ControlFlowGraphAnalysis {
+    type Result = ControlFlowGraph;
+
+    fn expects_preserved(&self) -> &'static [TypeId] {
+        &[]
+    }
+
+    fn run(&mut self, func: &Function, _: &FunctionAnalysisManager) -> Self::Result {
+        ControlFlowGraph::compute(func)
+    }
+}
 
 dense_arena_key! {
     struct CFGNode;
 }
 
+#[derive(Debug)]
 struct CFGNodeData {
     predecessors: SaHashSet<Block>,
     successors: SaHashSet<Block>,
 }
 
 struct CFGComputer<'f> {
-    nodes: ArenaMap<CFGNode, CFGNodeData>,
-    lookup: SaHashMap<Block, CFGNode>,
-    seen: SaHashSet<Block>,
+    nodes: SecondaryMap<Block, CFGNodeData>,
     cursor: FuncView<'f>,
 }
 
 impl<'f> CFGComputer<'f> {
     fn new(func: &'f Function) -> Self {
         Self {
-            nodes: ArenaMap::default(),
-            lookup: SaHashMap::default(),
-            seen: SaHashSet::default(),
+            nodes: SecondaryMap::default(),
             cursor: FuncView::over(func),
         }
     }
 
-    fn compute(mut self) -> (ArenaMap<CFGNode, CFGNodeData>, SaHashMap<Block, CFGNode>) {
+    fn compute(mut self) -> SecondaryMap<Block, CFGNodeData> {
         while let Some(block) = self.cursor.next_block() {
             self.compute_block(block);
         }
 
-        (self.nodes, self.lookup)
+        self.nodes
     }
 
     fn compute_block(&mut self, block: Block) {
@@ -86,90 +151,17 @@ impl<'f> CFGComputer<'f> {
     }
 
     fn node_of(&mut self, block: Block) -> &mut CFGNodeData {
-        match self.lookup.entry(block) {
-            Entry::Occupied(slot) => &mut self.nodes[*slot.get()],
-            Entry::Vacant(slot) => {
-                let node = self.nodes.insert(CFGNodeData {
+        if !self.nodes.contains(block) {
+            self.nodes.insert(
+                block,
+                CFGNodeData {
                     predecessors: SaHashSet::default(),
                     successors: SaHashSet::default(),
-                });
-
-                slot.insert(node);
-
-                &mut self.nodes[node]
-            }
+                },
+            );
         }
-    }
-}
 
-/// Models successor/predecessor information about the control-flow graph of
-/// a given function.
-pub struct ControlFlowGraph {
-    nodes: ArenaMap<CFGNode, CFGNodeData>,
-    lookup: SaHashMap<Block, CFGNode>,
-}
-
-impl ControlFlowGraph {
-    /// Directly computes flowgraph information for a given function.
-    ///
-    /// This should not be used directly in normal compiler passes, this should be
-    /// requested from the [`FunctionAnalysisManager`]
-    /// through [`CFGAnalysis`].
-    pub fn compute(func: &Function) -> Self {
-        let computer = CFGComputer::new(func);
-        let (nodes, lookup) = computer.compute();
-
-        Self { nodes, lookup }
-    }
-
-    /// Returns an iterator over the predecessors for a given block.
-    pub fn predecessors(&self, block: Block) -> impl Iterator<Item = Block> + '_ {
-        let node = self.data_of(block);
-
-        node.predecessors.iter().copied()
-    }
-
-    /// Returns an iterator over the successors for a given block.
-    pub fn successors(&self, block: Block) -> impl Iterator<Item = Block> + '_ {
-        let node = self.data_of(block);
-
-        node.successors.iter().copied()
-    }
-
-    /// Checks if a given block `pred` is a predecessor of `block`
-    pub fn is_pred_of(&self, block: Block, pred: Block) -> bool {
-        let node = self.data_of(block);
-
-        node.predecessors.contains(&pred)
-    }
-
-    /// Checks if a given block `pred` is a successor of `block`
-    pub fn is_succ_of(&self, block: Block, succ: Block) -> bool {
-        let node = self.data_of(block);
-
-        node.successors.contains(&succ)
-    }
-
-    fn data_of(&self, block: Block) -> &CFGNodeData {
-        let idx = self.lookup[&block];
-
-        &self.nodes[idx]
-    }
-}
-
-/// An analysis pass that wraps up a [`ControlFlowGraph`] into
-/// something that can actually be used inside of transform passes.
-pub struct CFGAnalysis;
-
-impl FunctionAnalysisPass for CFGAnalysis {
-    type Result = ControlFlowGraph;
-
-    fn expects_preserved(&self) -> &'static [TypeId] {
-        &[]
-    }
-
-    fn run(&mut self, func: &Function, _: &FunctionAnalysisManager) -> Self::Result {
-        ControlFlowGraph::compute(func)
+        &mut self.nodes[block]
     }
 }
 

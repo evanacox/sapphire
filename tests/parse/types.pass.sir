@@ -1,11 +1,18 @@
+; STANDARD
+; CHECK: fn bool @bool()
 fn bool @bool()
 
+; CHECK: fn ptr @ptr()
 fn ptr @ptr()
 
+; CHECK: fn i8 @int(i16, i32, i64)
 fn i8 @int(i16, i32, i64)
 
+; CHECK: fn f32 @float(f64)
 fn f32 @float(f64)
 
+; CHECK: fn [i8; 8] @array([[i8; 72]; 6], [[[i64; 8]; 42]; 500])
 fn [i8; 8] @array([[i8; 72]; 6], [[[i64; 8]; 42]; 500])
 
+; CHECK: fn { i64, ptr } @struct({ i8, [i8; 8], ptr })
 fn { i64, ptr } @struct({ i8, [i8; 8], ptr })

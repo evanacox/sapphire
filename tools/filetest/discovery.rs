@@ -1,6 +1,6 @@
 //======---------------------------------------------------------------======//
 //                                                                           //
-// Copyright 2022 Evan Cox <evanacox00@gmail.com>. All rights reserved.      //
+// Copyright 2022-2023 Evan Cox <evanacox00@gmail.com>. All rights reserved. //
 //                                                                           //
 // Use of this source code is governed by a BSD-style license that can be    //
 // found in the LICENSE.txt file at the root of this project, or at the      //
@@ -8,13 +8,15 @@
 //                                                                           //
 //======---------------------------------------------------------------======//
 
+use crate::testcase::FileTestCase;
 use lazy_static::lazy_static;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
-use std::fs;
 use std::path::PathBuf;
+use std::{fs, mem};
 
-type DirectoryContents = HashMap<String, Vec<(String, String)>, ahash::RandomState>;
+type DirectoryContents =
+    HashMap<String, Vec<(String, String, FileTestCase<'static>)>, ahash::RandomState>;
 
 lazy_static! {
     static ref ALL_TEST_CASES: DirectoryContents = {
@@ -53,12 +55,16 @@ fn recursive_build(out: &mut DirectoryContents, curr_key: String, current_dir: P
                 subdirs.push((inner, path.clone()));
             } else {
                 let content = fs::read_to_string(&path).expect("unable to read file");
+                // while content isn't 'static right now, it's immediately going into a lazy_static
+                // after this. strings are guaranteed to stay on the heap due to Vec<u8> guarantees
+                let check =
+                    FileTestCase::from_raw(&name, unsafe { mem::transmute(content.as_str()) });
 
-                files.push((name, content))
+                files.push((name, content, check))
             }
         }
 
-        files.sort();
+        files.sort_by(|(n1, _, _), (n2, _, _)| n1.cmp(n2));
     }
 
     for (inner, path) in subdirs {
@@ -66,6 +72,6 @@ fn recursive_build(out: &mut DirectoryContents, curr_key: String, current_dir: P
     }
 }
 
-pub fn cases_in_subdir(path: &'static str) -> &'static [(String, String)] {
+pub fn cases_in_subdir(path: &'static str) -> &'static [(String, String, FileTestCase)] {
     &ALL_TEST_CASES[path]
 }

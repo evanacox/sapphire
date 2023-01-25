@@ -1,1 +1,2 @@
+; COMPILE-ERROR: expected EOI or function_prototype
 invalid

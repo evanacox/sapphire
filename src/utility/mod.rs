@@ -1,6 +1,6 @@
 //======---------------------------------------------------------------======//
 //                                                                           //
-// Copyright 2022 Evan Cox <evanacox00@gmail.com>. All rights reserved.      //
+// Copyright 2022-2023 Evan Cox <evanacox00@gmail.com>. All rights reserved. //
 //                                                                           //
 // Use of this source code is governed by a BSD-style license that can be    //
 // found in the LICENSE.txt file at the root of this project, or at the      //
@@ -16,10 +16,14 @@
 mod graph;
 mod hash;
 mod packed_option;
+mod spinlock;
 mod string_pool;
 mod tiny;
+mod trees;
 
 pub use hash::*;
 pub use packed_option::{Packable, PackedOption};
+pub use spinlock::*;
 pub use string_pool::*;
 pub use tiny::*;
+pub use trees::*;

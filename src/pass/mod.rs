@@ -1,6 +1,6 @@
 //======---------------------------------------------------------------======//
 //                                                                           //
-// Copyright 2022 Evan Cox <evanacox00@gmail.com>. All rights reserved.      //
+// Copyright 2022-2023 Evan Cox <evanacox00@gmail.com>. All rights reserved. //
 //                                                                           //
 // Use of this source code is governed by a BSD-style license that can be    //
 // found in the LICENSE.txt file at the root of this project, or at the      //
@@ -20,7 +20,8 @@
 //! pattern.
 //!
 //! Passes at their core are just objects that take in IR and possibly
-//! return results:
+//! return results, and are effectively a slightly more complex version
+//! of the following interface:
 //!
 //! ```
 //! # use sapphire::ir::Module;
