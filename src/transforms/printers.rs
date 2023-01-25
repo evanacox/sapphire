@@ -18,6 +18,8 @@ use crate::utility;
 use std::io;
 
 /// Wrapper pass that prints out a textual representation of a [`DominatorTree`].
+///
+/// [`DominatorTree`]: crate::analysis::DominatorTree
 pub struct DominatorTreeWriterPass {
     out: Box<dyn io::Write>,
 }
