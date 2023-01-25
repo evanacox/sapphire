@@ -66,11 +66,14 @@ jobs:
           toolchain: nightly
           override: true
 
-      - name: Run cargo tarpaulin
-        uses: actions-rs/tarpaulin@v0.1
+      - name: Install cargo tarpaulin
+        uses: actions-rs/install@v0.2
         with:
-          version: 'latest'
-          args: '--run-types Tests,Doctests -- --test-threads 1'
+          crate: cargo-tarpaulin
+          version: latest
+
+      - name: Run cargo tarpaulin
+        run: cargo tarpaulin --run-types Tests,Doctests -- --test-threads 1
 
       - name: Upload to codecov.io
         uses: codecov/codecov-action@v3
