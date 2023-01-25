@@ -67,7 +67,7 @@ jobs:
           override: true
 
       - name: Install cargo tarpaulin
-        uses: actions-rs/install@v0.2
+        uses: actions-rs/install@v0.1
         with:
           crate: cargo-tarpaulin
           version: latest
