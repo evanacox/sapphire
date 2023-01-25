@@ -1,6 +1,6 @@
 //======---------------------------------------------------------------======//
 //                                                                           //
-// Copyright 2022 Evan Cox <evanacox00@gmail.com>. All rights reserved.      //
+// Copyright 2022-2023 Evan Cox <evanacox00@gmail.com>. All rights reserved. //
 //                                                                           //
 // Use of this source code is governed by a BSD-style license that can be    //
 // found in the LICENSE.txt file at the root of this project, or at the      //
@@ -37,6 +37,14 @@ impl FunctionTransformPass for VerifyFunctionPass {
     fn run(&mut self, _: &mut Function, _: &FunctionAnalysisManager) -> PreservedAnalyses {
         PreservedAnalyses::all()
     }
+}
+
+/// Verifies that an entire module is valid SIR.
+///
+/// This checks that the SSA properties are upheld (dominance mainly), that
+/// every block has a terminator, that every call is to a valid function, etc.
+pub fn verify_module(_: &Module) -> Result<(), String> {
+    todo!()
 }
 
 /// Verifies that a single function is a valid SIR function.

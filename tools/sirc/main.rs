@@ -8,16 +8,7 @@
 //                                                                           //
 //======---------------------------------------------------------------======//
 
-use sapphire::analysis;
-use sapphire::analysis::{
-    ControlFlowGraphAnalysis, DominatorTreeAnalysis, ModuleStringifyAnalysis, ModuleWriterAnalysis,
-    PrintDominatorTreeAnalysis,
-};
 use sapphire::cli;
-use sapphire::pass::{
-    FunctionAnalysisManager, FunctionAnalysisManagerModuleProxy, ModuleAnalysisManager,
-    ModulePassManager,
-};
 use std::fs;
 
 fn main() {
@@ -35,7 +26,7 @@ fn main() {
 
         match sapphire::parse_sir(&filename, &source) {
             Ok(module) => {
-                let mut mpm = ModulePassManager::new();
+                dbg!(module);
             }
             Err(e) => {
                 eprintln!("failed to parse: {e}");

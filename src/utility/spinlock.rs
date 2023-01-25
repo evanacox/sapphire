@@ -100,7 +100,8 @@ impl RawSpinMutex {
                 break;
             }
 
-            while self.flag.load(Ordering::Relaxed) {}
+            #[allow(clippy::missing_spin_loop)]
+            while self.flag.load(Ordering::Relaxed) { /* explicitly not using spin-hint */ }
         }
     }
 

@@ -83,8 +83,8 @@ impl _InitGuard {
 /// Allows an analysis to define any other analysis that it depends on.
 ///
 /// # Internal Implementation
-/// Unfortunately, Rust has still not stabilized `const` as of January 2023, see
-/// https://github.com/rust-lang/rust/issues/77125. This requires trickery to get
+/// Unfortunately, Rust has still not stabilized `const` for [`TypeId::of`] as of January
+/// 2023, see <https://github.com/rust-lang/rust/issues/77125>. This requires trickery to get
 /// lazy initialization that isn't slow.
 ///
 /// Internally, this works similarly to how function-scoped `static` initialization
@@ -106,7 +106,7 @@ impl _InitGuard {
 ///     type Result = i32;
 ///
 ///     fn expects_preserved(&self) -> &'static [TypeId] {
-///         analysis_preserved!(CFGAnalysis, DominatorTreeAnalysis)
+///         analysis_preserved!(ControlFlowGraphAnalysis, DominatorTreeAnalysis)
 ///     }
 ///
 ///     fn run(&mut self, _: &Function, _: &FunctionAnalysisManager) -> Self::Result {
@@ -502,7 +502,7 @@ pub trait FunctionAnalysisPass: Any {
     /// Tells the analysis that it has been invalidated. It also
     /// sends preservation information along, some analyses need this.
     ///
-    /// This is mostly here for [`FunctionToModuleProxy`] to allow the module manaager
+    /// This is mostly here for [`FunctionAnalysisManagerModuleProxy`] to allow the module manaager
     /// to tell the function manager to invalidate passes.
     fn invalidate(&mut self, ir: &Function, preserved: &PreservedAnalyses) {
         let _ = ir;
