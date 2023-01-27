@@ -1,0 +1,79 @@
+; MATCH-ENTIRE
+fn i32 @printf(ptr, ...)
+
+fn void @main() {
+entry:
+  %0 = null ptr
+  %1 = undef i32
+  %2 = iconst i32 42
+  %3 = call i32 @printf(ptr %0, i32 %1, i32 %2)
+  %4 = indirectcall i32 (ptr, ...), ptr %0(ptr %0, i32 %1, i32 %2)
+  %5 = icmp eq i32 %1, %2
+  %6 = null f32
+  %7 = undef f32
+  %8 = fcmp ogt f32 %6, %7
+  %9 = bconst bool false
+  %10 = null bool
+  %11 = sel i32, bool %9, %1, %2
+  %12 = and bool %9, %10
+  %13 = or bool %12, %10
+  %14 = xor bool %9, %10
+  %15 = undef i8
+  %16 = null i8
+  %17 = shl i8 %15, %16
+  %18 = undef i16
+  %19 = null i16
+  %20 = ashr i16 %18, %19
+  %21 = lshr i16 %18, %19
+  %22 = undef i64
+  %23 = null i64
+  %24 = iadd i64 %22, %23
+  %25 = isub i64 %22, %23
+  %26 = imul i64 %22, %23
+  %27 = udiv i64 %22, %23
+  %28 = sdiv i64 %22, %23
+  %29 = urem i64 %22, %23
+  %30 = srem i64 %22, %23
+  %31 = undef f64
+  %32 = null f64
+  %33 = fneg f64 %32
+  %34 = fadd f64 %31, %32
+  %35 = fsub f64 %32, %33
+  %36 = fmul f64 %33, %34
+  %37 = fdiv f64 %34, %35
+  %38 = frem f64 %35, %36
+  %39 = alloca { i32, i32 }
+  %40 = load { i32, i32 }, ptr %39
+  store f64 %31, ptr %39
+  %41 = iconst i64 501
+  %42 = offset i32, ptr %39, i64 %41
+  %43 = null { ptr, [i64; 16] }
+  %44 = extract [i64; 16], { ptr, [i64; 16] } %43, 1
+  %45 = insert { ptr, [i64; 16] } %43, ptr %42, 0
+  %46 = extract i64, [i64; 16] %44, 2
+  %47 = elemptr { ptr, [i64; 16] }, ptr %42, 1
+  %48 = elemptr [i64; 16], ptr %42, 1
+  %49 = sext i64, i8 %15
+  %50 = zext i32, i8 %15
+  %51 = trunc i16, i32 %50
+  %52 = itob bool, i16 %51
+  %53 = btoi i8, bool %52
+  %54 = sitof f32, i32 %50
+  %55 = uitof f64, i64 %49
+  %56 = ftosi i8, f32 %54
+  %57 = ftoui i32, f64 %55
+  %58 = fext f64, f32 %54
+  %59 = ftrunc f32, f64 %58
+  %60 = itop ptr, i64 %41
+  %61 = ptoi i64, ptr %60
+  br b
+
+b:
+  condbr bool %9, exit, fake
+
+fake:
+  unreachable
+
+exit:
+  ret void
+}

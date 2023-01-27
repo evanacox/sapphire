@@ -64,6 +64,15 @@ impl ControlFlowGraph {
         node.successors.contains(&succ)
     }
 
+    /// Returns an iterator over **all** of the nodes in the CFG.
+    /// This includes unreachable nodes, unlike the postorder/
+    /// reverse-postorder methods on [`DominatorTree`].
+    ///
+    /// [`DominatorTree`]: crate::analysis::DominatorTree
+    pub fn nodes(&self) -> impl Iterator<Item = Block> + '_ {
+        self.nodes.keys()
+    }
+
     fn data_of(&self, block: Block) -> &CFGNodeData {
         &self.nodes[block]
     }

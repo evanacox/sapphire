@@ -126,7 +126,6 @@ pub struct DataFlowGraph {
     values: SecondaryMap<Value, ValueDefinition>,
     params: SecondaryMap<Block, SmallVec<[Value; 4]>>,
     debug: SecondaryMap<EntityRef, DebugInfo>,
-    uses: SecondaryMap<Value, SmallVec<[Inst; 4]>>,
 }
 
 impl DataFlowGraph {
@@ -196,7 +195,7 @@ impl DataFlowGraph {
     /// Inserts an instruction into the DFG, and returns a reference to it. If the instruction
     /// yields a result (and thus can also be used as an operand for other instructions), that
     /// value is also returned as the second return value.
-    pub fn insert_inst(&mut self, data: InstData, debug: DebugInfo) -> (Inst, Option<Value>) {
+    pub fn create_inst(&mut self, data: InstData, debug: DebugInfo) -> (Inst, Option<Value>) {
         let result = data.result_ty();
         let k = self.entities.insert(EntityData::Inst(data));
         let inst = Inst::raw_from(k);
@@ -223,7 +222,7 @@ impl DataFlowGraph {
 
     /// Inserts a basic block with a given name into the DFG. It will start with an empty
     /// list of block parameters, these can be appended later.
-    pub fn insert_block(&mut self, name: Str) -> Block {
+    pub fn create_block(&mut self, name: Str) -> Block {
         let bb = self.blocks.insert(BasicBlock::new(name));
 
         self.block_names.insert(name, bb);
@@ -304,7 +303,7 @@ impl DataFlowGraph {
         matches!(self.values[val].data, ValueDef::Param(_, _))
     }
 
-    /// If an instruction is a branch, returns the list of branch targets. If it
+    /// If an instruction is a terminator, returns the list of branch targets. If it
     /// isn't, returns `None`.
     pub fn branch_info(&self, inst: Inst) -> Option<&'_ [BlockWithParams]> {
         match &self.entities[inst.raw_into()] {

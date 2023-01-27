@@ -1099,7 +1099,7 @@ expected {expected} arguments but got {count}"
         pair: Pair<'_, Rule>,
         builder: &mut FuncBuilder<'_>,
     ) -> ParseResult<()> {
-        debug_assert!(matches!(pair.as_rule(), Rule::binary_int));
+        debug_assert!(matches!(pair.as_rule(), Rule::binary_float));
 
         let mut inner = pair.into_inner();
         let result = inner.next_or("expected result");
@@ -1169,17 +1169,17 @@ expected {expected} arguments but got {count}"
     ) -> ParseResult<()> {
         debug_assert!(matches!(pair.as_rule(), Rule::store));
 
+        let pair2 = pair.clone();
         let mut inner = pair.into_inner();
-        let result = inner.next_or("expected result");
         let operand = inner.next_or("expected operand");
         let _ = inner.next_or("expected ptr");
         let val_pair = inner.next_or("expected value");
 
-        let (name, info) = self.parse_result(result, builder)?;
+        let info = pair_into_info(pair2, self.filename, None);
         let operand = self.parse_operand(operand, builder)?;
         let ptr = self.parse_existing_local_of_ty(val_pair, Type::ptr(), builder)?;
 
-        self.append_val(builder, name).store(operand, ptr, info);
+        builder.append().store(operand, ptr, info);
 
         Ok(())
     }
@@ -1547,24 +1547,24 @@ expected {expected} arguments but got {count}"
 
         match opcode.as_str() {
             "fext" => {
-                if into.unwrap_float().format() as u32 <= from.unwrap_int().width() {
+                if into.unwrap_float().format() as u32 <= from.unwrap_float().format() as u32 {
                     return Err(message_into_err(
                         into_ty_pair.as_span(),
                         "'fext' result type must be larger than input type",
                     ));
                 }
 
-                builder.sext(into, from_val, info);
+                builder.fext(into, from_val, info);
             }
             "ftrunc" => {
-                if into.unwrap_float().format() as u32 >= from.unwrap_int().width() {
+                if into.unwrap_float().format() as u32 >= from.unwrap_float().format() as u32 {
                     return Err(message_into_err(
                         into_ty_pair.as_span(),
                         "'ftrunc' result type must be smaller than input type",
                     ));
                 }
 
-                builder.zext(into, from_val, info);
+                builder.ftrunc(into, from_val, info);
             }
             _ => unreachable!(),
         }

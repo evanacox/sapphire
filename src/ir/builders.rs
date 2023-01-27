@@ -117,7 +117,7 @@ impl<'b> InstBuilder<'b> for AppendBuilder<'b> {
     }
 
     fn build(self, data: InstData, debug: DebugInfo) -> (Inst, Option<Value>) {
-        let (inst, val) = self.def.dfg.insert_inst(data, debug);
+        let (inst, val) = self.def.dfg.create_inst(data, debug);
 
         if let Some(bb) = self.curr {
             self.def.layout.append_inst(inst, bb);
@@ -336,6 +336,6 @@ impl<'m> FuncBuilder<'m> {
     }
 
     fn create_block_with_name(&mut self, name: &str) -> Block {
-        self.def.dfg.insert_block(self.module.insert_string(name))
+        self.def.dfg.create_block(self.module.insert_string(name))
     }
 }

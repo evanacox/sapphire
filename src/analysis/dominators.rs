@@ -13,17 +13,23 @@ use crate::analysis_preserved;
 use crate::arena::SecondaryMap;
 use crate::ir::{Block, Cursor, FuncView, Function};
 use crate::pass::{FunctionAnalysisManager, FunctionAnalysisPass};
-use crate::utility::{IntoTree, SaHashSet};
+use crate::utility::{IntoTree, Packable, SaHashSet};
 use smallvec::SmallVec;
 use std::any::TypeId;
+use std::iter;
 
 /// Models the dominator tree for a given control-flow graph. This analysis
 /// also gives a reverse postorder for the blocks in the CFG (as this is
-/// required for calculating dominators).  
+/// required for calculating dominators, and is useful information for
+/// other passes to have as well).
+///
+/// # Implementation
+/// The algorithm used is described in "A Simple, Fast Dominance Algorithm"
+/// by Cooper et. al.
 ///
 /// This implementation stores a tree inside of an arena instead of
-/// a naive tree structure, but the rough "dominator tree" structure
-/// still exists.
+/// a direct tree with separately allocated nodes, but the rough
+/// "dominator tree" structure still exists.
 pub struct DominatorTree {
     // maps B -> idom(B) for given block B. "tree" structure comes from going farther
     // up the tree, e.g. tree[idom(b)].
@@ -50,13 +56,11 @@ impl DominatorTree {
     pub fn idom(&self, block: Block) -> Option<Block> {
         let idom = self.tree[block];
 
-        (idom != block).then_some(idom)
-    }
-
-    /// This is equivalent to [`Self::idom`] except in the case where `block`
-    /// is the entry node. In that case, `block` is returned.
-    pub fn idom_non_strict(&self, block: Block) -> Block {
-        self.tree[block]
+        if idom.is_reserved() {
+            None
+        } else {
+            Some(idom)
+        }
     }
 
     /// Checks if `possible_dominator` dominates `block`. Both blocks must actually be in
@@ -118,7 +122,7 @@ impl IntoTree<'_> for DominatorTree {
         let mut result: Vec<Block> = self
             .tree
             .iter()
-            .filter(|(from, idom)| **idom == node && *from != node)
+            .filter(|(_, idom)| **idom == node)
             .map(|(block, _)| block)
             .collect();
 
@@ -146,8 +150,80 @@ impl FunctionAnalysisPass for DominatorTreeAnalysis {
 }
 
 /// Models the dominance frontier information for a function.
+///
+/// The dominance frontier effectively models the "join points" of the program,
+/// a block's dominance frontier is the set of nodes directly outside of the
+/// region that a block dominates.
+///
+/// Formally, for a given basic block A, the dominance frontier is the set
+/// of nodes B where A does not dominate B, but B dominates an immediate
+/// predecessor of A.
+///
+/// See <https://en.wikipedia.org/wiki/Static_single-assignment_form#Computing_minimal_SSA_using_dominance_frontiers>
 pub struct DominanceFrontier {
-    //
+    frontier: SecondaryMap<Block, Vec<Block>>,
+}
+
+impl DominanceFrontier {
+    /// Computes the dominance frontier of a given control-flow graph.
+    ///
+    /// The dominance frontier relies on the dominance information in
+    /// `domtree`, and only contains the nodes that were reachable from
+    /// the entry node.
+    pub fn compute(cfg: &ControlFlowGraph, domtree: &DominatorTree) -> Self {
+        //
+        // the algorithm used is the dominance frontier algorithm described
+        // in "A Simple, Fast Dominance Algorithm" by Cooper et. al. See
+        // the paper: http://www.hipersoft.rice.edu/grads/publications/dom14.pdf.
+        //
+        let mut frontier = SecondaryMap::default();
+
+        // we just need every reachable node, this algorithm doesn't specifically
+        // need postorder traversal.
+        for node in domtree.postorder() {
+            frontier.insert(*node, Vec::default());
+        }
+
+        for node in domtree.postorder() {
+            let mut preds = cfg.predecessors(*node);
+            let (one, two) = (preds.next(), preds.next());
+
+            // if we take the first two elements and the second is Some(..), we have
+            // multiple predecessors. we can't necessarily trust size_hint for
+            // the correctness of the algorithm
+            if let (Some(one), Some(two)) = (one, two) {
+                for pred in iter::once(one) // I apologize for my sins
+                    .chain(iter::once(two))
+                    .chain(preds)
+                {
+                    let mut runner = pred;
+
+                    while runner != domtree.idom(*node).unwrap() {
+                        let v = &mut frontier[runner];
+
+                        // these arrays are almost always very small, this is fine.
+                        // makes it easier to deal with the frontier in other code,
+                        // for now that seems to be worth the trade-off
+                        if !v.contains(node) {
+                            v.push(*node);
+                        }
+
+                        runner = domtree.idom(runner).unwrap();
+                    }
+                }
+            }
+        }
+
+        Self { frontier }
+    }
+
+    /// Gets the blocks in the dominance frontier of `block`.
+    ///
+    /// These are the blocks "one past the edge" of `block`'s range
+    /// of dominance.
+    pub fn frontier(&self, block: Block) -> &[Block] {
+        &self.frontier[block]
+    }
 }
 
 /// Directly computes a valid post-ordering of the blocks in `func`'s
@@ -259,6 +335,8 @@ fn compute_idoms(po: &[Block], cfg: &ControlFlowGraph) -> SecondaryMap<Block, Bl
     idoms.insert(root, root);
 
     while changed {
+        changed = false;
+
         // root has no predecessors, so we need to make sure we skip the root node.
         for block in po.iter().rev().copied().skip(1) {
             debug_assert_ne!(block, root);
@@ -288,6 +366,10 @@ fn compute_idoms(po: &[Block], cfg: &ControlFlowGraph) -> SecondaryMap<Block, Bl
             changed = idoms.insert(block, idom) != Some(idom);
         }
     }
+
+    // remove the root -> root idom relationship, mark a
+    // sentinel we can look for instead.
+    idoms.insert(root, Block::reserved());
 
     idoms
 }
@@ -587,5 +669,310 @@ mod tests {
         assert!(domtree.strictly_dominates(six, one));
         assert!(domtree.strictly_dominates(six, two));
         assert!(domtree.strictly_dominates(six, five));
+    }
+
+    #[test]
+    fn test_domtree_two() {
+        let mut module = Module::new("test");
+        let sig_rand = SigBuilder::new().ret(Some(Type::bool())).build();
+        let rand = module.declare_function("rand", sig_rand.clone());
+        let sig = SigBuilder::new().param(Type::bool()).build();
+        let mut b = module.define_function("main", sig);
+        let rand_sig = b.import_signature(&sig_rand);
+
+        // fn bool @rand()
+        //
+        // fn void @main() {
+        // bb0:
+        //     %0 = call bool @rand()
+        //     br bb1
+        //
+        // bb1:
+        //     condbr bool %0, bb2, bb5
+        //
+        // bb2:
+        //     br bb3
+        //
+        // bb3:
+        //     condbr bool %0, bb4, bb1
+        //
+        // bb4:
+        //     ret void
+        //
+        // bb5:
+        //     condbr bool %0, bb6, bb8
+        //
+        // bb6:
+        //     br bb7
+        //
+        // bb7:
+        //     br bb3
+        //
+        // bb8:
+        //     br bb7
+        // }
+        let bb0 = b.create_block("bb0");
+        let bb1 = b.create_block("bb1");
+        let bb2 = b.create_block("bb2");
+        let bb3 = b.create_block("bb3");
+        let bb4 = b.create_block("bb4");
+        let bb5 = b.create_block("bb5");
+        let bb6 = b.create_block("bb6");
+        let bb7 = b.create_block("bb7");
+        let bb8 = b.create_block("bb8");
+
+        b.switch_to(bb0);
+        let v0 = b.append().call(rand, rand_sig, &[], DebugInfo::fake());
+        let v0 = b.inst_to_result(v0).unwrap();
+        b.append().br(BlockWithParams::to(bb1), DebugInfo::fake());
+
+        b.switch_to(bb1);
+        b.append().condbr(
+            v0,
+            BlockWithParams::to(bb2),
+            BlockWithParams::to(bb5),
+            DebugInfo::fake(),
+        );
+
+        b.switch_to(bb2);
+        b.append().br(BlockWithParams::to(bb3), DebugInfo::fake());
+
+        b.switch_to(bb3);
+        b.append().condbr(
+            v0,
+            BlockWithParams::to(bb4),
+            BlockWithParams::to(bb1),
+            DebugInfo::fake(),
+        );
+
+        b.switch_to(bb4);
+        b.append().ret_void(DebugInfo::fake());
+
+        b.switch_to(bb5);
+        b.append().condbr(
+            v0,
+            BlockWithParams::to(bb6),
+            BlockWithParams::to(bb8),
+            DebugInfo::fake(),
+        );
+
+        b.switch_to(bb6);
+        b.append().br(BlockWithParams::to(bb7), DebugInfo::fake());
+
+        b.switch_to(bb7);
+        b.append().br(BlockWithParams::to(bb3), DebugInfo::fake());
+
+        b.switch_to(bb8);
+        b.append().br(BlockWithParams::to(bb7), DebugInfo::fake());
+
+        let func = b.define();
+        let main = module.function(func);
+
+        let cfg = ControlFlowGraph::compute(main);
+        let domtree = DominatorTree::compute(main, &cfg);
+
+        // bb0 dom = { bb0 }
+        assert!(domtree.dominates(bb0, bb0));
+
+        // bb1 dom = { bb0, bb1 }
+        assert!(domtree.dominates(bb1, bb0));
+        assert!(domtree.dominates(bb1, bb1));
+
+        // bb2 dom = { bb0, bb1, bb2 }
+        assert!(domtree.dominates(bb2, bb0));
+        assert!(domtree.dominates(bb2, bb1));
+        assert!(domtree.dominates(bb2, bb2));
+
+        // bb3 dom = { bb0, bb1, bb3 }
+        assert!(domtree.dominates(bb3, bb0));
+        assert!(domtree.dominates(bb3, bb1));
+        assert!(domtree.dominates(bb3, bb3));
+
+        // bb4 dom = { bb0, bb1, bb3, bb4 }
+        assert!(domtree.dominates(bb4, bb0));
+        assert!(domtree.dominates(bb4, bb1));
+        assert!(domtree.dominates(bb4, bb3));
+        assert!(domtree.dominates(bb4, bb4));
+
+        // bb5 dom = { bb0, bb1, bb5 }
+        assert!(domtree.dominates(bb5, bb0));
+        assert!(domtree.dominates(bb5, bb1));
+        assert!(domtree.dominates(bb5, bb5));
+
+        // bb6 dom = { bb0, bb1, bb5, bb6 }
+        assert!(domtree.dominates(bb6, bb0));
+        assert!(domtree.dominates(bb6, bb1));
+        assert!(domtree.dominates(bb6, bb5));
+        assert!(domtree.dominates(bb6, bb6));
+
+        // bb7 dom = { bb0, bb1, bb5, bb7 }
+        assert!(domtree.dominates(bb7, bb0));
+        assert!(domtree.dominates(bb7, bb1));
+        assert!(domtree.dominates(bb7, bb5));
+        assert!(domtree.dominates(bb7, bb7));
+
+        // bb8 dom = { bb0, bb1, bb5, bb8 }
+        assert!(domtree.dominates(bb8, bb0));
+        assert!(domtree.dominates(bb8, bb1));
+        assert!(domtree.dominates(bb8, bb5));
+        assert!(domtree.dominates(bb8, bb8));
+
+        // bb0 dom = { bb0 }
+        assert!(!domtree.strictly_dominates(bb0, bb0));
+
+        // bb1 dom = { bb0, bb1 }
+        assert!(domtree.strictly_dominates(bb1, bb0));
+        assert!(!domtree.strictly_dominates(bb1, bb1));
+
+        // bb2 dom = { bb0, bb1, bb2 }
+        assert!(domtree.strictly_dominates(bb2, bb0));
+        assert!(domtree.strictly_dominates(bb2, bb1));
+        assert!(!domtree.strictly_dominates(bb2, bb2));
+
+        // bb3 dom = { bb0, bb1, bb3 }
+        assert!(domtree.strictly_dominates(bb3, bb0));
+        assert!(domtree.strictly_dominates(bb3, bb1));
+        assert!(!domtree.strictly_dominates(bb3, bb3));
+
+        // bb4 dom = { bb0, bb1, bb3, bb4 }
+        assert!(domtree.strictly_dominates(bb4, bb0));
+        assert!(domtree.strictly_dominates(bb4, bb1));
+        assert!(domtree.strictly_dominates(bb4, bb3));
+        assert!(!domtree.strictly_dominates(bb4, bb4));
+
+        // bb5 dom = { bb0, bb1, bb5 }
+        assert!(domtree.strictly_dominates(bb5, bb0));
+        assert!(domtree.strictly_dominates(bb5, bb1));
+        assert!(!domtree.strictly_dominates(bb5, bb5));
+
+        // bb6 dom = { bb0, bb1, bb5, bb6 }
+        assert!(domtree.strictly_dominates(bb6, bb0));
+        assert!(domtree.strictly_dominates(bb6, bb1));
+        assert!(domtree.strictly_dominates(bb6, bb5));
+        assert!(!domtree.strictly_dominates(bb6, bb6));
+
+        // bb7 dom = { bb0, bb1, bb5, bb7 }
+        assert!(domtree.strictly_dominates(bb7, bb0));
+        assert!(domtree.strictly_dominates(bb7, bb1));
+        assert!(domtree.strictly_dominates(bb7, bb5));
+        assert!(!domtree.strictly_dominates(bb7, bb7));
+
+        // bb8 dom = { bb0, bb1, bb5, bb8 }
+        assert!(domtree.strictly_dominates(bb8, bb0));
+        assert!(domtree.strictly_dominates(bb8, bb1));
+        assert!(domtree.strictly_dominates(bb8, bb5));
+        assert!(!domtree.strictly_dominates(bb8, bb8));
+    }
+
+    #[test]
+    fn test_dominance_frontier() {
+        let mut module = Module::new("test");
+        let sig_rand = SigBuilder::new().ret(Some(Type::bool())).build();
+        let rand = module.declare_function("rand", sig_rand.clone());
+        let sig = SigBuilder::new().param(Type::bool()).build();
+        let mut b = module.define_function("main", sig);
+        let rand_sig = b.import_signature(&sig_rand);
+
+        // fn bool @rand()
+        //
+        // fn void @main() {
+        // bb0:
+        //     %0 = call bool @rand()
+        //     br bb1
+        //
+        // bb1:
+        //     condbr bool %0, bb2, bb5
+        //
+        // bb2:
+        //     br bb3
+        //
+        // bb3:
+        //     condbr bool %0, bb4, bb1
+        //
+        // bb4:
+        //     ret void
+        //
+        // bb5:
+        //     condbr bool %0, bb6, bb8
+        //
+        // bb6:
+        //     br bb7
+        //
+        // bb7:
+        //     br bb3
+        //
+        // bb8:
+        //     br bb7
+        // }
+        let bb0 = b.create_block("bb0");
+        let bb1 = b.create_block("bb1");
+        let bb2 = b.create_block("bb2");
+        let bb3 = b.create_block("bb3");
+        let bb4 = b.create_block("bb4");
+        let bb5 = b.create_block("bb5");
+        let bb6 = b.create_block("bb6");
+        let bb7 = b.create_block("bb7");
+        let bb8 = b.create_block("bb8");
+
+        b.switch_to(bb0);
+        let v0 = b.append().call(rand, rand_sig, &[], DebugInfo::fake());
+        let v0 = b.inst_to_result(v0).unwrap();
+        b.append().br(BlockWithParams::to(bb1), DebugInfo::fake());
+
+        b.switch_to(bb1);
+        b.append().condbr(
+            v0,
+            BlockWithParams::to(bb2),
+            BlockWithParams::to(bb5),
+            DebugInfo::fake(),
+        );
+
+        b.switch_to(bb2);
+        b.append().br(BlockWithParams::to(bb3), DebugInfo::fake());
+
+        b.switch_to(bb3);
+        b.append().condbr(
+            v0,
+            BlockWithParams::to(bb4),
+            BlockWithParams::to(bb1),
+            DebugInfo::fake(),
+        );
+
+        b.switch_to(bb4);
+        b.append().ret_void(DebugInfo::fake());
+
+        b.switch_to(bb5);
+        b.append().condbr(
+            v0,
+            BlockWithParams::to(bb6),
+            BlockWithParams::to(bb8),
+            DebugInfo::fake(),
+        );
+
+        b.switch_to(bb6);
+        b.append().br(BlockWithParams::to(bb7), DebugInfo::fake());
+
+        b.switch_to(bb7);
+        b.append().br(BlockWithParams::to(bb3), DebugInfo::fake());
+
+        b.switch_to(bb8);
+        b.append().br(BlockWithParams::to(bb7), DebugInfo::fake());
+
+        let func = b.define();
+        let main = module.function(func);
+
+        let cfg = ControlFlowGraph::compute(main);
+        let domtree = DominatorTree::compute(main, &cfg);
+        let df = DominanceFrontier::compute(&cfg, &domtree);
+
+        assert_eq!(df.frontier(bb0), &[]);
+        assert_eq!(df.frontier(bb1), &[bb1]);
+        assert_eq!(df.frontier(bb2), &[bb3]);
+        assert_eq!(df.frontier(bb3), &[bb1]);
+        assert_eq!(df.frontier(bb4), &[]);
+        assert_eq!(df.frontier(bb5), &[bb3]);
+        assert_eq!(df.frontier(bb6), &[bb7]);
+        assert_eq!(df.frontier(bb7), &[bb3]);
+        assert_eq!(df.frontier(bb8), &[bb7]);
     }
 }
