@@ -30,7 +30,7 @@ pub fn print_summary(total: usize, failed: usize, elapsed: Duration) {
 
     let passed = Green.paint(format!("{}", total - failed));
     let total = Blue.paint(format!("{total}"));
-    let failed = switching_color.paint(format!("{}", failed));
+    let failed = switching_color.paint(format!("{failed}"));
     let summary = switching_color.bold().paint("Summary");
     let time = format!("{:11}s", elapsed.as_secs_f32());
 
