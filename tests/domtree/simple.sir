@@ -1,0 +1,43 @@
+; MATCH-SECTION
+;
+; bb0
+; └── bb1
+;     ├── bb2
+;     ├── bb3
+;     │   └── bb4
+;     └── bb5
+;         ├── bb6
+;         ├── bb7
+;         └── bb8
+;
+fn bool @rand()
+
+fn void @main() {
+bb0:
+    br bb1
+
+bb1:
+    %0 = call bool @rand()
+    condbr bool %0, bb2, bb5
+
+bb2:
+    br bb3
+
+bb3:
+    condbr bool %0, bb4, bb1
+
+bb4:
+    ret void
+
+bb5:
+    condbr bool %0, bb6, bb8
+
+bb6:
+    br bb7
+
+bb7:
+    br bb3
+
+bb8:
+    br bb7
+}
