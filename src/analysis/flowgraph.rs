@@ -68,7 +68,7 @@ impl ControlFlowGraph {
     /// This includes unreachable nodes, unlike the postorder/
     /// reverse-postorder methods on [`DominatorTree`].
     ///
-    /// [`DominatorTree`]: crate::analysis::DominatorTree;
+    /// [`DominatorTree`]: crate::analysis::DominatorTree
     pub fn nodes(&self) -> impl Iterator<Item = Block> + '_ {
         self.nodes.keys()
     }

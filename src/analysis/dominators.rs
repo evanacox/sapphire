@@ -20,11 +20,16 @@ use std::iter;
 
 /// Models the dominator tree for a given control-flow graph. This analysis
 /// also gives a reverse postorder for the blocks in the CFG (as this is
-/// required for calculating dominators).  
+/// required for calculating dominators, and is useful information for
+/// other passes to have as well).
+///
+/// # Implementation
+/// The algorithm used is described in "A Simple, Fast Dominance Algorithm"
+/// by Cooper et. al.
 ///
 /// This implementation stores a tree inside of an arena instead of
-/// a naive tree structure, but the rough "dominator tree" structure
-/// still exists.
+/// a direct tree with separately allocated nodes, but the rough
+/// "dominator tree" structure still exists.
 pub struct DominatorTree {
     // maps B -> idom(B) for given block B. "tree" structure comes from going farther
     // up the tree, e.g. tree[idom(b)].
