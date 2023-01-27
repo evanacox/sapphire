@@ -8,9 +8,10 @@
 //                                                                           //
 //======---------------------------------------------------------------======//
 
-use crate::arena::SecondaryMap;
+use crate::arena::{ArenaKey, SecondaryMap};
 use crate::ir::{Block, Inst};
 use crate::utility::PackedOption;
+use std::cmp::Ordering;
 use std::fmt;
 use std::fmt::{Debug, Formatter};
 
@@ -277,7 +278,7 @@ impl Layout {
                 self.blocks[before].prev.replace(block);
             }
             None => {
-                self.head.replace(block);
+                self.tail.replace(block);
             }
         }
 
@@ -360,6 +361,31 @@ impl Layout {
         self.inst_blocks[inst]
     }
 
+    /// Compares two instructions that are from the same block, and returns their relative
+    /// order compared to each-other.
+    ///
+    /// `Ordering::Less` => `a < b` order-wise, i.e. `b` comes after `a`.
+    /// `Ordering::Equal` => `a == b`.
+    /// `Ordering::Greater` => `a > b` order-wise, i.e. `a` comes after `b`.
+    pub fn loc_compare(&self, a: Inst, b: Inst) -> Ordering {
+        if a == b {
+            return Ordering::Equal;
+        }
+
+        let bb = self.inst_block(a);
+        debug_assert_eq!(self.inst_block(b), bb);
+
+        for inst in self.insts_in_block(bb) {
+            if inst == a {
+                return Ordering::Less;
+            } else if inst == b {
+                return Ordering::Greater;
+            }
+        }
+
+        unreachable!();
+    }
+
     fn insert_node(
         &mut self,
         inst: Inst,
@@ -424,7 +450,325 @@ impl Layout {
 }
 
 impl Debug for Layout {
-    fn fmt(&self, _: &mut Formatter<'_>) -> fmt::Result {
-        todo!()
+    fn fmt(&self, fmt: &mut Formatter<'_>) -> fmt::Result {
+        let mut s = fmt.debug_struct("Layout");
+        let blocks: Vec<_> = self.blocks().collect();
+        let insts: Vec<Vec<Inst>> = blocks
+            .iter()
+            .map(|bb| self.insts_in_block(*bb).collect())
+            .collect();
+
+        for (bb, vec) in blocks.into_iter().zip(insts) {
+            s.field(&format!("bb{}", bb.index()), &vec);
+        }
+
+        s.finish()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ir::*;
+    use crate::utility::{Packable, Str, StringPool};
+
+    #[test]
+    fn test_layout_new() {
+        let layout = Layout::new();
+        let mut dfg = DataFlowGraph::new();
+        let (inst, _) = dfg.create_inst(
+            InstData::Undef(UndefConstInst::new(Type::bool())),
+            DebugInfo::fake(),
+        );
+        let bb = dfg.create_block(Str::reserved());
+
+        assert_eq!(layout.len_insts(), 0);
+        assert_eq!(layout.len_blocks(), 0);
+        assert!(!layout.is_block_inserted(bb));
+        assert!(!layout.is_inst_inserted(inst));
+    }
+
+    #[test]
+    fn test_layout_append_one() {
+        let mut pool = StringPool::new();
+        let mut layout = Layout::new();
+        let mut dfg = DataFlowGraph::new();
+        let (inst, _) = dfg.create_inst(
+            InstData::Undef(UndefConstInst::new(Type::bool())),
+            DebugInfo::fake(),
+        );
+        let bb0 = dfg.create_block(pool.insert("bb0"));
+
+        layout.append_block(bb0);
+        layout.append_inst(inst, bb0);
+
+        assert!(layout.is_block_inserted(bb0));
+        assert!(layout.is_inst_inserted(inst));
+
+        let mut blocks = layout.blocks();
+
+        assert_eq!(blocks.next(), Some(bb0));
+        assert_eq!(blocks.next(), None);
+
+        let mut insts = layout.insts_in_block(bb0);
+
+        assert_eq!(insts.next(), Some(inst));
+        assert_eq!(insts.next(), None);
+
+        assert_eq!(layout.block_next(bb0), None);
+        assert_eq!(layout.block_prev(bb0), None);
+
+        assert_eq!(layout.block_first_inst(bb0), Some(inst));
+        assert_eq!(layout.block_last_inst(bb0), Some(inst));
+        assert_eq!(layout.inst_next(inst), None);
+        assert_eq!(layout.inst_prev(inst), None);
+    }
+
+    #[test]
+    fn test_layout_append_multiple() {
+        let mut pool = StringPool::new();
+        let mut layout = Layout::new();
+        let mut dfg = DataFlowGraph::new();
+        let (inst1, _) = dfg.create_inst(
+            InstData::Undef(UndefConstInst::new(Type::bool())),
+            DebugInfo::fake(),
+        );
+        let (inst2, _) = dfg.create_inst(InstData::Ret(RetInst::new(None)), DebugInfo::fake());
+        let bb0 = dfg.create_block(pool.insert("bb0"));
+        let bb1 = dfg.create_block(pool.insert("bb1"));
+
+        layout.append_block(bb0);
+        layout.append_block(bb1);
+        layout.append_inst(inst1, bb0);
+        layout.append_inst(inst2, bb0);
+
+        // bb0 -> bb1 -> NIL
+        let mut blocks = layout.blocks();
+        assert_eq!(blocks.next(), Some(bb0));
+        assert_eq!(blocks.next(), Some(bb1));
+        assert_eq!(blocks.next(), None);
+
+        // inst1 -> inst2 -> NIL
+        let mut insts = layout.insts_in_block(bb0);
+        assert_eq!(insts.next(), Some(inst1));
+        assert_eq!(insts.next(), Some(inst2));
+        assert_eq!(insts.next(), None);
+        assert_eq!(layout.inst_next(inst1), Some(inst2));
+        assert_eq!(layout.inst_prev(inst1), None);
+        assert_eq!(layout.inst_next(inst2), None);
+        assert_eq!(layout.inst_prev(inst2), Some(inst1));
+
+        // NIL
+        let mut insts = layout.insts_in_block(bb1);
+        assert_eq!(insts.next(), None);
+
+        // bb0 -> bb1 -> NIL
+        assert_eq!(layout.block_next(bb0), Some(bb1));
+        assert_eq!(layout.block_prev(bb0), None);
+        assert_eq!(layout.block_next(bb1), None);
+        assert_eq!(layout.block_prev(bb1), Some(bb0));
+
+        assert_eq!(layout.block_first_inst(bb0), Some(inst1));
+        assert_eq!(layout.block_last_inst(bb0), Some(inst2));
+        assert_eq!(layout.block_first_inst(bb1), None);
+        assert_eq!(layout.block_last_inst(bb1), None);
+    }
+
+    #[test]
+    fn test_layout_multiple_blocks() {
+        let mut pool = StringPool::new();
+        let mut layout = Layout::new();
+        let mut dfg = DataFlowGraph::new();
+        let (inst1, _) = dfg.create_inst(InstData::Ret(RetInst::new(None)), DebugInfo::fake());
+        let (inst2, _) = dfg.create_inst(InstData::Ret(RetInst::new(None)), DebugInfo::fake());
+        let bb0 = dfg.create_block(pool.insert("bb0"));
+        let bb1 = dfg.create_block(pool.insert("bb1"));
+
+        layout.append_block(bb0);
+        layout.append_block(bb1);
+        layout.append_inst(inst1, bb0);
+        layout.append_inst(inst2, bb1);
+
+        assert_eq!(layout.len_blocks(), 2);
+        assert_eq!(layout.len_insts(), 2);
+
+        assert_eq!(layout.block_first_inst(bb0), Some(inst1));
+        assert_eq!(layout.block_last_inst(bb0), Some(inst1));
+        assert_eq!(layout.block_first_inst(bb1), Some(inst2));
+        assert_eq!(layout.block_last_inst(bb1), Some(inst2));
+
+        let mut insts = layout.insts_in_block(bb0);
+        assert_eq!(insts.next(), Some(inst1));
+        assert_eq!(insts.next(), None);
+
+        let mut insts = layout.insts_in_block(bb1);
+        assert_eq!(insts.next(), Some(inst2));
+        assert_eq!(insts.next(), None);
+
+        let mut blocks = layout.blocks();
+        assert_eq!(blocks.next(), Some(bb0));
+        assert_eq!(blocks.next(), Some(bb1));
+        assert_eq!(blocks.next(), None);
+    }
+
+    #[test]
+    fn test_layout_remove() {
+        let mut pool = StringPool::new();
+        let mut layout = Layout::new();
+        let mut dfg = DataFlowGraph::new();
+        let (inst0, Some(v0)) = dfg.create_inst(
+            InstData::IConst(IConstInst::new(Type::i32(), 16)),
+            DebugInfo::fake(),
+        ) else {
+            unreachable!()
+        };
+        let (inst1, Some(v1)) = dfg.create_inst(
+            InstData::IConst(IConstInst::new(Type::i32(), 42)),
+            DebugInfo::fake(),
+        ) else {
+            unreachable!()
+        };
+        let (inst2, Some(_)) = dfg.create_inst(
+            InstData::IMul(CommutativeArithInst::new(Type::i32(), v0, v1)),
+            DebugInfo::fake(),
+        ) else {
+            unreachable!()
+        };
+
+        let bb0 = dfg.create_block(pool.insert("bb0"));
+
+        layout.append_block(bb0);
+        layout.append_inst(inst0, bb0);
+        layout.append_inst(inst1, bb0);
+        layout.append_inst(inst2, bb0);
+
+        assert_eq!(layout.len_blocks(), 1);
+        assert_eq!(layout.len_insts(), 3);
+
+        let mut insts = layout.insts_in_block(bb0);
+        assert_eq!(insts.next(), Some(inst0));
+        assert_eq!(insts.next(), Some(inst1));
+        assert_eq!(insts.next(), Some(inst2));
+        assert_eq!(insts.next(), None);
+
+        assert!(layout.is_inst_inserted(inst2));
+
+        layout.remove_inst(inst2);
+
+        let mut insts = layout.insts_in_block(bb0);
+        assert_eq!(insts.next(), Some(inst0));
+        assert_eq!(insts.next(), Some(inst1));
+        assert_eq!(insts.next(), None);
+        assert!(!layout.is_inst_inserted(inst2));
+
+        assert!(!layout.remove_inst_if_exists(inst2));
+
+        let mut insts = layout.insts_in_block(bb0);
+        assert_eq!(insts.next(), Some(inst0));
+        assert_eq!(insts.next(), Some(inst1));
+        assert_eq!(insts.next(), None);
+        assert!(!layout.is_inst_inserted(inst2));
+    }
+
+    #[test]
+    fn test_layout_insert_after_before() {
+        let mut pool = StringPool::new();
+        let mut layout = Layout::new();
+        let mut dfg = DataFlowGraph::new();
+        let (inst0, _) = dfg.create_inst(
+            InstData::Alloca(AllocaInst::new(Type::i32())),
+            DebugInfo::fake(),
+        );
+        let (inst1, _) = dfg.create_inst(
+            InstData::Alloca(AllocaInst::new(Type::i32())),
+            DebugInfo::fake(),
+        );
+        let (inst2, _) = dfg.create_inst(
+            InstData::Alloca(AllocaInst::new(Type::i32())),
+            DebugInfo::fake(),
+        );
+        let (inst3, _) = dfg.create_inst(
+            InstData::Alloca(AllocaInst::new(Type::i32())),
+            DebugInfo::fake(),
+        );
+
+        let bb0 = dfg.create_block(pool.insert("bb0"));
+        let bb1 = dfg.create_block(pool.insert("bb1"));
+        let bb2 = dfg.create_block(pool.insert("bb2"));
+        let bb3 = dfg.create_block(pool.insert("bb3"));
+
+        layout.append_block(bb2);
+        layout.insert_block_before(bb0, bb2);
+        layout.insert_block_after(bb1, bb0);
+        layout.insert_block_after(bb3, bb2);
+
+        let mut blocks = layout.blocks();
+        assert_eq!(blocks.next(), Some(bb0));
+        assert_eq!(blocks.next(), Some(bb1));
+        assert_eq!(blocks.next(), Some(bb2));
+        assert_eq!(blocks.next(), Some(bb3));
+        assert_eq!(blocks.next(), None);
+
+        layout.append_inst(inst0, bb0);
+        layout.insert_inst_after(inst2, inst0);
+        layout.insert_inst_before(inst1, inst2);
+        layout.insert_inst_after(inst3, inst2);
+
+        let mut insts = layout.insts_in_block(bb0);
+        assert_eq!(insts.next(), Some(inst0));
+        assert_eq!(insts.next(), Some(inst1));
+        assert_eq!(insts.next(), Some(inst2));
+        assert_eq!(insts.next(), Some(inst3));
+        assert_eq!(insts.next(), None);
+    }
+
+    #[test]
+    fn test_layout_position_cmp() {
+        let mut pool = StringPool::new();
+        let mut layout = Layout::new();
+        let mut dfg = DataFlowGraph::new();
+        let (inst0, _) = dfg.create_inst(
+            InstData::Alloca(AllocaInst::new(Type::i32())),
+            DebugInfo::fake(),
+        );
+        let (inst1, _) = dfg.create_inst(
+            InstData::Alloca(AllocaInst::new(Type::i32())),
+            DebugInfo::fake(),
+        );
+        let (inst2, _) = dfg.create_inst(
+            InstData::Alloca(AllocaInst::new(Type::i32())),
+            DebugInfo::fake(),
+        );
+        let (inst3, _) = dfg.create_inst(
+            InstData::Alloca(AllocaInst::new(Type::i32())),
+            DebugInfo::fake(),
+        );
+
+        let bb0 = dfg.create_block(pool.insert("bb0"));
+        layout.append_block(bb0);
+        layout.append_inst(inst0, bb0);
+        layout.append_inst(inst1, bb0);
+        layout.append_inst(inst2, bb0);
+        layout.append_inst(inst3, bb0);
+
+        assert_eq!(layout.loc_compare(inst0, inst0), Ordering::Equal);
+        assert_eq!(layout.loc_compare(inst0, inst1), Ordering::Less);
+        assert_eq!(layout.loc_compare(inst0, inst2), Ordering::Less);
+        assert_eq!(layout.loc_compare(inst0, inst3), Ordering::Less);
+
+        assert_eq!(layout.loc_compare(inst1, inst0), Ordering::Greater);
+        assert_eq!(layout.loc_compare(inst1, inst1), Ordering::Equal);
+        assert_eq!(layout.loc_compare(inst1, inst2), Ordering::Less);
+        assert_eq!(layout.loc_compare(inst1, inst3), Ordering::Less);
+
+        assert_eq!(layout.loc_compare(inst2, inst0), Ordering::Greater);
+        assert_eq!(layout.loc_compare(inst2, inst1), Ordering::Greater);
+        assert_eq!(layout.loc_compare(inst2, inst2), Ordering::Equal);
+        assert_eq!(layout.loc_compare(inst2, inst3), Ordering::Less);
+
+        assert_eq!(layout.loc_compare(inst3, inst0), Ordering::Greater);
+        assert_eq!(layout.loc_compare(inst3, inst1), Ordering::Greater);
+        assert_eq!(layout.loc_compare(inst3, inst2), Ordering::Greater);
+        assert_eq!(layout.loc_compare(inst3, inst3), Ordering::Equal);
     }
 }
