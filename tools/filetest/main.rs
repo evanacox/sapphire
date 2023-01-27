@@ -16,6 +16,7 @@ mod subtest;
 mod testcase;
 
 use crate::runner::{run_all, run_subtest};
+use backtrace::Backtrace;
 use bpaf::Parser;
 use sapphire::cli;
 use std::process::ExitCode;
@@ -30,6 +31,11 @@ fn subtest() -> impl Parser<Option<String>> {
 fn main() -> ExitCode {
     #[cfg(windows)]
     ansi_term::enable_ansi_support().expect("unable to enable ANSI");
+
+    std::panic::set_hook(Box::new(|_| {
+        let trace = Backtrace::new();
+        subtest::BACKTRACE.with(move |b| b.borrow_mut().replace(trace));
+    }));
 
     let jobs = cli::jobs();
     let subtest = subtest();

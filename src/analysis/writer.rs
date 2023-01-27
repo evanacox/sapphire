@@ -727,10 +727,13 @@ impl<'m> SIRVisitor<'m> for WriterImpl<'m> {
         self.result(inst, def);
 
         let ty = self.ty(data.offset_ty());
+        let ty2 = self.ty(def.dfg.ty(data.base()));
+        let ty3 = self.ty(def.dfg.ty(data.offset()));
         let ptr = self.name(data.base(), def);
         let offset = self.name(data.offset(), def);
 
-        self.state.whole += &format!("offset {ty}, {ptr}, {offset}");
+        // we could hard-code ptr here but this is supposed to work even when the IR is broken
+        self.state.whole += &format!("offset {ty}, {ty2} {ptr}, {ty3} {offset}");
     }
 
     fn visit_extract(&mut self, inst: Inst, data: &ExtractInst, def: &FunctionDefinition) {

@@ -355,10 +355,11 @@ impl<'m> SIRVisitor<'m> for Verifier<'m> {
     fn visit_call(&mut self, inst: Inst, data: &CallInst, def: &FunctionDefinition) {
         let function = self.module().function(data.callee());
         let sig = function.signature();
+        let dbg = def.dfg.inst_debug(inst);
 
         verify_assert_eq!(
             self,
-            def.dfg.inst_debug(inst),
+            dbg,
             sig,
             def.dfg.signature(data.sig()),
             "in `call`, signature of callee function must match signature given to inst"
@@ -369,6 +370,27 @@ impl<'m> SIRVisitor<'m> for Verifier<'m> {
         let args_it = data.args().iter().map(|val| def.dfg.ty(*val));
 
         self.verify_call_params(def.dfg.inst_debug(inst), sig, func_params_it, args_it);
+
+        match def.dfg.inst_to_result(inst) {
+            Some(_) => {
+                verify_assert_ne!(
+                    self,
+                    dbg,
+                    sig.return_ty(),
+                    None,
+                    "`call` cannot call void and have a result"
+                );
+            }
+            None => {
+                verify_assert_eq!(
+                    self,
+                    dbg,
+                    sig.return_ty(),
+                    None,
+                    "`call` cannot return value and not have a result"
+                );
+            }
+        }
     }
 
     fn visit_indirectcall(
@@ -378,10 +400,11 @@ impl<'m> SIRVisitor<'m> for Verifier<'m> {
         def: &FunctionDefinition,
     ) {
         let sig = def.dfg.signature(data.sig());
+        let dbg = def.dfg.inst_debug(inst);
 
         verify_assert_eq!(
             self,
-            def.dfg.inst_debug(inst),
+            dbg,
             def.dfg.ty(data.callee()),
             Type::ptr(),
             "can only call `ptr` values with `indirectcall`"
@@ -392,6 +415,27 @@ impl<'m> SIRVisitor<'m> for Verifier<'m> {
         let args_it = data.args().iter().map(|val| def.dfg.ty(*val));
 
         self.verify_call_params(def.dfg.inst_debug(inst), sig, func_params_it, args_it);
+
+        match def.dfg.inst_to_result(inst) {
+            Some(_) => {
+                verify_assert_ne!(
+                    self,
+                    dbg,
+                    sig.return_ty(),
+                    None,
+                    "`indirectcall` cannot call void and have a result"
+                );
+            }
+            None => {
+                verify_assert_eq!(
+                    self,
+                    dbg,
+                    sig.return_ty(),
+                    None,
+                    "`indirectcall` cannot return value and not have a result"
+                );
+            }
+        }
     }
 
     fn visit_icmp(&mut self, inst: Inst, data: &ICmpInst, def: &FunctionDefinition) {

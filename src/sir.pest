@@ -253,7 +253,7 @@ fconst = { result ~ "fconst" ~ float_ty ~ float_literal }
 
 // %0 = bconst bool true
 bool_literal = @{ "true" | "false" }
-bconst = { result ~ "fconst" ~ bool_ty ~ bool_literal }
+bconst = { result ~ "bconst" ~ bool_ty ~ bool_literal }
 
 // %0 = undef { T... }
 undef = { result ~ "undef" ~ ty }

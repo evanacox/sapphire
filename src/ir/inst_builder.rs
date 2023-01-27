@@ -328,12 +328,12 @@ pub trait InstBuilder<'dfg>: Sized {
     }
 
     /// Builds a `store` instruction
-    fn store(self, val: Value, ptr: Value, debug: DebugInfo) -> Value {
+    fn store(self, val: Value, ptr: Value, debug: DebugInfo) -> Inst {
         debug_assert_eq!(self.dfg().ty(ptr), Type::ptr());
 
         let inst = StoreInst::new(ptr, val);
 
-        self.build_result(InstData::Store(inst), debug)
+        self.build_inst(InstData::Store(inst), debug)
     }
 
     /// Builds an `offset` instruction
@@ -363,7 +363,7 @@ pub trait InstBuilder<'dfg>: Sized {
 
     /// Builds an `elemptr` instruction
     fn elemptr(self, ty: Type, ptr: Value, index: u64, debug: DebugInfo) -> Value {
-        debug_assert!(ty.is_struct());
+        debug_assert!(ty.is_struct() || ty.is_array());
 
         let inst = ElemPtrInst::new(ty, ptr, index);
 
