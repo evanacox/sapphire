@@ -47,7 +47,7 @@ impl DominatorTreeWriterPass {
 }
 
 impl FunctionTransformPass for DominatorTreeWriterPass {
-    fn run(&mut self, func: &mut Function, am: &FunctionAnalysisManager) -> PreservedAnalyses {
+    fn run(&mut self, func: &mut Function, am: &mut FunctionAnalysisManager) -> PreservedAnalyses {
         let domtree = am.get::<DominatorTreeAnalysis>(func);
         let strings = func.ctx().strings();
         let def = func
@@ -64,11 +64,11 @@ impl FunctionTransformPass for DominatorTreeWriterPass {
 
 /// This is a pass that writes out a textual representation of a module
 /// to a given stream.
-pub struct ModuleWriterAnalysis {
+pub struct ModuleWriterPass {
     out: Box<dyn io::Write>,
 }
 
-impl ModuleWriterAnalysis {
+impl ModuleWriterPass {
     /// Shorthand for a writer that prints to [`std::io::stdout`].
     pub fn stdout() -> Self {
         Self::with_writer(io::stdout())
@@ -90,8 +90,8 @@ impl ModuleWriterAnalysis {
     }
 }
 
-impl ModuleTransformPass for ModuleWriterAnalysis {
-    fn run(&mut self, module: &mut Module, am: &ModuleAnalysisManager) -> PreservedAnalyses {
+impl ModuleTransformPass for ModuleWriterPass {
+    fn run(&mut self, module: &mut Module, am: &mut ModuleAnalysisManager) -> PreservedAnalyses {
         let writer = am.get::<ModuleStringifyAnalysis>(module);
 
         self.out

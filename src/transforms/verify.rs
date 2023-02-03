@@ -22,7 +22,7 @@ use std::cmp::Ordering;
 pub struct VerifyModulePass;
 
 impl ModuleTransformPass for VerifyModulePass {
-    fn run(&mut self, module: &mut Module, _: &ModuleAnalysisManager) -> PreservedAnalyses {
+    fn run(&mut self, module: &mut Module, _: &mut ModuleAnalysisManager) -> PreservedAnalyses {
         verify_module_panic(module);
 
         PreservedAnalyses::all()
