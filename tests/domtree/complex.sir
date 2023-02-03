@@ -10,7 +10,7 @@
 ;             └── h
 ;                 ├── i
 ;                 └── j
-;
+;;
 fn bool @rand()
 
 fn void @main() {

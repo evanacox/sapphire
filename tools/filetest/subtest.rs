@@ -10,16 +10,10 @@
 
 use crate::discovery;
 use crate::testcase::TestFailure;
-use backtrace::Backtrace;
-use std::cell::RefCell;
 use std::sync::mpsc;
 use std::sync::mpsc::Receiver;
 use std::time::{Duration, SystemTime};
 use threadpool::ThreadPool;
-
-thread_local! {
-    pub static BACKTRACE: RefCell<Option<Backtrace>> = RefCell::new(None);
-}
 
 pub enum TestResult {
     Output(String),
@@ -54,21 +48,14 @@ impl Subtest {
 
             pool.execute(move || {
                 let start = SystemTime::now();
-                let result = std::panic::catch_unwind(|| runner(name, contents));
+                let output = runner(name, contents);
                 let end = SystemTime::now();
-                let output = match result {
-                    Ok(output) => case.check(output),
-                    Err(_) => {
-                        let b = BACKTRACE.with(|b| b.borrow_mut().take()).unwrap();
-
-                        Err(TestFailure::Panic(format!("{b:#?}")))
-                    }
-                };
+                let result = case.check(output);
 
                 // we want to display the time taken on a per-test basis
                 let details = TestDetails {
                     elapsed: end.duration_since(start).unwrap(),
-                    output,
+                    output: result,
                 };
 
                 send.send((name.as_str(), details)).expect("unable to send")

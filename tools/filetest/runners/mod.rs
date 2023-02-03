@@ -8,10 +8,12 @@
 //                                                                           //
 //======---------------------------------------------------------------======//
 
+mod dce;
 mod domtree;
 mod flowgraph;
 mod parse;
 
+pub use dce::*;
 pub use domtree::*;
 pub use flowgraph::*;
 pub use parse::*;

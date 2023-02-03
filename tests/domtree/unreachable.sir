@@ -1,0 +1,26 @@
+; MATCH-SECTION
+;
+; entry
+; ├── a
+; │   └── c
+; └── exit
+;;
+fn i32 @main(i32, ptr) {
+entry(i32 %argc, ptr %argv):
+    %0 = iconst i32 42
+    %1 = icmp eq i32 %argc, %0
+    condbr bool %1, a, exit
+
+a:
+    br c
+
+b:
+    %2 = iconst i32 16
+    br exit
+
+c:
+    br exit
+
+exit:
+    ret i32 %0
+}

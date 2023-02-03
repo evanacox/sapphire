@@ -9,7 +9,7 @@
 ;         ├── bb6
 ;         ├── bb7
 ;         └── bb8
-;
+;;
 fn bool @rand()
 
 fn void @main() {

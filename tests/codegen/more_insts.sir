@@ -1,0 +1,21 @@
+; STANDARD
+fn i32 @main(i32, ptr) {
+entry(i32 %argc, ptr %argv):
+  %0 = iconst i32 -42
+  %1 = iconst i32 6
+  %2 = icmp sgt i32 %0, %1
+  %3 = itob bool, i32 %1
+  %4 = iconst i32 0
+  %5 = sdiv i32 %0, %4
+  %6 = sel i32, bool %2, %0, %1
+  condbr bool %2, a, b
+
+a:
+  ret i32 %4
+
+b:
+  br exit
+
+exit:
+  ret i32 %6
+}

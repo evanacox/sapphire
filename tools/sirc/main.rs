@@ -8,8 +8,41 @@
 //                                                                           //
 //======---------------------------------------------------------------======//
 
+use sapphire::analysis::{
+    print_module, ControlFlowGraphAnalysis, DominanceFrontierAnalysis, DominatorTreeAnalysis,
+    ModuleStringifyAnalysis,
+};
 use sapphire::cli;
+use sapphire::ir::Module;
+use sapphire::pass::*;
+use sapphire::transforms::*;
 use std::fs;
+
+fn run_pass(mut module: Module) {
+    let mut fam = FunctionAnalysisManager::new();
+    fam.add_analysis(ControlFlowGraphAnalysis);
+    fam.add_analysis(DominatorTreeAnalysis);
+    fam.add_analysis(DominanceFrontierAnalysis);
+
+    let mut mam = ModuleAnalysisManager::new();
+    mam.add_analysis(FunctionAnalysisManagerModuleProxy::wrap(fam));
+    mam.add_analysis(ModuleStringifyAnalysis);
+
+    let mut fpm = FunctionPassManager::new();
+    fpm.add_pass(DominatorTreeWriterPass::stdout());
+    fpm.add_pass(Mem2RegPass);
+
+    let mut mpm = ModulePassManager::new();
+    mpm.add_pass(FunctionToModulePassAdapter::adapt(fpm));
+    mpm.add_pass(ModuleWriterPass::stderr());
+    mpm.add_pass(VerifyModulePass);
+
+    print_module(&module);
+
+    mpm.run(&mut module, &mut mam);
+
+    print_module(&module);
+}
 
 fn main() {
     let (_, base) = cli::tool_with(
@@ -25,9 +58,7 @@ fn main() {
         let filename = input.into_os_string().into_string().unwrap();
 
         match sapphire::parse_sir(&filename, &source) {
-            Ok(module) => {
-                dbg!(module);
-            }
+            Ok(module) => run_pass(module),
             Err(e) => {
                 eprintln!("failed to parse: {e}");
             }

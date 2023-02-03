@@ -1,0 +1,28 @@
+; MATCH-SECTION
+;
+; fn i32 @test() {
+; entry:
+;   %0 = iconst i32 0
+;   br a
+;
+; a:
+;   br b
+;
+; b:
+;   ret i32 %0
+; }
+;;
+fn i32 @test() {
+entry:
+  %0 = iconst i32 0
+  %1 = iconst i32 1
+  br a(i32 %1)
+
+a(i32 %2):
+  %3 = iconst i32 3
+  %4 = iconst i32 4
+  br b
+
+b:
+  ret i32 %0
+}

@@ -28,14 +28,9 @@ fn subtest() -> impl Parser<Option<String>> {
         .optional()
 }
 
-fn main() -> ExitCode {
+fn main() {
     #[cfg(windows)]
     ansi_term::enable_ansi_support().expect("unable to enable ANSI");
-
-    std::panic::set_hook(Box::new(|_| {
-        let trace = Backtrace::new();
-        subtest::BACKTRACE.with(move |b| b.borrow_mut().replace(trace));
-    }));
 
     let jobs = cli::jobs();
     let subtest = subtest();
@@ -49,7 +44,7 @@ fn main() -> ExitCode {
     if !options.inputs.is_empty() {
         eprintln!("expected file list to be empty!");
 
-        return ExitCode::from(1);
+        std::process::exit(1);
     }
 
     let result = match subtest {
@@ -57,9 +52,8 @@ fn main() -> ExitCode {
         None => run_all(jobs),
     };
 
-    match result {
-        Ok(()) => ExitCode::SUCCESS,
-        Err(_) => ExitCode::from(1),
+    if result.is_err() {
+        std::process::exit(1);
     }
 }
 
