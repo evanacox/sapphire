@@ -36,8 +36,9 @@ impl ModulePassManager {
 }
 
 impl ModuleTransformPass for ModulePassManager {
-    fn run(&mut self, module: &mut Module, am: &ModuleAnalysisManager) -> PreservedAnalyses {
+    fn run(&mut self, module: &mut Module, am: &mut ModuleAnalysisManager) -> PreservedAnalyses {
         let mut preserved = PreservedAnalyses::all();
+        am.initialize_for_ir(module);
 
         for pass in self.passes.iter_mut() {
             let other = pass.run(module, am);
@@ -53,16 +54,33 @@ impl ModuleTransformPass for ModulePassManager {
 ///
 /// An important note is that this is actually a function pass itself, it's a pass
 /// that simply runs other passes.
+#[derive(Default)]
 pub struct FunctionPassManager {
     passes: Vec<Box<dyn FunctionTransformPass>>,
 }
 
+impl FunctionPassManager {
+    /// Creates an empty function pass manager.
+    pub fn new() -> Self {
+        Self { passes: vec![] }
+    }
+
+    /// Adds a transformation pass to the pass manager. This pass's order is defined
+    /// relative to other calls to [`Self::add_pass`].
+    pub fn add_pass<T: FunctionTransformPass + 'static>(&mut self, pass: T) {
+        self.passes.push(Box::new(pass));
+    }
+}
+
 impl FunctionTransformPass for FunctionPassManager {
-    fn run(&mut self, func: &mut Function, am: &FunctionAnalysisManager) -> PreservedAnalyses {
+    fn run(&mut self, func: &mut Function, am: &mut FunctionAnalysisManager) -> PreservedAnalyses {
         let mut preserved = PreservedAnalyses::all();
+        am.initialize_for_ir(func);
 
         for pass in self.passes.iter_mut() {
             let other = pass.run(func, am);
+
+            am.invalidate(func, &other);
 
             preserved = preserved.intersect(other)
         }
@@ -90,13 +108,17 @@ impl FunctionToModulePassAdapter {
 }
 
 impl ModuleTransformPass for FunctionToModulePassAdapter {
-    fn run(&mut self, module: &mut Module, am: &ModuleAnalysisManager) -> PreservedAnalyses {
+    fn run(&mut self, module: &mut Module, am: &mut ModuleAnalysisManager) -> PreservedAnalyses {
         let fam = am.get::<FunctionAnalysisManagerModuleProxy>(module);
         let mut preserved = PreservedAnalyses::all();
 
         for func in module.functions() {
+            let mut fam = fam.borrow_mut();
             let func = module.function_mut(func);
-            let other = self.pass.run(func, &fam.borrow());
+
+            fam.initialize_for_ir(func);
+
+            let other = self.pass.run(func, &mut fam);
 
             preserved = preserved.intersect(other);
         }
