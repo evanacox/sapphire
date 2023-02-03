@@ -147,6 +147,17 @@ impl InstData {
     pub fn opc(&self) -> Opcode {
         mem::discriminant(self)
     }
+
+    /// Checks if `self` is a constant materialization instruction. Note that `undef` is not
+    /// included here, as the value is not known at compile time.
+    pub fn is_constant(&self) -> bool {
+        match self {
+            InstData::BConst(_) | InstData::IConst(_) | InstData::FConst(_) | InstData::Null(_) => {
+                true
+            }
+            _ => false,
+        }
+    }
 }
 
 impl Instruction for InstData {
@@ -206,6 +217,65 @@ impl Instruction for InstData {
             InstData::Undef(e) => e.operands(),
             InstData::Null(e) => e.operands(),
             InstData::GlobalAddr(e) => e.operands(),
+        }
+    }
+
+    fn __operands_dfg_mut(&mut self) -> &mut [Value] {
+        match self {
+            InstData::Call(e) => e.__operands_dfg_mut(),
+            InstData::IndirectCall(e) => e.__operands_dfg_mut(),
+            InstData::ICmp(e) => e.__operands_dfg_mut(),
+            InstData::FCmp(e) => e.__operands_dfg_mut(),
+            InstData::Sel(e) => e.__operands_dfg_mut(),
+            InstData::Br(e) => e.__operands_dfg_mut(),
+            InstData::CondBr(e) => e.__operands_dfg_mut(),
+            InstData::Unreachable(e) => e.__operands_dfg_mut(),
+            InstData::Ret(e) => e.__operands_dfg_mut(),
+            InstData::And(e) => e.__operands_dfg_mut(),
+            InstData::Or(e) => e.__operands_dfg_mut(),
+            InstData::Xor(e) => e.__operands_dfg_mut(),
+            InstData::Shl(e) => e.__operands_dfg_mut(),
+            InstData::AShr(e) => e.__operands_dfg_mut(),
+            InstData::LShr(e) => e.__operands_dfg_mut(),
+            InstData::IAdd(e) => e.__operands_dfg_mut(),
+            InstData::ISub(e) => e.__operands_dfg_mut(),
+            InstData::IMul(e) => e.__operands_dfg_mut(),
+            InstData::SDiv(e) => e.__operands_dfg_mut(),
+            InstData::UDiv(e) => e.__operands_dfg_mut(),
+            InstData::SRem(e) => e.__operands_dfg_mut(),
+            InstData::URem(e) => e.__operands_dfg_mut(),
+            InstData::FNeg(e) => e.__operands_dfg_mut(),
+            InstData::FAdd(e) => e.__operands_dfg_mut(),
+            InstData::FSub(e) => e.__operands_dfg_mut(),
+            InstData::FMul(e) => e.__operands_dfg_mut(),
+            InstData::FDiv(e) => e.__operands_dfg_mut(),
+            InstData::FRem(e) => e.__operands_dfg_mut(),
+            InstData::Alloca(e) => e.__operands_dfg_mut(),
+            InstData::Load(e) => e.__operands_dfg_mut(),
+            InstData::Store(e) => e.__operands_dfg_mut(),
+            InstData::Offset(e) => e.__operands_dfg_mut(),
+            InstData::Extract(e) => e.__operands_dfg_mut(),
+            InstData::Insert(e) => e.__operands_dfg_mut(),
+            InstData::ElemPtr(e) => e.__operands_dfg_mut(),
+            InstData::Sext(e) => e.__operands_dfg_mut(),
+            InstData::Zext(e) => e.__operands_dfg_mut(),
+            InstData::Trunc(e) => e.__operands_dfg_mut(),
+            InstData::IToB(e) => e.__operands_dfg_mut(),
+            InstData::BToI(e) => e.__operands_dfg_mut(),
+            InstData::SIToF(e) => e.__operands_dfg_mut(),
+            InstData::UIToF(e) => e.__operands_dfg_mut(),
+            InstData::FToSI(e) => e.__operands_dfg_mut(),
+            InstData::FToUI(e) => e.__operands_dfg_mut(),
+            InstData::FExt(e) => e.__operands_dfg_mut(),
+            InstData::FTrunc(e) => e.__operands_dfg_mut(),
+            InstData::IToP(e) => e.__operands_dfg_mut(),
+            InstData::PToI(e) => e.__operands_dfg_mut(),
+            InstData::IConst(e) => e.__operands_dfg_mut(),
+            InstData::FConst(e) => e.__operands_dfg_mut(),
+            InstData::BConst(e) => e.__operands_dfg_mut(),
+            InstData::Undef(e) => e.__operands_dfg_mut(),
+            InstData::Null(e) => e.__operands_dfg_mut(),
+            InstData::GlobalAddr(e) => e.__operands_dfg_mut(),
         }
     }
 
@@ -280,6 +350,9 @@ pub trait Instruction {
     /// Note that this may be an empty array, it is not safe to assume that
     /// there will be at least one operand.
     fn operands(&self) -> &[Value];
+
+    #[doc(hidden)]
+    fn __operands_dfg_mut(&mut self) -> &mut [Value];
 
     /// Gets the type of the instruction's result after it has been evaluated.  
     ///
@@ -394,6 +467,29 @@ impl BlockWithParams {
             None => &[],
         }
     }
+
+    #[inline]
+    pub(in crate::ir) fn args_mut(&mut self) -> &mut [Value] {
+        match self.data.get_mut(1..) {
+            Some(vals) => vals,
+            None => &mut [],
+        }
+    }
+
+    #[inline]
+    pub(in crate::ir) fn replace_args(&mut self, new: &[Value]) {
+        // we have the target shoved in at index 0
+        if new.len() == (self.data.len() - 1) {
+            self.data.get_mut(1..).unwrap().copy_from_slice(new);
+        } else {
+            let mut vals = SmallVec::<[Value; 2]>::new();
+
+            vals.push(Value::raw_from(self.block()));
+            vals.extend_from_slice(new);
+
+            self.data = TinyArray::from_small_vec(vals);
+        }
+    }
 }
 
 /// Models a terminator, i.e. the only instructions that are allowed at the end
@@ -410,11 +506,18 @@ pub trait Terminator: Instruction {
 
     #[doc(hidden)]
     fn __operands(&self) -> &[Value];
+
+    #[doc(hidden)]
+    fn __operands_mut(&mut self) -> &mut [Value];
 }
 
 impl<T: Terminator> Instruction for T {
     fn operands(&self) -> &[Value] {
         self.__operands()
+    }
+
+    fn __operands_dfg_mut(&mut self) -> &mut [Value] {
+        self.__operands_mut()
     }
 
     fn result_ty(&self) -> Option<Type> {
@@ -476,6 +579,10 @@ impl ICmpInst {
 impl Instruction for ICmpInst {
     fn operands(&self) -> &[Value] {
         &self.operands
+    }
+
+    fn __operands_dfg_mut(&mut self) -> &mut [Value] {
+        &mut self.operands
     }
 
     fn result_ty(&self) -> Option<Type> {
@@ -556,6 +663,10 @@ impl Instruction for FCmpInst {
         &self.operands
     }
 
+    fn __operands_dfg_mut(&mut self) -> &mut [Value] {
+        &mut self.operands
+    }
+
     fn result_ty(&self) -> Option<Type> {
         Some(Type::bool())
     }
@@ -613,6 +724,10 @@ impl Instruction for SelInst {
         &self.operands
     }
 
+    fn __operands_dfg_mut(&mut self) -> &mut [Value] {
+        &mut self.operands
+    }
+
     fn result_ty(&self) -> Option<Type> {
         Some(self.output)
     }
@@ -638,6 +753,16 @@ impl BrInst {
     pub fn target(&self) -> &BlockWithParams {
         &self.target
     }
+
+    #[inline]
+    pub(in crate::ir) fn rewrite_branch_args(&mut self, args: &[Value]) {
+        self.target.replace_args(args)
+    }
+
+    #[inline]
+    pub(in crate::ir) fn replace_branch_arg(&mut self, idx: usize, new: Value) {
+        self.target.args_mut()[idx] = new;
+    }
 }
 
 impl Terminator for BrInst {
@@ -648,6 +773,18 @@ impl Terminator for BrInst {
     fn __operands(&self) -> &[Value] {
         self.target.args()
     }
+
+    fn __operands_mut(&mut self) -> &mut [Value] {
+        self.target.args_mut()
+    }
+}
+
+#[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
+#[cfg_attr(feature = "enable-serde", derive(Serialize, Deserialize))]
+struct CondBrData {
+    cond: Value,
+    branches: [BlockWithParams; 2],
+    operands_copy: SmallVec<[Value; 4]>,
 }
 
 /// Models a conditional branch
@@ -658,8 +795,7 @@ impl Terminator for BrInst {
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
 #[cfg_attr(feature = "enable-serde", derive(Serialize, Deserialize))]
 pub struct CondBrInst {
-    condition: Value,
-    targets: [BlockWithParams; 2],
+    state: Box<CondBrData>,
 }
 
 impl CondBrInst {
@@ -668,35 +804,105 @@ impl CondBrInst {
         if_true: BlockWithParams,
         otherwise: BlockWithParams,
     ) -> Self {
+        let values = Self::updated_values(cond, &if_true, &otherwise);
+
         Self {
-            condition: cond,
-            targets: [if_true, otherwise],
+            state: Box::new(CondBrData {
+                cond,
+                branches: [if_true, otherwise],
+                operands_copy: values,
+            }),
         }
     }
 
     /// Gets the condition being checked in the `condbr`
     pub fn condition(&self) -> Value {
-        self.condition
+        self.state.cond
     }
 
     /// Gets the branch being jumped to if the condition is `true`
     pub fn true_branch(&self) -> &BlockWithParams {
-        &self.targets[0]
+        &self.state.branches[0]
     }
 
     /// Gets the branch being jumped to if the condition is `false`
     pub fn false_branch(&self) -> &BlockWithParams {
-        &self.targets[1]
+        &self.state.branches[1]
+    }
+
+    pub(in crate::ir) fn replace_use(&mut self, original: Value, new: Value) {
+        if self.condition() == original {
+            self.state.cond = new;
+        }
+
+        // true branch
+        for (i, arg) in self.state.branches[0].args_mut().iter_mut().enumerate() {
+            if *arg == original {
+                *arg = new;
+                self.state.operands_copy[1 + i] = new;
+            }
+        }
+
+        // false branch
+        let true_branch_len = self.state.branches[0].args().len();
+
+        for (j, arg) in self.state.branches[1].args_mut().iter_mut().enumerate() {
+            if *arg == original {
+                *arg = new;
+                self.state.operands_copy[1 + true_branch_len + j] = new;
+            }
+        }
+    }
+
+    #[inline]
+    pub(in crate::ir) fn rewrite_branch_args(&mut self, target: usize, args: &[Value]) {
+        self.state.branches[target].replace_args(args);
+        self.state.operands_copy =
+            Self::updated_values(self.condition(), self.true_branch(), self.false_branch());
+    }
+
+    #[inline]
+    pub(in crate::ir) fn replace_branch_arg(&mut self, target: usize, idx: usize, new: Value) {
+        self.state.branches[target].args_mut()[idx] = new;
+        let true_range_end = self.true_branch().args().len() + 1;
+
+        let slice = if target == 0 {
+            self.state.operands_copy.get_mut(1..true_range_end)
+        } else {
+            self.state.operands_copy.get_mut(true_range_end..)
+        };
+
+        slice.unwrap()[idx] = new;
+    }
+
+    fn updated_values(
+        cond: Value,
+        if_true: &BlockWithParams,
+        otherwise: &BlockWithParams,
+    ) -> SmallVec<[Value; 4]> {
+        let mut result = SmallVec::default();
+
+        result.reserve(1 + if_true.args().len() + otherwise.args().len());
+
+        result.push(cond);
+        result.extend_from_slice(if_true.args());
+        result.extend_from_slice(otherwise.args());
+
+        result
     }
 }
 
 impl Terminator for CondBrInst {
     fn targets(&self) -> &[BlockWithParams] {
-        &self.targets
+        &self.state.branches
     }
 
     fn __operands(&self) -> &[Value] {
-        slice::from_ref(&self.condition)
+        &self.state.operands_copy
+    }
+
+    fn __operands_mut(&mut self) -> &mut [Value] {
+        unreachable!("__operands_mut is broken for CondBr, need to special case")
     }
 }
 
@@ -722,6 +928,10 @@ impl Terminator for UnreachableInst {
 
     fn __operands(&self) -> &[Value] {
         &[]
+    }
+
+    fn __operands_mut(&mut self) -> &mut [Value] {
+        &mut []
     }
 }
 
@@ -758,6 +968,13 @@ impl Terminator for RetInst {
             None => &[],
         }
     }
+
+    fn __operands_mut(&mut self) -> &mut [Value] {
+        match &mut self.value {
+            Some(val) => slice::from_mut(val),
+            None => &mut [],
+        }
+    }
 }
 
 /// Models a general arithmetic instruction
@@ -780,6 +997,10 @@ impl<const C: bool> ArithmeticInst<C> {
 impl<const C: bool> Instruction for ArithmeticInst<C> {
     fn operands(&self) -> &[Value] {
         &self.operands
+    }
+
+    fn __operands_dfg_mut(&mut self) -> &mut [Value] {
+        &mut self.operands
     }
 
     fn result_ty(&self) -> Option<Type> {
@@ -818,6 +1039,10 @@ impl Instruction for CastInst {
         slice::from_ref(&self.operand)
     }
 
+    fn __operands_dfg_mut(&mut self) -> &mut [Value] {
+        slice::from_mut(&mut self.operand)
+    }
+
     fn result_ty(&self) -> Option<Type> {
         Some(self.output)
     }
@@ -842,6 +1067,10 @@ impl FloatUnaryInst {
 impl Instruction for FloatUnaryInst {
     fn operands(&self) -> &[Value] {
         slice::from_ref(&self.operand)
+    }
+
+    fn __operands_dfg_mut(&mut self) -> &mut [Value] {
+        slice::from_mut(&mut self.operand)
     }
 
     fn result_ty(&self) -> Option<Type> {
@@ -903,6 +1132,13 @@ impl Instruction for CallInst {
         self.args()
     }
 
+    fn __operands_dfg_mut(&mut self) -> &mut [Value] {
+        match self.operands.get_mut(2..) {
+            Some(args) => args,
+            None => &mut [],
+        }
+    }
+
     fn result_ty(&self) -> Option<Type> {
         self.output.expand()
     }
@@ -961,6 +1197,10 @@ impl Instruction for IndirectCallInst {
         &self.operands
     }
 
+    fn __operands_dfg_mut(&mut self) -> &mut [Value] {
+        &mut self.operands
+    }
+
     fn result_ty(&self) -> Option<Type> {
         self.output.expand()
     }
@@ -987,6 +1227,10 @@ impl AllocaInst {
 impl Instruction for AllocaInst {
     fn operands(&self) -> &[Value] {
         &[]
+    }
+
+    fn __operands_dfg_mut(&mut self) -> &mut [Value] {
+        &mut []
     }
 
     fn result_ty(&self) -> Option<Type> {
@@ -1016,6 +1260,10 @@ impl LoadInst {
 impl Instruction for LoadInst {
     fn operands(&self) -> &[Value] {
         slice::from_ref(&self.pointer)
+    }
+
+    fn __operands_dfg_mut(&mut self) -> &mut [Value] {
+        slice::from_mut(&mut self.pointer)
     }
 
     fn result_ty(&self) -> Option<Type> {
@@ -1051,6 +1299,10 @@ impl StoreInst {
 impl Instruction for StoreInst {
     fn operands(&self) -> &[Value] {
         &self.operands
+    }
+
+    fn __operands_dfg_mut(&mut self) -> &mut [Value] {
+        &mut self.operands
     }
 
     fn result_ty(&self) -> Option<Type> {
@@ -1096,6 +1348,10 @@ impl Instruction for OffsetInst {
         &self.operands
     }
 
+    fn __operands_dfg_mut(&mut self) -> &mut [Value] {
+        &mut self.operands
+    }
+
     fn result_ty(&self) -> Option<Type> {
         Some(Type::ptr())
     }
@@ -1133,6 +1389,10 @@ impl ExtractInst {
 impl Instruction for ExtractInst {
     fn operands(&self) -> &[Value] {
         slice::from_ref(&self.operand)
+    }
+
+    fn __operands_dfg_mut(&mut self) -> &mut [Value] {
+        slice::from_mut(&mut self.operand)
     }
 
     fn result_ty(&self) -> Option<Type> {
@@ -1179,6 +1439,10 @@ impl Instruction for InsertInst {
         &self.operands
     }
 
+    fn __operands_dfg_mut(&mut self) -> &mut [Value] {
+        &mut self.operands
+    }
+
     fn result_ty(&self) -> Option<Type> {
         Some(self.aggregate)
     }
@@ -1223,6 +1487,10 @@ impl Instruction for ElemPtrInst {
         slice::from_ref(&self.base)
     }
 
+    fn __operands_dfg_mut(&mut self) -> &mut [Value] {
+        slice::from_mut(&mut self.base)
+    }
+
     fn result_ty(&self) -> Option<Type> {
         Some(Type::ptr())
     }
@@ -1259,6 +1527,10 @@ impl IConstInst {
 impl Instruction for IConstInst {
     fn operands(&self) -> &[Value] {
         &[]
+    }
+
+    fn __operands_dfg_mut(&mut self) -> &mut [Value] {
+        &mut []
     }
 
     fn result_ty(&self) -> Option<Type> {
@@ -1302,6 +1574,10 @@ impl Instruction for FConstInst {
         &[]
     }
 
+    fn __operands_dfg_mut(&mut self) -> &mut [Value] {
+        &mut []
+    }
+
     fn result_ty(&self) -> Option<Type> {
         Some(self.ty)
     }
@@ -1334,6 +1610,10 @@ impl Instruction for BConstInst {
         &[]
     }
 
+    fn __operands_dfg_mut(&mut self) -> &mut [Value] {
+        &mut []
+    }
+
     fn result_ty(&self) -> Option<Type> {
         Some(Type::bool())
     }
@@ -1361,6 +1641,10 @@ impl Instruction for UndefConstInst {
         &[]
     }
 
+    fn __operands_dfg_mut(&mut self) -> &mut [Value] {
+        &mut []
+    }
+
     fn result_ty(&self) -> Option<Type> {
         Some(self.ty)
     }
@@ -1386,6 +1670,10 @@ impl NullConstInst {
 impl Instruction for NullConstInst {
     fn operands(&self) -> &[Value] {
         &[]
+    }
+
+    fn __operands_dfg_mut(&mut self) -> &mut [Value] {
+        &mut []
     }
 
     fn result_ty(&self) -> Option<Type> {
@@ -1418,6 +1706,10 @@ impl GlobalAddrInst {
 impl Instruction for GlobalAddrInst {
     fn operands(&self) -> &[Value] {
         &[]
+    }
+
+    fn __operands_dfg_mut(&mut self) -> &mut [Value] {
+        &mut []
     }
 
     fn result_ty(&self) -> Option<Type> {

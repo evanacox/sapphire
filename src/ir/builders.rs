@@ -108,7 +108,7 @@ impl Default for SigBuilder {
 /// trait to allow easy instruction creation.
 pub struct AppendBuilder<'b> {
     def: &'b mut FunctionDefinition,
-    curr: Option<Block>,
+    curr: Block,
 }
 
 impl<'b> InstBuilder<'b> for AppendBuilder<'b> {
@@ -119,9 +119,7 @@ impl<'b> InstBuilder<'b> for AppendBuilder<'b> {
     fn build(self, data: InstData, debug: DebugInfo) -> (Inst, Option<Value>) {
         let (inst, val) = self.def.dfg.create_inst(data, debug);
 
-        if let Some(bb) = self.curr {
-            self.def.layout.append_inst(inst, bb);
-        }
+        self.def.layout.append_inst(inst, self.curr);
 
         (inst, val)
     }
@@ -258,14 +256,11 @@ impl<'m> FuncBuilder<'m> {
     /// Returns a builder that can be used to append an instruction to
     /// the current block.
     ///
-    /// If there is no current block, trying to build an instruction
-    /// will panic somewhere in the internals.
+    /// If there is no current block, this will panic.
     pub fn append(&mut self) -> AppendBuilder<'_> {
-        debug_assert!(self.current.is_some());
-
         AppendBuilder {
             def: &mut self.def,
-            curr: self.current,
+            curr: self.current.expect("cannot append without a current block"),
         }
     }
 
@@ -333,6 +328,16 @@ impl<'m> FuncBuilder<'m> {
     /// Gets the [`Signature`] of the function being built.
     pub fn current_signature(&self) -> &Signature {
         self.function(self.func).signature()
+    }
+
+    /// Returns the data-flow graph for the function
+    pub fn dfg(&self) -> &DataFlowGraph {
+        &self.def.dfg
+    }
+
+    /// Returns the data-flow graph for the function
+    pub fn layout(&self) -> &Layout {
+        &self.def.layout
     }
 
     fn create_block_with_name(&mut self, name: &str) -> Block {

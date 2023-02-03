@@ -15,7 +15,7 @@ use crate::ir::{
     Terminator, Type,
 };
 use crate::utility::{SaHashMap, Str};
-use smallvec::SmallVec;
+use smallvec::{smallvec, SmallVec};
 use static_assertions::assert_eq_size;
 
 #[cfg(feature = "enable-serde")]
@@ -103,6 +103,7 @@ struct ValueDefinition {
 }
 
 assert_eq_size!(ValueDefinition, [u64; 2]);
+assert_eq_size!(InstData, [u64; 4]);
 
 /// Owns all of the instructions, basic blocks, values, and everything else
 /// in a given function. Also models all the complex data-flow information between
@@ -126,6 +127,7 @@ pub struct DataFlowGraph {
     values: SecondaryMap<Value, ValueDefinition>,
     params: SecondaryMap<Block, SmallVec<[Value; 4]>>,
     debug: SecondaryMap<EntityRef, DebugInfo>,
+    uses: SecondaryMap<Value, SmallVec<[Inst; 4]>>,
 }
 
 impl DataFlowGraph {
@@ -197,27 +199,18 @@ impl DataFlowGraph {
     /// value is also returned as the second return value.
     pub fn create_inst(&mut self, data: InstData, debug: DebugInfo) -> (Inst, Option<Value>) {
         let result = data.result_ty();
-        let k = self.entities.insert(EntityData::Inst(data));
-        let inst = Inst::raw_from(k);
+        let k = self.entities.next_key();
+
+        for operand in data.operands() {
+            self.uses[*operand].push(Inst::raw_from(k));
+        }
+
+        let _ = self.entities.insert(EntityData::Inst(data));
+        self.uses.insert(Value::raw_from(k), smallvec![]);
 
         self.debug.insert(k, debug);
 
-        match result {
-            Some(result) => {
-                let val = Value::raw_from(k);
-
-                self.values.insert(
-                    val,
-                    ValueDefinition {
-                        ty: result,
-                        data: ValueDef::Inst(inst),
-                    },
-                );
-
-                (inst, Some(val))
-            }
-            None => (inst, None),
-        }
+        self.maybe_result(k, result)
     }
 
     /// Inserts a basic block with a given name into the DFG. It will start with an empty
@@ -255,6 +248,7 @@ impl DataFlowGraph {
         block.append_param(val);
 
         self.debug.insert(param, debug);
+        self.uses.insert(val, smallvec![]);
         self.values.insert(
             val,
             ValueDefinition {
@@ -315,5 +309,312 @@ impl DataFlowGraph {
             },
             _ => None,
         }
+    }
+
+    /// Replaces `inst` with new data and new debuginfo. This makes all references
+    /// to that [`Inst`] point to this new instruction instead.
+    pub fn replace_inst(
+        &mut self,
+        inst: Inst,
+        data: InstData,
+        debug: DebugInfo,
+    ) -> (Inst, Option<Value>) {
+        debug_assert!(self.is_inst_inserted(inst));
+
+        let result = data.result_ty();
+        let k = inst.raw_into();
+        let slot = match &mut self.entities[inst.raw_into()] {
+            EntityData::Inst(data) => data,
+            _ => unreachable!(),
+        };
+
+        for operand in slot.operands() {
+            if !data.operands().contains(operand) {
+                let v = &mut self.uses[*operand];
+                let idx = v.iter().position(|&i| i == inst).unwrap();
+
+                v.swap_remove(idx);
+            }
+        }
+
+        for operand in data.operands() {
+            self.uses[*operand].push(Inst::raw_from(k));
+        }
+
+        *slot = data;
+        self.debug.insert(k, debug);
+
+        self.maybe_result(k, result)
+    }
+
+    /// Returns every use in the data-flow graph of a given value.
+    ///
+    /// Note that all of these may not actually exist in the function layout.
+    /// If you don't want to pointlessly iterate over these, filter this
+    /// by the ones that are present in a given layout.
+    pub fn uses_of(&self, val: Value) -> &[Inst] {
+        &self.uses[val]
+    }
+
+    /// Replaces every use of `original` with `new`.
+    pub fn replace_uses_with(&mut self, original: Value, new: Value) {
+        let original_uses = std::mem::take(&mut self.uses[original]);
+
+        self.uses[new].extend_from_slice(&original_uses);
+
+        for inst in original_uses {
+            let data = match &mut self.entities[inst.raw_into()] {
+                EntityData::Inst(data) => data,
+                _ => unreachable!("got an `Inst` that did not refer to an instruction"),
+            };
+
+            if let InstData::CondBr(inst) = data {
+                inst.replace_use(original, new);
+            } else {
+                for v in data.__operands_dfg_mut() {
+                    if *v == original {
+                        *v = new;
+                    }
+                }
+            }
+        }
+    }
+
+    /// Gets one past the highest possible value key. This is an invalid key,
+    /// but it is suitable for use with [`SecondaryMap::fill`].
+    pub fn next_value(&self) -> Value {
+        Value::raw_from(self.entities.next_key())
+    }
+
+    /// Removes a block parameter from a given block without invalidating references
+    /// to the other block parameters. Note that this does change the index
+    /// for other block parameters, but it doesn't make their [`Value`]s invalid.
+    pub fn remove_block_param(&mut self, block: Block, param: Value) {
+        debug_assert_eq!(self.uses_of(param), []);
+
+        let block = &mut self.blocks[block];
+
+        block.remove_param(param);
+
+        // need to update the indices of each parameter
+        for (i, &val) in block.params().iter().enumerate() {
+            match &mut self.entities[val.raw_into()] {
+                EntityData::Param(param) => {
+                    param.index = i as u32;
+                }
+                _ => unreachable!(),
+            }
+
+            match &mut self.values[val].data {
+                ValueDef::Param(_, index) => *index = i as u32,
+                _ => unreachable!(),
+            }
+        }
+    }
+
+    /// Rewrites a branch instruction that targets `target` to have a new set of block params
+    pub fn rewrite_branch_args(&mut self, branch: Inst, target: Block, new_params: &[Value]) {
+        let data = match &mut self.entities[branch.raw_into()] {
+            EntityData::Inst(data) => data,
+            _ => unreachable!("got an `Inst` that did not refer to an instruction"),
+        };
+
+        let targets = match data {
+            InstData::Br(br) => br.targets(),
+            InstData::CondBr(condbr) => condbr.targets(),
+            InstData::Ret(_) | InstData::Unreachable(_) => &mut [],
+            _ => unreachable!("got an `Inst` that did not refer to a terminator"),
+        };
+
+        let idx = targets
+            .iter()
+            .position(|t| t.block() == target)
+            .expect("cannot rewrite branch that doesn't target `target`");
+
+        let branch_target = &targets[idx];
+
+        // need to make sure uses aren't made stale. we go through and remove
+        // branch as a user for args that aren't present anymore, and we
+        // add branch as a user for args that are present
+        for val in branch_target.args() {
+            if !new_params.contains(val) {
+                let v = &mut self.uses[*val];
+
+                v.swap_remove(
+                    v.iter()
+                        .position(|&inst| inst == branch)
+                        .expect("uses are stale"),
+                );
+            }
+        }
+
+        for val in new_params {
+            if !self.uses[*val].contains(&branch) {
+                self.uses[*val].push(branch);
+            }
+        }
+
+        match data {
+            InstData::Br(br) => br.rewrite_branch_args(new_params),
+            InstData::CondBr(condbr) => condbr.rewrite_branch_args(idx, new_params),
+            _ => {}
+        }
+    }
+
+    /// Replaces a single argument to a branch target on a branch instruction. This is intended
+    /// to be more efficient for the more common case where a value is only being *replaced*
+    /// instead of inserted/removed.
+    pub fn replace_branch_arg(&mut self, inst: Inst, to: Block, arg: usize, new: Value) {
+        let data = match &mut self.entities[inst.raw_into()] {
+            EntityData::Inst(data) => data,
+            _ => unreachable!("got an `Inst` that did not refer to an instruction"),
+        };
+
+        // get the old value occupying that slot of the arguments
+        let old = match data {
+            InstData::Br(br) => {
+                debug_assert_eq!(br.target().block(), to);
+
+                let old = br.target().args()[arg];
+
+                br.replace_branch_arg(arg, new);
+
+                old
+            }
+            InstData::CondBr(condbr) => {
+                let idx = (condbr.false_branch().block() == to) as usize;
+
+                let old = {
+                    let target = if condbr.true_branch().block() == to {
+                        condbr.true_branch()
+                    } else {
+                        condbr.false_branch()
+                    };
+
+                    target.args()[arg]
+                };
+
+                condbr.replace_branch_arg(idx, arg, new);
+
+                old
+            }
+            _ => return,
+        };
+
+        // update uses information
+        let inst_idx = self.uses[old].iter().position(|i| *i == inst).unwrap();
+        self.uses[old].swap_remove(inst_idx);
+
+        if !self.uses[new].contains(&inst) {
+            self.uses[new].push(inst);
+        }
+    }
+
+    fn maybe_result(&mut self, key: EntityRef, result: Option<Type>) -> (Inst, Option<Value>) {
+        let inst = Inst::raw_from(key);
+
+        match result {
+            Some(result) => {
+                let val = Value::raw_from(key);
+
+                self.values.insert(
+                    val,
+                    ValueDefinition {
+                        ty: result,
+                        data: ValueDef::Inst(inst),
+                    },
+                );
+
+                (inst, Some(val))
+            }
+            None => (inst, None),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::analysis::stringify_module;
+    use crate::ir::*;
+
+    #[test]
+    fn test_dfg_use_tracking_append() {
+        let mut module = Module::new("test");
+        let mut b =
+            module.define_function("test", SigBuilder::new().ret(Some(Type::i32())).build());
+
+        let bb0 = b.create_block("bb0");
+        let bb1 = b.create_block("bb1");
+        let v1 = b.append_block_param(bb1, Type::i32(), DebugInfo::fake());
+        b.switch_to(bb0);
+
+        let v0 = b.append().iconst(Type::i32(), 42, DebugInfo::fake());
+
+        assert_eq!(b.dfg().uses_of(v0), []);
+        assert_eq!(b.dfg().uses_of(v1), []);
+
+        let br = b
+            .append()
+            .br(BlockWithParams::new(bb1, &[v0]), DebugInfo::fake());
+
+        assert_eq!(b.dfg().uses_of(v0), [br]);
+        assert_eq!(b.dfg().uses_of(v1), []);
+
+        b.switch_to(bb1);
+        let ret = b.append().ret_val(v1, DebugInfo::fake());
+
+        assert_eq!(b.dfg().uses_of(v0), [br]);
+        assert_eq!(b.dfg().uses_of(v1), [ret]);
+    }
+
+    #[test]
+    fn test_dfg_use_tracking_replace() {
+        let mut module = Module::new("test");
+        let mut b =
+            module.define_function("test", SigBuilder::new().ret(Some(Type::i32())).build());
+
+        let bb0 = b.create_block("bb0");
+        let bb1 = b.create_block("bb1");
+        let v1 = b.append_block_param(bb1, Type::i32(), DebugInfo::fake());
+        b.switch_to(bb0);
+
+        let v0 = b.append().iconst(Type::i32(), 42, DebugInfo::fake());
+        let br = b
+            .append()
+            .br(BlockWithParams::new(bb1, &[v0]), DebugInfo::fake());
+
+        b.switch_to(bb1);
+        let ret = b.append().ret_val(v1, DebugInfo::fake());
+
+        assert_eq!(b.dfg().uses_of(v0), [br]);
+        assert_eq!(b.dfg().uses_of(v1), [ret]);
+
+        let f = b.define();
+        let func = module.function_mut(f);
+        let mut cursor = FuncCursor::over(func);
+
+        cursor.goto_inst(ret);
+        let v2 = cursor.insert().iconst(Type::i32(), 16, DebugInfo::fake());
+
+        assert_eq!(cursor.dfg().uses_of(v2), []);
+
+        let ret2 = cursor.replace().ret_val(v2, DebugInfo::fake());
+
+        assert_eq!(cursor.dfg().uses_of(v2), [ret2]);
+        assert_eq!(cursor.dfg().uses_of(v1), []);
+
+        assert_eq!(
+            stringify_module(&module),
+            r#"fn i32 @test() {
+bb0:
+  %0 = iconst i32 42
+  br bb1(i32 %0)
+
+bb1(i32 %1):
+  %2 = iconst i32 16
+  ret i32 %2
+}
+"#
+        )
     }
 }
