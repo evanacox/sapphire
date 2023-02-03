@@ -9,7 +9,7 @@
 //======---------------------------------------------------------------======//
 
 use crate::arena;
-use crate::arena::iter::{Iter, IterMut, Keys};
+use crate::arena::iter::Keys;
 use crate::arena::{ArenaKey, ArenaMap};
 use smallbitvec::{sbvec, SmallBitVec};
 use std::fmt::{Debug, Formatter};
@@ -226,6 +226,30 @@ impl<K: ArenaKey, V> SecondaryMap<K, V> {
             slots,
             initialized,
             len: count,
+            _unused: PhantomData::default(),
+        }
+    }
+
+    /// Fills a [`SecondaryMap`] with a given value for every key. `upto`
+    /// should be the `next_key` value for the primary map.
+    pub fn fill(upto: K, value: V) -> Self
+    where
+        V: Clone,
+    {
+        let mut slots = Vec::with_capacity(upto.index());
+        let mut initialized = SmallBitVec::with_capacity(upto.index());
+
+        for key in Keys::<K>::with_len(upto.index()) {
+            debug_assert_eq!(key.index(), slots.len());
+
+            slots.push(MaybeUninit::new(value.clone()));
+            initialized.push(true);
+        }
+
+        Self {
+            slots,
+            initialized,
+            len: upto.index(),
             _unused: PhantomData::default(),
         }
     }
@@ -543,8 +567,12 @@ impl<K: ArenaKey, V> SecondaryMap<K, V> {
     /// assert_eq!(it.next(), Some((k1, &'c')));
     /// ```
     pub fn iter(&self) -> impl Iterator<Item = (K, &V)> {
-        // already filtered by `self.values()`
-        Iter::with_inner(self.values())
+        self.slots
+            .as_slice()
+            .iter()
+            .enumerate()
+            .filter_uninitialized_slots(self.initialized.iter())
+            .map(|(i, val)| (K::new(i), unsafe { val.assume_init_ref() }))
     }
 
     /// Returns an iterator that iterates over the values in the arena,
@@ -561,8 +589,12 @@ impl<K: ArenaKey, V> SecondaryMap<K, V> {
     /// assert_eq!(it.next(), Some((k1, &mut 15)));
     /// ```
     pub fn iter_mut(&mut self) -> impl Iterator<Item = (K, &mut V)> {
-        // already filtered by `self.values()`
-        IterMut::with_inner(self.values_mut())
+        self.slots
+            .as_mut_slice()
+            .iter_mut()
+            .enumerate()
+            .filter_uninitialized_slots(self.initialized.iter())
+            .map(|(i, val)| (K::new(i), unsafe { val.assume_init_mut() }))
     }
 
     #[inline]
@@ -683,7 +715,7 @@ where
     K: ArenaKey,
 {
     fn drop(&mut self) {
-        // we simply iterate over initialized values and use [`MaybeUnint::assume_init_drop`] on them
+        // we simply iterate over initialized values and use `MaybeUninit::assume_init_drop` on them
         for value in self
             .slots
             .iter_mut()
@@ -908,7 +940,7 @@ mod tests {
 
         let k = m1.insert(6);
 
-        m2[k];
+        let _ = m2[k];
     }
 
     #[test]
