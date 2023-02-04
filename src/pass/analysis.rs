@@ -649,7 +649,7 @@ impl FunctionAnalysisManager {
 
     /// Initializes the analysis manager for a given bit of IR.
     ///
-    /// This must be called at least once before [`get`] is called for
+    /// This must be called at least once before [`Self::get`] is called for
     /// a given unit of IR, or the manager will panic.
     #[inline]
     pub fn initialize_for_ir(&mut self, ir: &Function) {
@@ -729,7 +729,7 @@ impl ModuleAnalysisManager {
 
     /// Initializes the analysis manager for a given bit of IR.
     ///
-    /// This must be called at least once before [`get`] is called for
+    /// This must be called at least once before [`Self::get`] is called for
     /// a given unit of IR, or the manager will panic.
     #[inline]
     pub fn initialize_for_ir(&mut self, ir: &Module) {

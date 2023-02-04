@@ -123,7 +123,7 @@ impl DominatorTree {
     }
 }
 
-impl IntoTree<'_> for DominatorTree {
+impl IntoTree<'_, 12> for DominatorTree {
     type Node = Block;
 
     fn root(&self) -> Self::Node {

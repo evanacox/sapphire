@@ -8,10 +8,7 @@
 //                                                                           //
 //======---------------------------------------------------------------======//
 
-use sapphire::analysis::{
-    print_module, ControlFlowGraphAnalysis, DominanceFrontierAnalysis, DominatorTreeAnalysis,
-    ModuleStringifyAnalysis,
-};
+use sapphire::analysis::*;
 use sapphire::cli;
 use sapphire::ir::Module;
 use sapphire::pass::*;
@@ -29,13 +26,11 @@ fn run_pass(mut module: Module) {
     mam.add_analysis(ModuleStringifyAnalysis);
 
     let mut fpm = FunctionPassManager::new();
-    fpm.add_pass(DominatorTreeWriterPass::stdout());
     fpm.add_pass(Mem2RegPass);
+    fpm.add_pass(DeadCodeEliminationPass);
 
     let mut mpm = ModulePassManager::new();
     mpm.add_pass(FunctionToModulePassAdapter::adapt(fpm));
-    mpm.add_pass(ModuleWriterPass::stderr());
-    mpm.add_pass(VerifyModulePass);
 
     print_module(&module);
 

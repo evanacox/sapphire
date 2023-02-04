@@ -16,10 +16,8 @@ mod subtest;
 mod testcase;
 
 use crate::runner::{run_all, run_subtest};
-use backtrace::Backtrace;
 use bpaf::Parser;
 use sapphire::cli;
-use std::process::ExitCode;
 
 fn subtest() -> impl Parser<Option<String>> {
     bpaf::long("subtest")

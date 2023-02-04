@@ -73,13 +73,6 @@ fn prettify_failure(fail: &TestDetails) -> String {
             format!("{prefix}\n{PAD_TO_START_OF_LINE}{check}\n\n{suffix}\n{PAD_TO_START_OF_LINE}{fixed_output}")
         }
         TestFailure::Diff { expected, got } => prettify_diff(expected, got),
-        TestFailure::Panic(panic) => {
-            let prefix = Red.bold().paint("unexpected panic:");
-            let fixed_err = panic.replace('\n', &format!("\n{PAD_TO_START_OF_LINE}"));
-
-            // message, then linebreak and the error
-            format!("{prefix}\n{PAD_TO_START_OF_LINE}{fixed_err}")
-        }
         TestFailure::LackOfCompileError => Red
             .bold()
             .paint("expected a compile error but file compiled")

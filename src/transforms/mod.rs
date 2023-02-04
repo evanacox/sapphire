@@ -20,18 +20,18 @@
 
 pub mod common;
 
+mod dce;
 mod gvn;
 mod mem2reg;
 mod printers;
 mod sccp;
 mod simplify;
 mod verify;
-mod dce;
 
+pub use dce::*;
 pub use gvn::*;
 pub use mem2reg::*;
 pub use printers::*;
 pub use sccp::*;
 pub use simplify::*;
 pub use verify::*;
-pub use dce::*;

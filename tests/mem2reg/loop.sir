@@ -46,7 +46,7 @@ entry(i32 %b):
 loop.header:
     %4 = load i32, ptr %1
     %5 = iconst i32 3
-    %6 = icmp eq i32 %4, %5
+    %6 = icmp ne i32 %4, %5
     condbr bool %6, loop.body, exit
 
 loop.body:

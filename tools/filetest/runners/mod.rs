@@ -11,11 +11,11 @@
 mod dce;
 mod domtree;
 mod flowgraph;
-mod parse;
 mod mem2reg;
+mod parse;
 
 pub use dce::*;
 pub use domtree::*;
 pub use flowgraph::*;
-pub use parse::*;
 pub use mem2reg::*;
+pub use parse::*;

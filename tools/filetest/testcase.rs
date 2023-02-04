@@ -15,7 +15,6 @@ pub enum TestFailure {
     Diff { expected: String, got: String },
     Missing { check: String, full: String },
     CompileError(String),
-    Panic(String),
     LackOfCompileError,
 }
 

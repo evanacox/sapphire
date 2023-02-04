@@ -151,12 +151,10 @@ impl InstData {
     /// Checks if `self` is a constant materialization instruction. Note that `undef` is not
     /// included here, as the value is not known at compile time.
     pub fn is_constant(&self) -> bool {
-        match self {
-            InstData::BConst(_) | InstData::IConst(_) | InstData::FConst(_) | InstData::Null(_) => {
-                true
-            }
-            _ => false,
-        }
+        matches!(
+            self,
+            InstData::BConst(_) | InstData::IConst(_) | InstData::FConst(_) | InstData::Null(_)
+        )
     }
 }
 
