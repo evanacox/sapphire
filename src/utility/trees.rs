@@ -8,12 +8,10 @@
 //                                                                           //
 //======---------------------------------------------------------------======//
 
+use smallvec::SmallVec;
+
 /// Models a type that can be traversed in a tree-like fashion. This is
 /// intended for debug APIs / passes that deal in human-readable trees.
-///
-/// This is **not** for anything that is actually in the hot path of any
-/// compiler passes, this is meant for human-facing APIs. What this means
-/// is that it may be extremely slow.
 pub trait IntoTree<'a> {
     /// The node type of the tree
     type Node: Copy;
@@ -22,7 +20,7 @@ pub trait IntoTree<'a> {
     fn root(&'a self) -> Self::Node;
 
     /// Returns the list of children that a given node has
-    fn children(&'a self, node: Self::Node) -> Vec<Self::Node>;
+    fn children(&'a self, node: Self::Node) -> SmallVec<[Self::Node; 12]>;
 }
 
 /// Prints a tree in a consistent format.

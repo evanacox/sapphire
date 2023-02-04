@@ -197,34 +197,42 @@ pub trait Cursor: Sized {
     /// before the block, this is the first instruction. If it points after, this does
     /// nothing. If it points at nothing, this does nothing.
     fn next_inst(&mut self) -> Option<Inst> {
-        let block_and_inst = match self.pos() {
-            CursorPos::Nothing | CursorPos::After(_) => None,
-            CursorPos::At(block, inst) => self.layout().inst_next(inst).map(|inst| (block, inst)),
-            CursorPos::Before(block) => self
-                .def()
-                .layout
-                .block_first_inst(block)
-                .map(|inst| (block, inst)),
+        let (maybe_inst, inst) = match self.pos() {
+            CursorPos::Nothing | CursorPos::After(_) => (self.pos(), None),
+            CursorPos::At(block, inst) => match self.layout().inst_next(inst) {
+                Some(next) => (CursorPos::At(block, next), Some(next)),
+                None => (CursorPos::After(block), None),
+            },
+            CursorPos::Before(block) => match self.layout().block_first_inst(block) {
+                Some(first) => (CursorPos::At(block, first), Some(first)),
+                None => (CursorPos::After(block), None),
+            },
         };
 
-        move_to_inst_internal(self, block_and_inst)
+        self.set_pos(maybe_inst);
+
+        inst
     }
 
     /// Moves the cursor to the previous instruction in the function. If the cursor points
     /// after the block, this is the last instruction. If it points before, this does
     /// nothing. If it points at nothing, this does nothing.
     fn prev_inst(&mut self) -> Option<Inst> {
-        let block_and_inst = match self.pos() {
-            CursorPos::Nothing | CursorPos::Before(_) => None,
-            CursorPos::At(block, inst) => self.layout().inst_prev(inst).map(|inst| (block, inst)),
-            CursorPos::After(block) => self
-                .def()
-                .layout
-                .block_last_inst(block)
-                .map(|inst| (block, inst)),
+        let (maybe_inst, inst) = match self.pos() {
+            CursorPos::Nothing | CursorPos::Before(_) => (self.pos(), None),
+            CursorPos::At(block, inst) => match self.layout().inst_prev(inst) {
+                Some(next) => (CursorPos::At(block, next), Some(next)),
+                None => (CursorPos::Before(block), None),
+            },
+            CursorPos::After(block) => match self.layout().block_last_inst(block) {
+                Some(first) => (CursorPos::At(block, first), Some(first)),
+                None => (CursorPos::Before(block), None),
+            },
         };
 
-        move_to_inst_internal(self, block_and_inst)
+        self.set_pos(maybe_inst);
+
+        inst
     }
 
     /// Converts an [`Inst`] into a [`Value`] that refers to the result

@@ -79,6 +79,11 @@ impl DebugInfo {
         }
     }
 
+    /// Returns a copy of `self`, but without the same name.
+    pub fn strip_name(self) -> Self {
+        Self::new(self.line, self.col, self.file)
+    }
+
     /// Returns the line in the original file that the entity came from.
     pub fn line(&self) -> u32 {
         self.line

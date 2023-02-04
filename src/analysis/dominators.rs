@@ -130,8 +130,8 @@ impl IntoTree<'_> for DominatorTree {
         self.root()
     }
 
-    fn children(&self, node: Self::Node) -> Vec<Self::Node> {
-        let mut result: Vec<Block> = self
+    fn children(&self, node: Self::Node) -> SmallVec<[Self::Node; 12]> {
+        let mut result: SmallVec<[Block; 12]> = self
             .tree
             .iter()
             .filter(|(_, idom)| **idom == node)
@@ -1122,11 +1122,17 @@ mod tests {
         let domtree = DominatorTree::compute(main, &cfg);
         let df = DominanceFrontier::compute(&cfg, &domtree);
 
+        let mut bbc_df: Vec<Block> = df.frontier(bbc).to_vec();
+        let mut bbd_df: Vec<Block> = df.frontier(bbd).to_vec();
+
+        bbc_df.sort();
+        bbd_df.sort();
+
         assert_eq!(df.frontier(bbr), &[]);
         assert_eq!(df.frontier(bba), &[bba]);
         assert_eq!(df.frontier(bbb), &[bbd]);
-        assert_eq!(df.frontier(bbc), &[bbd, bbe]);
-        assert_eq!(df.frontier(bbd), &[bba, bbe]);
+        assert_eq!(&bbc_df, &[bbd, bbe]);
+        assert_eq!(&bbd_df, &[bba, bbe]);
         assert_eq!(df.frontier(bbe), &[]);
     }
 }
