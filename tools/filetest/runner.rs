@@ -9,13 +9,18 @@
 //======---------------------------------------------------------------======//
 
 use crate::display;
-use crate::runners::{dce_subtest, domtree_subtest, parse_subtest};
+use crate::runners::{dce_subtest, domtree_subtest, mem2reg_subtest, parse_subtest};
 use crate::subtest::Subtest;
 use std::io;
 use std::time::Duration;
 use threadpool::ThreadPool;
 
-const SUBTESTS: [Subtest; 3] = [parse_subtest(), domtree_subtest(), dce_subtest()];
+const SUBTESTS: [Subtest; 4] = [
+    parse_subtest(),
+    domtree_subtest(),
+    dce_subtest(),
+    mem2reg_subtest(),
+];
 
 fn pool_for_jobs(jobs: Option<usize>) -> ThreadPool {
     match jobs {

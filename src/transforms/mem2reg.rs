@@ -12,12 +12,15 @@ use crate::analysis::*;
 use crate::ir::*;
 use crate::pass::{FunctionAnalysisManager, FunctionTransformPass, PreservedAnalyses};
 use crate::transforms::common::rewrite_pad_branch_argument;
-use crate::utility::{SaHashMap, SaHashSet};
+use crate::utility::{IntoTree, SaHashMap, SaHashSet};
 use smallvec::{smallvec, SmallVec};
 
 /// Promotes `alloca`s that only have `load`s and `store`s as uses into registers.
 /// This is effectively an SSA construction pass, it promotes memory operations into
 /// SSA values and φ nodes.  
+///
+/// This pass generates *minimal* SSA, not *pruned* SSA. You likely want to run
+/// DCE after this pass for pruned SSA.
 ///
 /// # Limitations:
 /// - This will not promote any local memory that has multiple types stored into it,
@@ -26,6 +29,10 @@ use smallvec::{smallvec, SmallVec};
 /// - Any `alloca` that is leaked in **any way** is not promoted. An `alloca`
 ///   must only have `load`s and `store`s as uses, even passing the `alloca`
 ///   through φ nodes will cause it to be ignored.
+///
+/// - Right now, this pass does not treat `elemptr` as a `load`/`store`, and will
+///   just ignore any `alloca`s that are used in an `elemptr`. If you want aggregates to
+///   be promoted, they need to be created via `insert`s and then `store`d into the memory.
 pub struct Mem2RegPass;
 
 impl FunctionTransformPass for Mem2RegPass {
@@ -78,7 +85,7 @@ fn find_promotable_allocas(
 ) -> SaHashMap<Value, (Type, SmallVec<[Inst; 4]>)> {
     // allocas is our result, escaped is scratch storage for our "find usages that
     // make it impossible to promote" in our inner loop
-    let mut allocas = SaHashMap::<Value, (Type, SmallVec<[Inst; 4]>)>::default();
+    let mut allocas = SaHashMap::default();
     let mut not_promotable = SmallVec::<[Value; 16]>::default();
 
     // basic idea: we scan through the function in reverse postorder to see
@@ -120,7 +127,7 @@ fn find_promotable_allocas(
                             if store.pointer() != alloca || *ty != cursor.ty(store.stored()) {
                                 not_promotable.push(alloca);
                             } else {
-                                defs.push(inst);
+                                defs.push(inst)
                             }
                         }
                         InstData::Load(load) => {
@@ -158,7 +165,15 @@ fn insert_phis(
     // this is intended to map alloca -> phi for blocks where the phi was added
     let mut phis = SaHashMap::default();
 
-    for (&alloca, (ty, defs)) in allocas.iter() {
+    // we need a consistent order for these to be inserted, so instead of directly iterating
+    // over the hash table we instead copy keys into a vec and then sort it.
+    //
+    // the keys are integers anyway and this will be a very small vec, should be cheap
+    let mut alloca_keys: SmallVec<[Value; 16]> = allocas.keys().copied().collect();
+    alloca_keys.sort();
+
+    for alloca in alloca_keys {
+        let (ty, defs) = &allocas[&alloca];
         let mut phis_added = SaHashSet::default();
         let mut contains_defs = SaHashSet::default();
 
@@ -175,7 +190,7 @@ fn insert_phis(
                 // if we haven't already added a phi for this variable yet for this
                 // particular join point, add the phi and record it.
                 if !phis_added.contains(&bb) {
-                    let dbg = cursor.dfg().debug(alloca);
+                    let dbg = cursor.dfg().debug(alloca).strip_name();
                     let phi = cursor.def_mut().dfg.append_block_param(bb, *ty, dbg);
 
                     phis.insert(phi, alloca);
@@ -198,6 +213,137 @@ enum Memory {
     Use(LoadInst),
 }
 
+// Gets the closest (dominating) definition for a given alloca. If there is none,
+// an `undef` is inserted as the definition and is then returned.
+fn nearest_reaching_def(
+    cursor: &mut FuncCursor<'_>,
+    alloca: Value,
+    ty: Type,
+    dbg: DebugInfo,
+    defs: &mut SaHashMap<Value, SmallVec<[Value; 4]>>,
+) -> Value {
+    let stack = defs.get_mut(&alloca).unwrap();
+
+    match stack.last().copied() {
+        Some(v) => v,
+        None => {
+            let undef = cursor.insert().undef(ty, dbg.strip_name());
+
+            stack.push(undef);
+
+            undef
+        }
+    }
+}
+
+fn rename_variables_recursive(
+    cursor: &mut FuncCursor<'_>,
+    phis: &SaHashMap<Value, Value>,
+    reaching_def: &mut SaHashMap<Value, SmallVec<[Value; 4]>>,
+    cfg: &ControlFlowGraph,
+    domtree: &DominatorTree,
+) {
+    let bb = cursor.current_block().unwrap();
+    let mut defs = SmallVec::<[Value; 12]>::default();
+
+    // first task is to update reaching_def if any of our block's φ nodes are
+    // actually definitions for a variable in this block
+    for &phi in cursor.block_params(bb) {
+        if let Some(&alloca) = phis.get(&phi) {
+            defs.push(alloca);
+            reaching_def.get_mut(&alloca).unwrap().push(phi);
+        }
+    }
+
+    // this is the main renaming loop, we remove loads and replace their uses with the
+    // closest reaching definition, and we remove stores and set the value they were storing
+    // as the most recent definition
+    while let Some(inst) = cursor.next_inst() {
+        // needed to clone so cursor wasn't borrowed, we need to mutate it
+        let op = match cursor.inst_data(inst) {
+            InstData::Load(load) if reaching_def.contains_key(&load.pointer()) => {
+                Memory::Use(*load)
+            }
+            InstData::Store(store) if reaching_def.contains_key(&store.pointer()) => {
+                defs.push(store.pointer());
+                Memory::Def(*store)
+            }
+            _ => continue,
+        };
+
+        match op {
+            // by this point, we can assume that any stores to that alloca
+            // that are in `reaching_def` are actually allocas we can promote.
+            // we checked earlier to make sure
+            Memory::Use(load) => {
+                // if there is no closest definition, we insert an `undef` instruction
+                // and use that as our new def. otherwise, we replace the load's uses
+                // with that closest definition and remove the load
+                let val = cursor.inst_to_result(inst).unwrap();
+                let closest_def = nearest_reaching_def(
+                    cursor,
+                    load.pointer(),
+                    load.result_ty().unwrap(),
+                    cursor.inst_debug(inst),
+                    reaching_def,
+                );
+
+                cursor.replace_uses_with(val, closest_def);
+                cursor.remove_inst_and_move_back();
+            }
+            Memory::Def(store) => {
+                // this is pretty simple: we get whatever value we were storing,
+                // mark that as the closest definition, and then remove the store.
+                reaching_def
+                    .get_mut(&store.pointer())
+                    .unwrap()
+                    .push(store.stored());
+
+                cursor.remove_inst_and_move_back();
+            }
+        }
+    }
+
+    cursor.goto_last_inst(bb);
+    let branch = cursor.current_inst().unwrap();
+    let mut params = SmallVec::<[(usize, Value); 16]>::default();
+
+    // if one of our successors has a φ node that came from an alloca we defined, rewrite
+    // the branch to that successor to pass the most recent definition
+    for successor in cfg.successors(bb) {
+        params.insert_many(
+            0,
+            cursor.block_params(successor).iter().copied().enumerate(),
+        );
+
+        for (i, phi) in params.drain(..) {
+            if let Some(&alloca) = phis.get(&phi) {
+                let dbg = cursor.val_debug(phi);
+                let reaching =
+                    nearest_reaching_def(cursor, alloca, cursor.ty(phi), dbg, reaching_def);
+
+                rewrite_pad_branch_argument(cursor, branch, successor, i, reaching);
+            }
+        }
+    }
+
+    // while we still have the most recent dominating reaching_defs in `reaching_def`,
+    // we run renamer over the children.
+    //
+    // this ensures that they see the most recent definition when they encounter a load
+    for child in domtree.children(bb) {
+        cursor.goto_before(child);
+
+        rename_variables_recursive(cursor, phis, reaching_def, cfg, domtree);
+    }
+
+    // once we've finished recursing, remove our defs from the stack so they don't
+    // interfere with blocks that we don't actually dominate.
+    for alloca in defs {
+        let _ = reaching_def.get_mut(&alloca).unwrap().pop();
+    }
+}
+
 fn rename_variables(
     cursor: &mut FuncCursor<'_>,
     allocas: &SaHashMap<Value, (Type, SmallVec<[Inst; 4]>)>,
@@ -205,95 +351,17 @@ fn rename_variables(
     cfg: &ControlFlowGraph,
     domtree: &DominatorTree,
 ) {
-    let mut reaching_def = SaHashMap::<Value, Option<Value>>::default();
+    let mut reaching_def = SaHashMap::<Value, SmallVec<[Value; 4]>>::default();
 
     // initialize reaching_def, for every alloca we have no definition
     // at this point in the program yet.
     for &alloca in allocas.keys() {
-        reaching_def.insert(alloca, None);
+        reaching_def.insert(alloca, smallvec![]);
     }
 
-    // as usual, iterate in rpo so we see defs before uses. in this case,
-    // we are effectively going through and tracking the "closest" (domination-wise
-    // closest) def of each alloca at a given point, and replacing loads with that def
-    // (and removing the stores entirely).
-    for bb in domtree.compute_tree_dfs_preorder() {
-        cursor.goto_before(bb);
+    cursor.goto_before(domtree.root());
 
-        // first task is to update reaching_def if any of our block's φ nodes are
-        // actually definitions for a variable in this block
-        for &phi in cursor.block_params(bb) {
-            if let Some(&alloca) = phis.get(&phi) {
-                reaching_def.insert(alloca, Some(phi));
-            }
-        }
-
-        while let Some(inst) = cursor.next_inst() {
-            // needed to clone so cursor wasn't borrowed, we need to mutate it
-            let op = match cursor.inst_data(inst) {
-                InstData::Load(load) if reaching_def.contains_key(&load.pointer()) => {
-                    Memory::Use(*load)
-                }
-                InstData::Store(store) if reaching_def.contains_key(&store.pointer()) => {
-                    Memory::Def(*store)
-                }
-                _ => continue,
-            };
-
-            match op {
-                // by this point, we can assume that any stores to that alloca
-                // that are in `reaching_def` are actually allocas we can promote.
-                // we checked earlier to make sure
-                Memory::Use(load) => {
-                    // if there is no closest definition, we insert an `undef` instruction
-                    // and use that as our new def. otherwise, we replace the load's uses
-                    // with that closest definition and remove the load
-                    let dbg = cursor.inst_debug(inst);
-                    let val = cursor.inst_to_result(inst).unwrap();
-                    let closest_def = reaching_def
-                        .get_mut(&load.pointer())
-                        .unwrap()
-                        .get_or_insert_with(|| {
-                            cursor.insert().undef(load.result_ty().unwrap(), dbg)
-                        });
-
-                    cursor.replace_uses_with(val, *closest_def);
-                    cursor.remove_inst_and_move_back();
-                }
-                Memory::Def(store) => {
-                    // this is pretty simple: we get whatever value we were storing,
-                    // mark that as the closest definition, and then remove the store.
-                    reaching_def.insert(store.pointer(), Some(store.stored()));
-                    cursor.remove_inst_and_move_back();
-                }
-            }
-        }
-
-        cursor.goto_last_inst(bb);
-        let branch = cursor.current_inst().unwrap();
-        let mut params = SmallVec::<[(usize, Value); 16]>::default();
-
-        // if one of our successors has a φ node that came from an alloca we defined, rewrite
-        // the branch to that successor to pass the most recent definition
-        for successor in cfg.successors(bb) {
-            params.insert_many(
-                0,
-                cursor.block_params(successor).iter().copied().enumerate(),
-            );
-
-            for (i, phi) in params.drain(..) {
-                if let Some(&alloca) = phis.get(&phi) {
-                    let dbg = cursor.val_debug(phi);
-                    let reaching = reaching_def
-                        .get_mut(&alloca)
-                        .unwrap()
-                        .get_or_insert_with(|| cursor.insert().undef(allocas[&alloca].0, dbg));
-
-                    rewrite_pad_branch_argument(cursor, branch, successor, i, *reaching);
-                }
-            }
-        }
-    }
+    rename_variables_recursive(cursor, phis, &mut reaching_def, cfg, domtree);
 }
 
 #[cfg(test)]
@@ -428,11 +496,6 @@ mod tests {
         let cfg = ControlFlowGraph::compute(func);
         let domtree = DominatorTree::compute(func, &cfg);
         let allocas = find_promotable_allocas(&mut FuncCursor::over(func), &domtree);
-
-        assert!(allocas.contains_key(&x));
-        assert!(allocas.contains_key(&y));
-        assert!(allocas.contains_key(&tmp));
-
         {
             let (ty, mut defs) = allocas[&x].clone();
 
