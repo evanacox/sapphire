@@ -1,0 +1,41 @@
+; MATCH-SECTION
+;
+; fn i32 @main(i32, ptr) {
+; entry(i32 %argc, ptr %argv):
+;   %0 = iconst i32 42
+;   %1 = icmp eq i32 %argc, %0
+;   condbr bool %1, a, b
+;
+; a:
+;   %2 = iconst i32 6
+;   br merge(i32 %2)
+;
+; b:
+;   %3 = iconst i32 5
+;   br merge(i32 %3)
+;
+; merge(i32 %4):
+;   ret i32 %4
+; }
+;;
+fn i32 @main(i32, ptr) {
+entry(i32 %argc, ptr %argv):
+    %0 = alloca i32
+    %1 = iconst i32 42
+    %2 = icmp eq i32 %argc, %1
+    condbr bool %2, a, b
+
+a:
+    %3 = iconst i32 6
+    store i32 %3, ptr %0
+    br merge
+
+b:
+    %4 = iconst i32 5
+    store i32 %4, ptr %0
+    br merge
+
+merge:
+    %5 = load i32, ptr %0
+    ret i32 %5
+}

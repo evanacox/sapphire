@@ -2,7 +2,7 @@
 ;
 ; entry
 ; └── exit
-;
+;;
 fn void @test() {
 entry:
   br exit

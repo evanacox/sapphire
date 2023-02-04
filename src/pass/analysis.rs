@@ -198,9 +198,8 @@ impl PreservedAnalyses {
         }
 
         let mut new = PreservedAnalyses::none();
-        let intersection = self.preserved.into_iter().filter(|id| other.contains(*id));
 
-        for id in intersection {
+        for id in self.preserved.into_iter().filter(|id| other.contains(*id)) {
             new.insert(id)
         }
 
@@ -322,7 +321,7 @@ impl<Traits: StorageTraits> AnalysisManager<Traits> {
 
     /// Registers an analysis pass with the manager. The pass is not run until it is
     /// later requested through [`Self::get`].
-    fn add_pass<T: IRAnalysisPass<Traits::IR, Traits = Traits>>(&mut self, pass: T) {
+    fn add_analysis<T: IRAnalysisPass<Traits::IR, Traits = Traits>>(&mut self, pass: T) {
         let id = TypeId::of::<T>();
 
         // initially, every pass is invalid. there's a possibility none of them
@@ -343,11 +342,15 @@ impl<Traits: StorageTraits> AnalysisManager<Traits> {
     /// This does not trigger any passes to be re-run, it merely marks them as invalid
     /// which will cause a re-run if they are later requested through [`Self::get`].
     fn invalidate(&mut self, ir: &Traits::IR, preserved: &PreservedAnalyses) {
-        for (key, pass) in self.passes.iter() {
+        for (key, pass) in self.passes.iter_mut() {
             // if the pass is preserved explicitly, we do nothing (and in debug
             // mode, we make sure that all the analyses depended on by that analysis
             // are also preserved). otherwise, we invalidate it
             if !preserved.is_preserved(self.pass_to_id[key]) {
+                // this is a no-op for the vast majority of passes,
+                // but for managers this delegates invalidation down the chain
+                pass.get_mut().invalidate(ir, preserved);
+
                 let result_key = Traits::key_from(ir, key);
                 let slot = self
                     .results
@@ -442,6 +445,18 @@ impl<Traits: StorageTraits> AnalysisManager<Traits> {
                 inner.as_ref().unwrap().downcast_ref().unwrap()
             })),
             None => None,
+        }
+    }
+
+    fn initialize_for_ir(&mut self, ir: &Traits::IR) {
+        // the "FakeFunctionAnalysis"/"FakeModuleAnalysis" pass is effectively a sentinel to check
+        // if we've initialized our result state or not.
+        let key = Traits::key_from(ir, Pass(0));
+
+        if !self.results.contains_key(&key) {
+            for pass in self.passes.keys() {
+                self.initialize(ir, pass);
+            }
         }
     }
 }
@@ -564,9 +579,23 @@ where
     }
 }
 
+struct FakeFunctionAnalysis;
+
+impl FunctionAnalysisPass for FakeFunctionAnalysis {
+    type Result = ();
+
+    fn expects_preserved(&self) -> &'static [TypeId] {
+        &[]
+    }
+
+    fn invalidate(&mut self, _: &Function, _: &PreservedAnalyses) {}
+
+    fn run(&mut self, _: &Function, _: &FunctionAnalysisManager) -> Self::Result {}
+}
+
 /// A lazy analysis manager for a single function in SIR.
 ///
-/// Analysis passes are registered through [`Self::add_pass`], and then can be later requested
+/// Analysis passes are registered through [`Self::add_analysis`], and then can be later requested
 /// through [`Self::get`]. These are lazily recomputed as they are invalidated and requested
 /// through different passes.
 ///
@@ -583,14 +612,18 @@ pub struct FunctionAnalysisManager(AnalysisManager<FunctionStorageTraits>);
 impl FunctionAnalysisManager {
     /// Creates a new [`FunctionAnalysisManager`].
     ///
-    /// This manager has no analyses registered, they need to be added with [`Self::add_pass`]
+    /// This manager has no analyses registered, they need to be added with [`Self::add_analysis`]
     /// before they can be used by transform passes.
     #[inline]
     pub fn new() -> Self {
-        Self(AnalysisManager::new())
+        let mut am = AnalysisManager::new();
+
+        am.add_analysis(FakeFunctionAnalysis);
+
+        Self(am)
     }
 
-    /// Invalidates a set of analyses for a given function.
+    /// Invalidates a set of analyses for a given function.`
     ///
     /// Any analysis not explicitly marked to be preserved in `preserved` is
     /// considered to be invalidated.
@@ -604,14 +637,23 @@ impl FunctionAnalysisManager {
     ///
     /// You cannot use `T` in any of the other methods in this type without
     /// having called this one with the same `T` first, or else you'll get a panic.
-    pub fn add_pass<T: FunctionAnalysisPass>(&mut self, pass: T) {
-        self.0.add_pass(pass)
+    pub fn add_analysis<T: FunctionAnalysisPass>(&mut self, pass: T) {
+        self.0.add_analysis(pass)
     }
 
     /// Lazily gets the result of an analysis. If the analysis has been invalidated,
     /// the result is re-computed, cached, and then returned.
     pub fn get<T: FunctionAnalysisPass>(&self, ir: &Function) -> Ref<'_, T::Result> {
         self.0.get::<T>(ir)
+    }
+
+    /// Initializes the analysis manager for a given bit of IR.
+    ///
+    /// This must be called at least once before [`Self::get`] is called for
+    /// a given unit of IR, or the manager will panic.
+    #[inline]
+    pub fn initialize_for_ir(&mut self, ir: &Function) {
+        self.0.initialize_for_ir(ir);
     }
 }
 
@@ -621,9 +663,21 @@ impl Default for FunctionAnalysisManager {
     }
 }
 
+struct FakeModuleAnalysis;
+
+impl ModuleAnalysisPass for FakeModuleAnalysis {
+    type Result = ();
+
+    fn expects_preserved(&self) -> &'static [TypeId] {
+        &[]
+    }
+
+    fn run(&mut self, _: &Module, _: &ModuleAnalysisManager) -> Self::Result {}
+}
+
 /// A lazy analysis manager for a module of SIR.
 ///
-/// Analysis passes are registered through [`Self::add_pass`], and then can be later requested
+/// Analysis passes are registered through [`Self::add_analysis`], and then can be later requested
 /// through [`Self::get`]. These are lazily recomputed as they are invalidated and requested
 /// through different passes.
 ///
@@ -640,7 +694,7 @@ pub struct ModuleAnalysisManager(AnalysisManager<ModuleStorageTraits>);
 impl ModuleAnalysisManager {
     /// Creates a new [`ModuleAnalysisManager`].
     ///
-    /// This manager has no analyses registered, they need to be added with [`Self::add_pass`]
+    /// This manager has no analyses registered, they need to be added with [`Self::add_analysis`]
     /// before they can be used by transform passes.
     #[inline]
     pub fn new() -> Self {
@@ -662,8 +716,8 @@ impl ModuleAnalysisManager {
     /// You cannot use `T` in any of the other methods in this type without
     /// having called this one with the same `T` first, or else you'll get a panic.
     #[inline]
-    pub fn add_pass<T: ModuleAnalysisPass>(&mut self, pass: T) {
-        self.0.add_pass(pass)
+    pub fn add_analysis<T: ModuleAnalysisPass>(&mut self, pass: T) {
+        self.0.add_analysis(pass)
     }
 
     /// Lazily gets the result of an analysis. If the analysis has been invalidated,
@@ -671,6 +725,15 @@ impl ModuleAnalysisManager {
     #[inline]
     pub fn get<T: ModuleAnalysisPass>(&self, ir: &Module) -> Ref<'_, T::Result> {
         self.0.get::<T>(ir)
+    }
+
+    /// Initializes the analysis manager for a given bit of IR.
+    ///
+    /// This must be called at least once before [`Self::get`] is called for
+    /// a given unit of IR, or the manager will panic.
+    #[inline]
+    pub fn initialize_for_ir(&mut self, ir: &Module) {
+        self.0.initialize_for_ir(ir);
     }
 }
 

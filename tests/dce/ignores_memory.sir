@@ -1,0 +1,15 @@
+; MATCH-SECTION
+;
+; fn i32 @main(i32) {
+; entry(i32 %0):
+;   %1 = alloca i32
+;   %2 = load i32, ptr %1
+;   ret i32 %2
+; }
+;;
+fn i32 @main(i32) {
+entry(i32 %0):
+  %1 = alloca i32
+  %2 = load i32, ptr %1
+  ret i32 %2
+}

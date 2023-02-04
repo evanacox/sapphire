@@ -8,13 +8,11 @@
 //                                                                           //
 //======---------------------------------------------------------------======//
 
+use smallvec::SmallVec;
+
 /// Models a type that can be traversed in a tree-like fashion. This is
 /// intended for debug APIs / passes that deal in human-readable trees.
-///
-/// This is **not** for anything that is actually in the hot path of any
-/// compiler passes, this is meant for human-facing APIs. What this means
-/// is that it may be extremely slow.
-pub trait IntoTree<'a> {
+pub trait IntoTree<'a, const N: usize> {
     /// The node type of the tree
     type Node: Copy;
 
@@ -22,7 +20,7 @@ pub trait IntoTree<'a> {
     fn root(&'a self) -> Self::Node;
 
     /// Returns the list of children that a given node has
-    fn children(&'a self, node: Self::Node) -> Vec<Self::Node>;
+    fn children(&'a self, node: Self::Node) -> SmallVec<[Self::Node; N]>;
 }
 
 /// Prints a tree in a consistent format.
@@ -37,11 +35,11 @@ pub trait IntoTree<'a> {
 /// └── child 2
 ///     └── grandchild 3
 /// ```
-pub fn stringify_tree<'a, N, T, F>(tree: &'a T, mut stringify: F) -> String
+pub fn stringify_tree<'a, U, T, F, const N: usize>(tree: &'a T, mut stringify: F) -> String
 where
-    N: Copy,
-    T: IntoTree<'a, Node = N>,
-    F: FnMut(N) -> String,
+    U: Copy,
+    T: IntoTree<'a, N, Node = U>,
+    F: FnMut(U) -> String,
 {
     let mut result = String::default();
 
@@ -50,16 +48,16 @@ where
     result
 }
 
-fn stringify_tree_recursive<'a, N, T, F>(
+fn stringify_tree_recursive<'a, U, T, F, const N: usize>(
     out: &mut String,
     prefix: &str,
     curr: T::Node,
     tree: &'a T,
     stringify: &mut F,
 ) where
-    N: Copy,
-    T: IntoTree<'a, Node = N>,
-    F: FnMut(N) -> String,
+    U: Copy,
+    T: IntoTree<'a, N, Node = U>,
+    F: FnMut(U) -> String,
 {
     let children = tree.children(curr);
 
@@ -97,6 +95,7 @@ fn stringify_tree_recursive<'a, N, T, F>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use smallvec::smallvec;
 
     #[derive(Clone)]
     enum BinaryTree {
@@ -109,18 +108,18 @@ mod tests {
         curr: &'b BinaryTree,
     }
 
-    impl<'a> IntoTree<'a> for BinaryTree {
+    impl<'a> IntoTree<'a, 2> for BinaryTree {
         type Node = BinaryTreeIter<'a>;
 
         fn root(&'a self) -> Self::Node {
             Self::Node { curr: self }
         }
 
-        fn children(&'a self, node: Self::Node) -> Vec<Self::Node> {
+        fn children(&'a self, node: Self::Node) -> SmallVec<[Self::Node; 2]> {
             match node.curr {
-                BinaryTree::Leaf(_) => Vec::default(),
+                BinaryTree::Leaf(_) => SmallVec::default(),
                 BinaryTree::Tree(_, lhs, rhs) => {
-                    vec![BinaryTreeIter { curr: lhs }, BinaryTreeIter { curr: rhs }]
+                    smallvec![BinaryTreeIter { curr: lhs }, BinaryTreeIter { curr: rhs }]
                 }
             }
         }

@@ -302,7 +302,7 @@ impl Layout {
 
     /// Checks if an instruction is currently inside the layout
     pub fn is_inst_inserted(&self, inst: Inst) -> bool {
-        self.nodes.contains(inst)
+        self.inst_blocks.contains(inst)
     }
 
     /// Gets an iterator over the blocks of the layout.

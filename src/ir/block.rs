@@ -66,4 +66,9 @@ impl BasicBlock {
     pub(in crate::ir) fn append_param(&mut self, val: Value) {
         self.data.push(val);
     }
+
+    pub(in crate::ir) fn remove_param(&mut self, val: Value) {
+        self.data
+            .remove(self.data.iter().position(|v| *v == val).unwrap());
+    }
 }

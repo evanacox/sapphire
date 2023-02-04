@@ -18,8 +18,20 @@
 //! but most of them are. All of them logically yield no result except
 //! the IR that exists after they run.
 
+pub mod common;
+
+mod dce;
+mod gvn;
+mod mem2reg;
 mod printers;
+mod sccp;
+mod simplify;
 mod verify;
 
+pub use dce::*;
+pub use gvn::*;
+pub use mem2reg::*;
 pub use printers::*;
+pub use sccp::*;
+pub use simplify::*;
 pub use verify::*;

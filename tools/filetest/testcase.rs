@@ -15,7 +15,6 @@ pub enum TestFailure {
     Diff { expected: String, got: String },
     Missing { check: String, full: String },
     CompileError(String),
-    Panic(String),
     LackOfCompileError,
 }
 
@@ -41,19 +40,18 @@ fn find_match_section<'data>(rest: &str) -> Check<'data> {
     let mut lines = rest.lines();
     let mut section = String::default();
 
-    assert_eq!(
-        lines.next().map(|line| line.trim_start_matches(';')),
-        Some(""),
-        "expected section to match on for MATCH-SECTION test"
-    );
+    assert_eq!(lines.next(), Some(";"));
 
     for line in lines
-        // we don't do `trim_start_matches("; ")` because an empty line `;` needs to be empty
+        // we don't do `trim_start_matches(';')` because an empty line `;` needs to be empty
         // but we also need to maintain whitespace, so we can't just do .trim_start with one space
-        .map(|line| line.trim_start_matches("; ").trim_start_matches(';'))
-        .take_while(|line| !line.is_empty())
+        .map(|line| line.trim_start_matches("; ").trim_end())
+        .take_while(|line| *line != ";;")
     {
-        section.push_str(line);
+        if line != ";" {
+            section.push_str(line);
+        }
+
         section.push('\n');
     }
 

@@ -1,0 +1,29 @@
+; MATCH-SECTION
+;
+; fn i32 @test(bool) {
+; entry(bool %cond):
+;   %x = iconst i32 0
+;   condbr bool %cond, a, b
+;
+; a:
+;   br b
+;
+; b:
+;   ret i32 %x
+; }
+;;
+fn i32 @test(bool) {
+entry(bool %cond):
+  %x = iconst i32 0
+  %y = iconst i32 1
+  %z = btoi i32, bool %cond
+  condbr bool %cond, a(i32 %y), b(i32 %z)
+
+a(i32 %a):
+  %b = iconst i32 3
+  %c = iconst i32 4
+  br b(i32 %a)
+
+b(i32 %d):
+  ret i32 %x
+}

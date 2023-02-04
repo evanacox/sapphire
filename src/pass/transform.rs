@@ -21,7 +21,7 @@ pub trait ModuleTransformPass {
     /// This function is expected to act as-if it was pure, i.e. calling the same
     /// pass multiple times on the same IR should produce equivalent IR each time
     /// and should return the same preserved analyses each time.
-    fn run(&mut self, module: &mut Module, am: &ModuleAnalysisManager) -> PreservedAnalyses;
+    fn run(&mut self, module: &mut Module, am: &mut ModuleAnalysisManager) -> PreservedAnalyses;
 }
 
 /// Defines a transformation over a single SIR function.
@@ -34,5 +34,5 @@ pub trait FunctionTransformPass {
     /// This function is expected to act as-if it was pure, i.e. calling the same
     /// pass multiple times on the same IR should produce equivalent IR each time
     /// and should return the same preserved analyses each time.
-    fn run(&mut self, func: &mut Function, am: &FunctionAnalysisManager) -> PreservedAnalyses;
+    fn run(&mut self, func: &mut Function, am: &mut FunctionAnalysisManager) -> PreservedAnalyses;
 }

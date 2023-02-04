@@ -11,13 +11,15 @@
 use crate::subtest::{Subtest, TestResult};
 use sapphire::analysis::{ControlFlowGraph, DominatorTree};
 use sapphire::ir::Block;
-use sapphire::utility;
+use sapphire::{transforms, utility};
 
 fn domtree_test(name: &str, contents: &str) -> TestResult {
     let module = match sapphire::parse_sir(name, contents) {
         Ok(module) => module,
         Err(e) => return TestResult::CompileError(format!("{e}")),
     };
+
+    transforms::verify_module_panic(&module);
 
     let mut result = String::default();
 

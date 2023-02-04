@@ -9,6 +9,7 @@
 //======---------------------------------------------------------------======//
 
 use crate::ir::*;
+use crate::utility::Str;
 
 /// Models the position that the cursor is "pointing at."
 ///
@@ -123,6 +124,16 @@ pub trait Cursor: Sized {
             .and_then(|inst| self.dfg().branch_info(inst))
     }
 
+    /// Gets the debuginfo associated with the current instruction
+    fn current_inst_dbg(&self) -> Option<DebugInfo> {
+        self.current_inst().map(|inst| self.dfg().inst_debug(inst))
+    }
+
+    /// Moves the position to `Nothing`.
+    fn goto_function_begin(&mut self) {
+        self.set_pos(CursorPos::Nothing);
+    }
+
     /// Moves the position to `Before(block)`.
     fn goto_before(&mut self, block: Block) {
         debug_assert!(self.layout().is_block_inserted(block));
@@ -186,34 +197,257 @@ pub trait Cursor: Sized {
     /// before the block, this is the first instruction. If it points after, this does
     /// nothing. If it points at nothing, this does nothing.
     fn next_inst(&mut self) -> Option<Inst> {
-        let block_and_inst = match self.pos() {
-            CursorPos::Nothing | CursorPos::After(_) => None,
-            CursorPos::At(block, inst) => self.layout().inst_next(inst).map(|inst| (block, inst)),
-            CursorPos::Before(block) => self
-                .def()
-                .layout
-                .block_first_inst(block)
-                .map(|inst| (block, inst)),
+        let (maybe_inst, inst) = match self.pos() {
+            CursorPos::Nothing | CursorPos::After(_) => (self.pos(), None),
+            CursorPos::At(block, inst) => match self.layout().inst_next(inst) {
+                Some(next) => (CursorPos::At(block, next), Some(next)),
+                None => (CursorPos::After(block), None),
+            },
+            CursorPos::Before(block) => match self.layout().block_first_inst(block) {
+                Some(first) => (CursorPos::At(block, first), Some(first)),
+                None => (CursorPos::After(block), None),
+            },
         };
 
-        move_to_inst_internal(self, block_and_inst)
+        self.set_pos(maybe_inst);
+
+        inst
     }
 
     /// Moves the cursor to the previous instruction in the function. If the cursor points
     /// after the block, this is the last instruction. If it points before, this does
     /// nothing. If it points at nothing, this does nothing.
     fn prev_inst(&mut self) -> Option<Inst> {
-        let block_and_inst = match self.pos() {
-            CursorPos::Nothing | CursorPos::Before(_) => None,
-            CursorPos::At(block, inst) => self.layout().inst_prev(inst).map(|inst| (block, inst)),
-            CursorPos::After(block) => self
-                .def()
-                .layout
-                .block_last_inst(block)
-                .map(|inst| (block, inst)),
+        let (maybe_inst, inst) = match self.pos() {
+            CursorPos::Nothing | CursorPos::Before(_) => (self.pos(), None),
+            CursorPos::At(block, inst) => match self.layout().inst_prev(inst) {
+                Some(next) => (CursorPos::At(block, next), Some(next)),
+                None => (CursorPos::Before(block), None),
+            },
+            CursorPos::After(block) => match self.layout().block_last_inst(block) {
+                Some(first) => (CursorPos::At(block, first), Some(first)),
+                None => (CursorPos::Before(block), None),
+            },
         };
 
-        move_to_inst_internal(self, block_and_inst)
+        self.set_pos(maybe_inst);
+
+        inst
+    }
+
+    /// Converts an [`Inst`] into a [`Value`] that refers to the result
+    /// of the instruction if possible.
+    ///
+    /// Not all instructions actually yield results, those will return `None`
+    fn inst_to_result(&self, inst: Inst) -> Option<Value> {
+        self.def().dfg.inst_to_result(inst)
+    }
+
+    /// Converts a [`Value`] into an [`Inst`] that yields that value, if possible.
+    ///
+    /// A block param has no associated inst, that will return `None`.
+    fn value_to_inst(&self, val: Value) -> Option<Inst> {
+        self.def().dfg.value_to_inst(val)
+    }
+
+    /// Checks if a given block is the entry block to the function
+    fn is_entry_block(&self, block: Block) -> bool {
+        self.def().layout.entry_block() == Some(block)
+    }
+
+    /// Gets the entry block of the function. Unless no blocks have been
+    /// appended to the function, this will be `Some`.
+    fn entry_block(&self) -> Option<Block> {
+        self.def().layout.entry_block()
+    }
+
+    /// Gets the type of a value that was previously emitted by the builder.
+    fn ty(&self, value: Value) -> Type {
+        self.def().dfg.ty(value)
+    }
+
+    /// Gets the name of a block that has been inserted into the function
+    fn block_name(&self, block: Block) -> Str {
+        debug_assert!(self.def().layout.is_block_inserted(block));
+
+        self.def().dfg.block(block).name()
+    }
+
+    /// Gets the block parameters of a given block.
+    fn block_params(&self, block: Block) -> &[Value] {
+        debug_assert!(self.def().layout.is_block_inserted(block));
+
+        self.def().dfg.block(block).params()
+    }
+
+    /// Gets the definition of a given value
+    fn value_def(&self, value: Value) -> ValueDef {
+        self.def().dfg.value_def(value)
+    }
+
+    /// Gets the data defining a given instruction
+    fn inst_data(&self, inst: Inst) -> &InstData {
+        self.def().dfg.data(inst)
+    }
+
+    /// Gets the block that an instruction is defined in
+    fn inst_block(&self, inst: Inst) -> Block {
+        self.layout().inst_block(inst)
+    }
+
+    /// If the instruction given is a branch instruction, returns the potential
+    /// branch targets.
+    ///
+    /// Note that this does not care about if they are actually *reachable* targets,
+    /// this cares about if the instruction mentions them or not. `condbr false a, b` would
+    /// return `a` and `b` here.
+    fn branch_info(&self, inst: Inst) -> Option<&[BlockWithParams]> {
+        self.dfg().branch_info(inst)
+    }
+
+    /// Returns the debug information for a given instruction
+    fn inst_debug(&self, inst: Inst) -> DebugInfo {
+        self.dfg().inst_debug(inst)
+    }
+
+    /// Returns the debug information for a given instruction
+    fn val_debug(&self, val: Value) -> DebugInfo {
+        self.dfg().debug(val)
+    }
+}
+
+/// A builder that replaces an instruction with a new one
+pub struct ReplaceBuilder<'b> {
+    def: &'b mut FunctionDefinition,
+    pos: Inst,
+}
+
+impl<'b> InstBuilder<'b> for ReplaceBuilder<'b> {
+    fn dfg(&self) -> &DataFlowGraph {
+        &self.def.dfg
+    }
+
+    fn build(self, data: InstData, debug: DebugInfo) -> (Inst, Option<Value>) {
+        debug_assert_eq!(
+            self.def.dfg.data(self.pos).result_ty(),
+            data.result_ty(),
+            "cannot replace inst with inst of different result"
+        );
+
+        self.def.dfg.replace_inst(self.pos, data, debug)
+    }
+}
+
+/// A builder that inserts an instruction between/before other ones.
+pub struct InsertBuilder<'b> {
+    def: &'b mut FunctionDefinition,
+    pos: CursorPos,
+}
+
+impl<'b> InstBuilder<'b> for InsertBuilder<'b> {
+    fn dfg(&self) -> &DataFlowGraph {
+        &self.def.dfg
+    }
+
+    fn build(self, data: InstData, debug: DebugInfo) -> (Inst, Option<Value>) {
+        let (inst, val) = self.def.dfg.create_inst(data, debug);
+
+        match self.pos {
+            CursorPos::At(_, before) => self.def.layout.insert_inst_before(inst, before),
+            CursorPos::After(bb) => self.def.layout.append_inst(inst, bb),
+            _ => panic!("move to either At(inst) or After(block) before inserting"),
+        }
+
+        (inst, val)
+    }
+}
+
+/// A cursor with additional methods for mutating the IR.
+pub trait CursorMut: Cursor {
+    /// Gets a mutable reference to the function's definition.
+    fn def_mut(&mut self) -> &mut FunctionDefinition;
+
+    /// Returns an instruction builder that replaces the current instruction.
+    fn replace(&mut self) -> ReplaceBuilder<'_> {
+        let pos = self.pos();
+
+        ReplaceBuilder {
+            def: self.def_mut(),
+            pos: match pos {
+                CursorPos::At(_, inst) => inst,
+                _ => panic!("move cursor to At(inst) before replacing"),
+            },
+        }
+    }
+
+    /// Allows an instruction to be inserted before the current one being pointed at.
+    ///
+    /// If this points at `At(inst)`, an instruction is inserted before `inst`. If
+    /// this is pointing at `After(bb)`, an instruction is appended. Either way, the cursor
+    /// is not moved, so repeated [`Self::insert`] calls make the instructions appear
+    /// in the same order in the program.
+    fn insert(&mut self) -> InsertBuilder<'_> {
+        let pos = self.pos();
+
+        InsertBuilder {
+            def: self.def_mut(),
+            pos,
+        }
+    }
+
+    /// Replaces any uses of `original` in the function with `new`.
+    fn replace_uses_with(&mut self, original: Value, new: Value) {
+        self.def_mut().dfg.replace_uses_with(original, new)
+    }
+
+    /// Removes the current instruction and leaves the cursor pointing at the instruction
+    /// immediately following the one that was removed.
+    ///
+    /// Returns the instruction that was removed.
+    fn remove_inst(&mut self) -> Inst {
+        let inst = self
+            .current_inst()
+            .expect("must be pointing at inst to remove");
+
+        self.next_inst();
+        self.def_mut().layout.remove_inst(inst);
+
+        inst
+    }
+
+    /// Removes the current instruction and leaves the cursor pointing at the instruction
+    /// immediately before the one that was removed.
+    ///
+    /// Returns the instruction that was removed.
+    fn remove_inst_and_move_back(&mut self) -> Inst {
+        let inst = self
+            .current_inst()
+            .expect("must be pointing at inst to remove");
+
+        self.prev_inst();
+        self.def_mut().layout.remove_inst(inst);
+
+        inst
+    }
+
+    /// Removes a block parameter from a given block.
+    fn remove_block_param(&mut self, block: Block, param: Value) {
+        debug_assert!(self.layout().is_block_inserted(block));
+        debug_assert!(matches!(self.value_def(param), ValueDef::Param(bb, _) if bb == block));
+
+        self.def_mut().dfg.remove_block_param(block, param);
+    }
+
+    /// Rewrites the arguments of a given branch to match `new`
+    fn rewrite_branch_args(&mut self, branch: Inst, target: Block, new: &[Value]) {
+        self.def_mut().dfg.rewrite_branch_args(branch, target, new)
+    }
+
+    /// Rewrites a branch to `target` to have `new` as the `index`th argument
+    fn replace_branch_arg(&mut self, branch: Inst, target: Block, index: usize, new: Value) {
+        self.def_mut()
+            .dfg
+            .replace_branch_arg(branch, target, index, new)
     }
 }
 
@@ -252,6 +486,37 @@ impl<'f> FuncView<'f> {
 
 /// Similar to [`FuncBuilder`] but for in-place modification of functions.
 pub struct FuncCursor<'f> {
-    func: &'f mut Function,
+    /// The function being moved over, public so it can be re-borrowed.
+    pub func: &'f mut Function,
     pos: CursorPos,
+}
+
+impl<'f> FuncCursor<'f> {
+    /// Creates a [`FuncCursor`] that allows the given function to be modified.
+    pub fn over(func: &'f mut Function) -> Self {
+        Self {
+            func,
+            pos: CursorPos::Nothing,
+        }
+    }
+}
+
+impl<'f> Cursor for FuncCursor<'f> {
+    fn pos(&self) -> CursorPos {
+        self.pos
+    }
+
+    fn set_pos(&mut self, pos: CursorPos) {
+        self.pos = pos;
+    }
+
+    fn def(&self) -> &FunctionDefinition {
+        self.func.definition().unwrap()
+    }
+}
+
+impl<'f> CursorMut for FuncCursor<'f> {
+    fn def_mut(&mut self) -> &mut FunctionDefinition {
+        self.func.definition_mut().unwrap()
+    }
 }

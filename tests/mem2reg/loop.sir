@@ -1,0 +1,79 @@
+; MATCH-SECTION
+;
+; fn i32 @test(i32) {
+; entry(i32 %b):
+;   %0 = iconst i32 4
+;   %1 = iconst i32 5
+;   br loop.header(i32 %0, i32 %1)
+;
+; loop.header(i32 %2, i32 %3):
+;   %4 = iconst i32 3
+;   %5 = icmp ne i32 %3, %4
+;   condbr bool %5, loop.body, exit
+;
+; loop.body:
+;   %6 = iconst i32 0
+;   %7 = icmp sgt i32 %b, %6
+;   condbr bool %7, a, b
+;
+; a:
+;   %8 = iadd i32 %2, %b
+;   br c(i32 %8)
+;
+; b:
+;   %9 = isub i32 %2, %b
+;   br c(i32 %9)
+;
+; c(i32 %10):
+;   %11 = iconst i32 1
+;   %12 = iadd i32 %3, %11
+;   br loop.header(i32 %10, i32 %12)
+;
+; exit:
+;   ret i32 %2
+; }
+;;
+fn i32 @test(i32) {
+entry(i32 %b):
+    %0 = alloca i32
+    %1 = alloca i32
+    %2 = iconst i32 4
+    %3 = iconst i32 5
+    store i32 %2, ptr %0
+    store i32 %3, ptr %1
+    br loop.header
+
+loop.header:
+    %4 = load i32, ptr %1
+    %5 = iconst i32 3
+    %6 = icmp ne i32 %4, %5
+    condbr bool %6, loop.body, exit
+
+loop.body:
+    %7 = iconst i32 0
+    %8 = icmp sgt i32 %b, %7
+    condbr bool %8, a, b
+
+a:
+    %9 = load i32, ptr %0
+    %10 = iadd i32 %9, %b
+    store i32 %10, ptr %0
+    br c
+
+b:
+    %11 = load i32, ptr %0
+    %12 = isub i32 %11, %b
+    store i32 %12, ptr %0
+    br c
+
+c:
+    %13 = load i32, ptr %1
+    %14 = iconst i32 1
+    %15 = iadd i32 %13, %14
+    store i32 %15, ptr %1
+    br loop.header
+
+exit:
+    %16 = load i32, ptr %0
+    ret i32 %16
+}

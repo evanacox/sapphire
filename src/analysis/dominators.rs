@@ -34,7 +34,7 @@ pub struct DominatorTree {
     // maps B -> idom(B) for given block B. "tree" structure comes from going farther
     // up the tree, e.g. tree[idom(b)].
     tree: SecondaryMap<Block, Block>,
-    // A valid postorder of the basic blocks in the control-flow graph
+    // A valid postorder of the basic blocks in the control-flow graph.
     postorder: Vec<Block>,
 }
 
@@ -109,17 +109,29 @@ impl DominatorTree {
     pub fn reverse_postorder(&self) -> impl Iterator<Item = Block> + '_ {
         self.postorder().iter().copied().rev()
     }
+
+    /// Walks over the **dominator tree** in DFS preorder. This is only
+    /// here for use in the `mem2reg` pass right now (as this is required
+    /// for the correctness of the renaming algorithm).
+    pub fn compute_tree_dfs_preorder(&self) -> Vec<Block> {
+        compute_domtree_dfs_preorder(self.root(), &self.tree)
+    }
+
+    /// Checks if a block is reachable from the entry node
+    pub fn is_reachable(&self, block: Block) -> bool {
+        self.tree.contains(block)
+    }
 }
 
-impl IntoTree<'_> for DominatorTree {
+impl IntoTree<'_, 12> for DominatorTree {
     type Node = Block;
 
     fn root(&self) -> Self::Node {
         self.root()
     }
 
-    fn children(&self, node: Self::Node) -> Vec<Self::Node> {
-        let mut result: Vec<Block> = self
+    fn children(&self, node: Self::Node) -> SmallVec<[Self::Node; 12]> {
+        let mut result: SmallVec<[Block; 12]> = self
             .tree
             .iter()
             .filter(|(_, idom)| **idom == node)
@@ -150,6 +162,9 @@ impl FunctionAnalysisPass for DominatorTreeAnalysis {
 }
 
 /// Models the dominance frontier information for a function.
+///
+/// Note that this implementation only models dominance frontier info for the reachable
+/// nodes in the graph.
 ///
 /// The dominance frontier effectively models the "join points" of the program,
 /// a block's dominance frontier is the set of nodes directly outside of the
@@ -192,9 +207,20 @@ impl DominanceFrontier {
             // multiple predecessors. we can't necessarily trust size_hint for
             // the correctness of the algorithm
             if let (Some(one), Some(two)) = (one, two) {
-                for pred in iter::once(one) // I apologize for my sins
+                // we need to filter out any unreachable blocks that may be preds here, consider:
+                //
+                // entry:
+                //   br a
+                // a:
+                //   br c
+                // b:
+                //   br c
+                // c:
+                //   a and b are preds, only a is reachable
+                for pred in iter::once(one) // I apologize
                     .chain(iter::once(two))
                     .chain(preds)
+                    .filter(|pred| domtree.is_reachable(*pred))
                 {
                     let mut runner = pred;
 
@@ -223,6 +249,24 @@ impl DominanceFrontier {
     /// of dominance.
     pub fn frontier(&self, block: Block) -> &[Block] {
         &self.frontier[block]
+    }
+}
+
+/// Wrapper analysis that generates a [`DominanceFrontier`].
+pub struct DominanceFrontierAnalysis;
+
+impl FunctionAnalysisPass for DominanceFrontierAnalysis {
+    type Result = DominanceFrontier;
+
+    fn expects_preserved(&self) -> &'static [TypeId] {
+        analysis_preserved!(ControlFlowGraphAnalysis)
+    }
+
+    fn run(&mut self, func: &Function, am: &FunctionAnalysisManager) -> Self::Result {
+        let cfg = am.get::<ControlFlowGraphAnalysis>(func);
+        let domtree = am.get::<DominatorTreeAnalysis>(func);
+
+        DominanceFrontier::compute(&cfg, &domtree)
     }
 }
 
@@ -280,6 +324,28 @@ fn compute_po_recursive(
     }
 
     order.push(curr);
+}
+
+fn compute_domtree_dfs_preorder(root: Block, tree: &SecondaryMap<Block, Block>) -> Vec<Block> {
+    let mut out = Vec::default();
+
+    compute_domtree_dfs_preorder_recursive(root, tree, &mut out);
+
+    out
+}
+
+fn compute_domtree_dfs_preorder_recursive(
+    curr: Block,
+    tree: &SecondaryMap<Block, Block>,
+    out: &mut Vec<Block>,
+) {
+    out.push(curr);
+
+    // unfortunately we optimize for the child -> idom case, not the idom -> child case.
+    // in most situations this is a good call, but here it is not
+    for (child, _) in tree.iter().filter(|(_, idom)| **idom == curr) {
+        compute_domtree_dfs_preorder_recursive(child, tree, out);
+    }
 }
 
 fn intersect(
@@ -974,5 +1040,99 @@ mod tests {
         assert_eq!(df.frontier(bb6), &[bb7]);
         assert_eq!(df.frontier(bb7), &[bb3]);
         assert_eq!(df.frontier(bb8), &[bb7]);
+    }
+
+    #[test]
+    fn test_dominance_frontier2() {
+        let mut module = Module::new("test");
+        let sig_rand = SigBuilder::new().ret(Some(Type::bool())).build();
+        let rand = module.declare_function("rand", sig_rand.clone());
+        let sig = SigBuilder::new().param(Type::bool()).build();
+        let mut b = module.define_function("main", sig);
+        let rand_sig = b.import_signature(&sig_rand);
+
+        // fn bool @rand()
+        //
+        // fn void @main() {
+        // r:
+        //     %0 = call bool @rand()
+        //     br a
+        //
+        // a:
+        //     condbr bool %0, b, c
+        //
+        // b:
+        //     br d
+        //
+        // c:
+        //     condbr bool %0, d, e
+        //
+        // d:
+        //     condbr bool %0, a, e
+        //
+        // e:
+        //     ret void
+        // }
+        let bbr = b.create_block("r");
+        let bba = b.create_block("a");
+        let bbb = b.create_block("b");
+        let bbc = b.create_block("c");
+        let bbd = b.create_block("d");
+        let bbe = b.create_block("e");
+
+        b.switch_to(bbr);
+        let v0 = b.append().call(rand, rand_sig, &[], DebugInfo::fake());
+        let v0 = b.inst_to_result(v0).unwrap();
+        b.append().br(BlockWithParams::to(bba), DebugInfo::fake());
+
+        b.switch_to(bba);
+        b.append().condbr(
+            v0,
+            BlockWithParams::to(bbb),
+            BlockWithParams::to(bbc),
+            DebugInfo::fake(),
+        );
+
+        b.switch_to(bbb);
+        b.append().br(BlockWithParams::to(bbd), DebugInfo::fake());
+
+        b.switch_to(bbc);
+        b.append().condbr(
+            v0,
+            BlockWithParams::to(bbd),
+            BlockWithParams::to(bbe),
+            DebugInfo::fake(),
+        );
+
+        b.switch_to(bbd);
+        b.append().condbr(
+            v0,
+            BlockWithParams::to(bba),
+            BlockWithParams::to(bbe),
+            DebugInfo::fake(),
+        );
+
+        b.switch_to(bbe);
+        b.append().ret_void(DebugInfo::fake());
+
+        let func = b.define();
+        let main = module.function(func);
+
+        let cfg = ControlFlowGraph::compute(main);
+        let domtree = DominatorTree::compute(main, &cfg);
+        let df = DominanceFrontier::compute(&cfg, &domtree);
+
+        let mut bbc_df: Vec<Block> = df.frontier(bbc).to_vec();
+        let mut bbd_df: Vec<Block> = df.frontier(bbd).to_vec();
+
+        bbc_df.sort();
+        bbd_df.sort();
+
+        assert_eq!(df.frontier(bbr), &[]);
+        assert_eq!(df.frontier(bba), &[bba]);
+        assert_eq!(df.frontier(bbb), &[bbd]);
+        assert_eq!(&bbc_df, &[bbd, bbe]);
+        assert_eq!(&bbd_df, &[bba, bbe]);
+        assert_eq!(df.frontier(bbe), &[]);
     }
 }

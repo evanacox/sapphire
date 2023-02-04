@@ -22,7 +22,7 @@ use std::cmp::Ordering;
 pub struct VerifyModulePass;
 
 impl ModuleTransformPass for VerifyModulePass {
-    fn run(&mut self, module: &mut Module, _: &ModuleAnalysisManager) -> PreservedAnalyses {
+    fn run(&mut self, module: &mut Module, _: &mut ModuleAnalysisManager) -> PreservedAnalyses {
         verify_module_panic(module);
 
         PreservedAnalyses::all()
@@ -315,6 +315,16 @@ impl<'m> SIRVisitor<'m> for Verifier<'m> {
                         inst,
                         "instruction cannot use itself as operand"
                     );
+
+                    if !def.layout.is_inst_inserted(i) {
+                        verify_assert!(
+                            self,
+                            def.dfg.inst_debug(inst),
+                            def.layout.is_inst_inserted(i),
+                            "instruction cannot use result of non-inserted instruction"
+                        );
+                        return;
+                    }
 
                     def.layout.inst_block(i)
                 }
