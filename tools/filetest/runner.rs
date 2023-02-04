@@ -73,6 +73,8 @@ pub fn run_subtest(name: &str, jobs: Option<usize>) -> io::Result<()> {
     match name {
         "parse" => run_tests(&SUBTESTS[0..1], &mut pool),
         "domtree" => run_tests(&SUBTESTS[1..2], &mut pool),
+        "dce" => run_tests(&SUBTESTS[2..3], &mut pool),
+        "mem2reg" => run_tests(&SUBTESTS[3..4], &mut pool),
         _ => unreachable!(),
     }
 }

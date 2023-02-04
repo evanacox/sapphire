@@ -64,3 +64,13 @@ fn test_parse() {
 fn test_domtree() {
     assert!(matches!(run_subtest("domtree", Some(1)), Ok(())))
 }
+
+#[test]
+fn test_mem2reg() {
+    assert!(matches!(run_subtest("mem2reg", Some(1)), Ok(())));
+}
+
+#[test]
+fn test_dce() {
+    assert!(matches!(run_subtest("dce", Some(1)), Ok(())));
+}

@@ -26,8 +26,11 @@ fn dce(name: &str, content: &str) -> TestResult {
             let mut mam = ModuleAnalysisManager::default();
             mam.add_analysis(FunctionAnalysisManagerModuleProxy::wrap(fam));
 
+            let mut fpm = FunctionPassManager::new();
+            fpm.add_pass(DeadCodeEliminationPass);
+
             let mut mpm = ModulePassManager::new();
-            mpm.add_pass(FunctionToModulePassAdapter::adapt(DeadCodeEliminationPass));
+            mpm.add_pass(FunctionToModulePassAdapter::adapt(fpm));
 
             mpm.run(&mut module, &mut mam);
 
