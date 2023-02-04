@@ -316,6 +316,16 @@ impl<'m> SIRVisitor<'m> for Verifier<'m> {
                         "instruction cannot use itself as operand"
                     );
 
+                    if !def.layout.is_inst_inserted(i) {
+                        verify_assert!(
+                            self,
+                            def.dfg.inst_debug(inst),
+                            def.layout.is_inst_inserted(i),
+                            "instruction cannot use result of non-inserted instruction"
+                        );
+                        return;
+                    }
+
                     def.layout.inst_block(i)
                 }
                 ValueDef::Param(bb, _) => bb,
