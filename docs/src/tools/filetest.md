@@ -88,8 +88,11 @@ entry(i32 %argc, ptr %argv):
 ### `MATCH-SECTION`
 
 This directive allows defining an exact textual structure that should appear somewhere in the output. After
-the `MATCH-SECTION` directive, an empty `;` line denotes the beginning and the end of the section to
-look for in the output.
+the `MATCH-SECTION` directive, an `;;` line denotes the end of the section to look for in the output, and
+the first line after is expected to be an empty `;` line.
+
+> Note: While a bit odd, this makes it easier to read the test cases and allows blank lines to be
+> part of the tests.
 
 ```llvm
 ; MATCH-SECTION
@@ -98,7 +101,7 @@ look for in the output.
 ; entry:
 ;   ret void
 ; }
-;
+;;
 fn void @test() {
 entry:
   ret void
