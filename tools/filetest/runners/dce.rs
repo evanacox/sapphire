@@ -9,7 +9,6 @@
 //======---------------------------------------------------------------======//
 
 use crate::subtest::{Subtest, TestResult};
-use sapphire::analysis;
 use sapphire::analysis::*;
 use sapphire::pass::*;
 use sapphire::transforms;
@@ -18,6 +17,8 @@ use sapphire::transforms::DeadCodeEliminationPass;
 fn dce(name: &str, content: &str) -> TestResult {
     match sapphire::parse_sir(name, content) {
         Ok(mut module) => {
+            transforms::verify_module_panic(&module);
+
             let mut fam = FunctionAnalysisManager::default();
             fam.add_analysis(ControlFlowGraphAnalysis);
             fam.add_analysis(DominatorTreeAnalysis);
