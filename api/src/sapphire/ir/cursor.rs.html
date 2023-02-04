@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `src/ir/cursor.rs`."><meta name="keywords" content="rust, rustlang, rust-lang"><title>cursor.rs - source</title><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/SourceSerif4-Regular-1f7d512b176f0f72.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/FiraSans-Regular-018c141bf0843ffd.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/FiraSans-Medium-8f9a781e4970d388.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/SourceSerif4-Bold-124a1ca42af929b6.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2"><link rel="stylesheet" href="../../../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../../../static.files/rustdoc-14bb2392d96a38da.css" id="mainThemeStyle"><link rel="stylesheet" id="themeStyle" href="../../../static.files/light-5f7299aa2b503fb1.css"><link rel="stylesheet" disabled href="../../../static.files/dark-dfb18ef8114bb428.css"><link rel="stylesheet" disabled href="../../../static.files/ayu-4047a6aaddd3789d.css"><script id="default-settings" ></script><script src="../../../static.files/storage-d43fa987303ecbbb.js"></script><script defer src="../../../static.files/source-script-ea63cb6500f71309.js"></script><script defer src="../../../source-files.js"></script><script defer src="../../../static.files/main-3367e395607fafc1.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-13285aec31fa243e.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-16x16-8b506e7a72182f1c.png"><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-2c020d218678b618.svg"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.6.0/katex.min.css">
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `src/ir/cursor.rs`."><title>cursor.rs - source</title><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/SourceSerif4-Regular-46f98efaafac5295.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/FiraSans-Regular-018c141bf0843ffd.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/FiraSans-Medium-8f9a781e4970d388.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/SourceSerif4-Bold-a2c9cd1067f8b328.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2"><link rel="stylesheet" href="../../../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../../../static.files/rustdoc-505eba68f310f6bf.css" id="mainThemeStyle"><link rel="stylesheet" id="themeStyle" href="../../../static.files/light-f501212b8b071243.css"><link rel="stylesheet" disabled href="../../../static.files/dark-e92fc12c34ff89d3.css"><link rel="stylesheet" disabled href="../../../static.files/ayu-c8c85693c8a4f9db.css"><script id="default-settings" ></script><script src="../../../static.files/storage-3891ce972e3a2bf8.js"></script><script defer src="../../../static.files/source-script-ea63cb6500f71309.js"></script><script defer src="../../../source-files.js"></script><script defer src="../../../static.files/main-364b95f387bc3166.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-13285aec31fa243e.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-16x16-8b506e7a72182f1c.png"><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-2c020d218678b618.svg"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.6.0/katex.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.6.0/katex.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.6.0/contrib/auto-render.min.js"></script>
 </head><body class="rustdoc source"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"></nav><main><nav class="sub"><a class="sub-logo-container" href="../../../sapphire/index.html"><img class="rust-logo" src="../../../static.files/rust-logo-151179464ae7ed46.svg" alt="logo"></a><form class="search-form"><span></span><input class="search-input" name="search" aria-label="Run search in the documentation" autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"><div id="help-button" title="help" tabindex="-1"><a href="../../../help.html">?</a></div><div id="settings-menu" tabindex="-1"><a href="../../../settings.html" title="settings"><img width="22" height="22" alt="Change settings" src="../../../static.files/wheel-5ec35bf9ca753509.svg"></a></div></form></nav><section id="main-content" class="content"><div class="example-wrap"><pre class="src-line-numbers"><a href="#1" id="1">1</a>
@@ -258,6 +258,271 @@
 <a href="#255" id="255">255</a>
 <a href="#256" id="256">256</a>
 <a href="#257" id="257">257</a>
+<a href="#258" id="258">258</a>
+<a href="#259" id="259">259</a>
+<a href="#260" id="260">260</a>
+<a href="#261" id="261">261</a>
+<a href="#262" id="262">262</a>
+<a href="#263" id="263">263</a>
+<a href="#264" id="264">264</a>
+<a href="#265" id="265">265</a>
+<a href="#266" id="266">266</a>
+<a href="#267" id="267">267</a>
+<a href="#268" id="268">268</a>
+<a href="#269" id="269">269</a>
+<a href="#270" id="270">270</a>
+<a href="#271" id="271">271</a>
+<a href="#272" id="272">272</a>
+<a href="#273" id="273">273</a>
+<a href="#274" id="274">274</a>
+<a href="#275" id="275">275</a>
+<a href="#276" id="276">276</a>
+<a href="#277" id="277">277</a>
+<a href="#278" id="278">278</a>
+<a href="#279" id="279">279</a>
+<a href="#280" id="280">280</a>
+<a href="#281" id="281">281</a>
+<a href="#282" id="282">282</a>
+<a href="#283" id="283">283</a>
+<a href="#284" id="284">284</a>
+<a href="#285" id="285">285</a>
+<a href="#286" id="286">286</a>
+<a href="#287" id="287">287</a>
+<a href="#288" id="288">288</a>
+<a href="#289" id="289">289</a>
+<a href="#290" id="290">290</a>
+<a href="#291" id="291">291</a>
+<a href="#292" id="292">292</a>
+<a href="#293" id="293">293</a>
+<a href="#294" id="294">294</a>
+<a href="#295" id="295">295</a>
+<a href="#296" id="296">296</a>
+<a href="#297" id="297">297</a>
+<a href="#298" id="298">298</a>
+<a href="#299" id="299">299</a>
+<a href="#300" id="300">300</a>
+<a href="#301" id="301">301</a>
+<a href="#302" id="302">302</a>
+<a href="#303" id="303">303</a>
+<a href="#304" id="304">304</a>
+<a href="#305" id="305">305</a>
+<a href="#306" id="306">306</a>
+<a href="#307" id="307">307</a>
+<a href="#308" id="308">308</a>
+<a href="#309" id="309">309</a>
+<a href="#310" id="310">310</a>
+<a href="#311" id="311">311</a>
+<a href="#312" id="312">312</a>
+<a href="#313" id="313">313</a>
+<a href="#314" id="314">314</a>
+<a href="#315" id="315">315</a>
+<a href="#316" id="316">316</a>
+<a href="#317" id="317">317</a>
+<a href="#318" id="318">318</a>
+<a href="#319" id="319">319</a>
+<a href="#320" id="320">320</a>
+<a href="#321" id="321">321</a>
+<a href="#322" id="322">322</a>
+<a href="#323" id="323">323</a>
+<a href="#324" id="324">324</a>
+<a href="#325" id="325">325</a>
+<a href="#326" id="326">326</a>
+<a href="#327" id="327">327</a>
+<a href="#328" id="328">328</a>
+<a href="#329" id="329">329</a>
+<a href="#330" id="330">330</a>
+<a href="#331" id="331">331</a>
+<a href="#332" id="332">332</a>
+<a href="#333" id="333">333</a>
+<a href="#334" id="334">334</a>
+<a href="#335" id="335">335</a>
+<a href="#336" id="336">336</a>
+<a href="#337" id="337">337</a>
+<a href="#338" id="338">338</a>
+<a href="#339" id="339">339</a>
+<a href="#340" id="340">340</a>
+<a href="#341" id="341">341</a>
+<a href="#342" id="342">342</a>
+<a href="#343" id="343">343</a>
+<a href="#344" id="344">344</a>
+<a href="#345" id="345">345</a>
+<a href="#346" id="346">346</a>
+<a href="#347" id="347">347</a>
+<a href="#348" id="348">348</a>
+<a href="#349" id="349">349</a>
+<a href="#350" id="350">350</a>
+<a href="#351" id="351">351</a>
+<a href="#352" id="352">352</a>
+<a href="#353" id="353">353</a>
+<a href="#354" id="354">354</a>
+<a href="#355" id="355">355</a>
+<a href="#356" id="356">356</a>
+<a href="#357" id="357">357</a>
+<a href="#358" id="358">358</a>
+<a href="#359" id="359">359</a>
+<a href="#360" id="360">360</a>
+<a href="#361" id="361">361</a>
+<a href="#362" id="362">362</a>
+<a href="#363" id="363">363</a>
+<a href="#364" id="364">364</a>
+<a href="#365" id="365">365</a>
+<a href="#366" id="366">366</a>
+<a href="#367" id="367">367</a>
+<a href="#368" id="368">368</a>
+<a href="#369" id="369">369</a>
+<a href="#370" id="370">370</a>
+<a href="#371" id="371">371</a>
+<a href="#372" id="372">372</a>
+<a href="#373" id="373">373</a>
+<a href="#374" id="374">374</a>
+<a href="#375" id="375">375</a>
+<a href="#376" id="376">376</a>
+<a href="#377" id="377">377</a>
+<a href="#378" id="378">378</a>
+<a href="#379" id="379">379</a>
+<a href="#380" id="380">380</a>
+<a href="#381" id="381">381</a>
+<a href="#382" id="382">382</a>
+<a href="#383" id="383">383</a>
+<a href="#384" id="384">384</a>
+<a href="#385" id="385">385</a>
+<a href="#386" id="386">386</a>
+<a href="#387" id="387">387</a>
+<a href="#388" id="388">388</a>
+<a href="#389" id="389">389</a>
+<a href="#390" id="390">390</a>
+<a href="#391" id="391">391</a>
+<a href="#392" id="392">392</a>
+<a href="#393" id="393">393</a>
+<a href="#394" id="394">394</a>
+<a href="#395" id="395">395</a>
+<a href="#396" id="396">396</a>
+<a href="#397" id="397">397</a>
+<a href="#398" id="398">398</a>
+<a href="#399" id="399">399</a>
+<a href="#400" id="400">400</a>
+<a href="#401" id="401">401</a>
+<a href="#402" id="402">402</a>
+<a href="#403" id="403">403</a>
+<a href="#404" id="404">404</a>
+<a href="#405" id="405">405</a>
+<a href="#406" id="406">406</a>
+<a href="#407" id="407">407</a>
+<a href="#408" id="408">408</a>
+<a href="#409" id="409">409</a>
+<a href="#410" id="410">410</a>
+<a href="#411" id="411">411</a>
+<a href="#412" id="412">412</a>
+<a href="#413" id="413">413</a>
+<a href="#414" id="414">414</a>
+<a href="#415" id="415">415</a>
+<a href="#416" id="416">416</a>
+<a href="#417" id="417">417</a>
+<a href="#418" id="418">418</a>
+<a href="#419" id="419">419</a>
+<a href="#420" id="420">420</a>
+<a href="#421" id="421">421</a>
+<a href="#422" id="422">422</a>
+<a href="#423" id="423">423</a>
+<a href="#424" id="424">424</a>
+<a href="#425" id="425">425</a>
+<a href="#426" id="426">426</a>
+<a href="#427" id="427">427</a>
+<a href="#428" id="428">428</a>
+<a href="#429" id="429">429</a>
+<a href="#430" id="430">430</a>
+<a href="#431" id="431">431</a>
+<a href="#432" id="432">432</a>
+<a href="#433" id="433">433</a>
+<a href="#434" id="434">434</a>
+<a href="#435" id="435">435</a>
+<a href="#436" id="436">436</a>
+<a href="#437" id="437">437</a>
+<a href="#438" id="438">438</a>
+<a href="#439" id="439">439</a>
+<a href="#440" id="440">440</a>
+<a href="#441" id="441">441</a>
+<a href="#442" id="442">442</a>
+<a href="#443" id="443">443</a>
+<a href="#444" id="444">444</a>
+<a href="#445" id="445">445</a>
+<a href="#446" id="446">446</a>
+<a href="#447" id="447">447</a>
+<a href="#448" id="448">448</a>
+<a href="#449" id="449">449</a>
+<a href="#450" id="450">450</a>
+<a href="#451" id="451">451</a>
+<a href="#452" id="452">452</a>
+<a href="#453" id="453">453</a>
+<a href="#454" id="454">454</a>
+<a href="#455" id="455">455</a>
+<a href="#456" id="456">456</a>
+<a href="#457" id="457">457</a>
+<a href="#458" id="458">458</a>
+<a href="#459" id="459">459</a>
+<a href="#460" id="460">460</a>
+<a href="#461" id="461">461</a>
+<a href="#462" id="462">462</a>
+<a href="#463" id="463">463</a>
+<a href="#464" id="464">464</a>
+<a href="#465" id="465">465</a>
+<a href="#466" id="466">466</a>
+<a href="#467" id="467">467</a>
+<a href="#468" id="468">468</a>
+<a href="#469" id="469">469</a>
+<a href="#470" id="470">470</a>
+<a href="#471" id="471">471</a>
+<a href="#472" id="472">472</a>
+<a href="#473" id="473">473</a>
+<a href="#474" id="474">474</a>
+<a href="#475" id="475">475</a>
+<a href="#476" id="476">476</a>
+<a href="#477" id="477">477</a>
+<a href="#478" id="478">478</a>
+<a href="#479" id="479">479</a>
+<a href="#480" id="480">480</a>
+<a href="#481" id="481">481</a>
+<a href="#482" id="482">482</a>
+<a href="#483" id="483">483</a>
+<a href="#484" id="484">484</a>
+<a href="#485" id="485">485</a>
+<a href="#486" id="486">486</a>
+<a href="#487" id="487">487</a>
+<a href="#488" id="488">488</a>
+<a href="#489" id="489">489</a>
+<a href="#490" id="490">490</a>
+<a href="#491" id="491">491</a>
+<a href="#492" id="492">492</a>
+<a href="#493" id="493">493</a>
+<a href="#494" id="494">494</a>
+<a href="#495" id="495">495</a>
+<a href="#496" id="496">496</a>
+<a href="#497" id="497">497</a>
+<a href="#498" id="498">498</a>
+<a href="#499" id="499">499</a>
+<a href="#500" id="500">500</a>
+<a href="#501" id="501">501</a>
+<a href="#502" id="502">502</a>
+<a href="#503" id="503">503</a>
+<a href="#504" id="504">504</a>
+<a href="#505" id="505">505</a>
+<a href="#506" id="506">506</a>
+<a href="#507" id="507">507</a>
+<a href="#508" id="508">508</a>
+<a href="#509" id="509">509</a>
+<a href="#510" id="510">510</a>
+<a href="#511" id="511">511</a>
+<a href="#512" id="512">512</a>
+<a href="#513" id="513">513</a>
+<a href="#514" id="514">514</a>
+<a href="#515" id="515">515</a>
+<a href="#516" id="516">516</a>
+<a href="#517" id="517">517</a>
+<a href="#518" id="518">518</a>
+<a href="#519" id="519">519</a>
+<a href="#520" id="520">520</a>
+<a href="#521" id="521">521</a>
+<a href="#522" id="522">522</a>
 </pre><pre class="rust"><code><span class="comment">//======---------------------------------------------------------------======//
 //                                                                           //
 // Copyright 2022-2023 Evan Cox &lt;evanacox00@gmail.com&gt;. All rights reserved. //
@@ -269,6 +534,7 @@
 //======---------------------------------------------------------------======//
 
 </span><span class="kw">use </span><span class="kw">crate</span>::ir::<span class="kw-2">*</span>;
+<span class="kw">use </span><span class="kw">crate</span>::utility::Str;
 
 <span class="doccomment">/// Models the position that the cursor is &quot;pointing at.&quot;
 ///
@@ -383,6 +649,16 @@
             .and_then(|inst| <span class="self">self</span>.dfg().branch_info(inst))
     }
 
+    <span class="doccomment">/// Gets the debuginfo associated with the current instruction
+    </span><span class="kw">fn </span>current_inst_dbg(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;DebugInfo&gt; {
+        <span class="self">self</span>.current_inst().map(|inst| <span class="self">self</span>.dfg().inst_debug(inst))
+    }
+
+    <span class="doccomment">/// Moves the position to `Nothing`.
+    </span><span class="kw">fn </span>goto_function_begin(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
+        <span class="self">self</span>.set_pos(CursorPos::Nothing);
+    }
+
     <span class="doccomment">/// Moves the position to `Before(block)`.
     </span><span class="kw">fn </span>goto_before(<span class="kw-2">&amp;mut </span><span class="self">self</span>, block: Block) {
         <span class="macro">debug_assert!</span>(<span class="self">self</span>.layout().is_block_inserted(block));
@@ -446,34 +722,257 @@
     /// before the block, this is the first instruction. If it points after, this does
     /// nothing. If it points at nothing, this does nothing.
     </span><span class="kw">fn </span>next_inst(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;Inst&gt; {
-        <span class="kw">let </span>block_and_inst = <span class="kw">match </span><span class="self">self</span>.pos() {
-            CursorPos::Nothing | CursorPos::After(<span class="kw">_</span>) =&gt; <span class="prelude-val">None</span>,
-            CursorPos::At(block, inst) =&gt; <span class="self">self</span>.layout().inst_next(inst).map(|inst| (block, inst)),
-            CursorPos::Before(block) =&gt; <span class="self">self
-                </span>.def()
-                .layout
-                .block_first_inst(block)
-                .map(|inst| (block, inst)),
+        <span class="kw">let </span>(maybe_inst, inst) = <span class="kw">match </span><span class="self">self</span>.pos() {
+            CursorPos::Nothing | CursorPos::After(<span class="kw">_</span>) =&gt; (<span class="self">self</span>.pos(), <span class="prelude-val">None</span>),
+            CursorPos::At(block, inst) =&gt; <span class="kw">match </span><span class="self">self</span>.layout().inst_next(inst) {
+                <span class="prelude-val">Some</span>(next) =&gt; (CursorPos::At(block, next), <span class="prelude-val">Some</span>(next)),
+                <span class="prelude-val">None </span>=&gt; (CursorPos::After(block), <span class="prelude-val">None</span>),
+            },
+            CursorPos::Before(block) =&gt; <span class="kw">match </span><span class="self">self</span>.layout().block_first_inst(block) {
+                <span class="prelude-val">Some</span>(first) =&gt; (CursorPos::At(block, first), <span class="prelude-val">Some</span>(first)),
+                <span class="prelude-val">None </span>=&gt; (CursorPos::After(block), <span class="prelude-val">None</span>),
+            },
         };
 
-        move_to_inst_internal(<span class="self">self</span>, block_and_inst)
+        <span class="self">self</span>.set_pos(maybe_inst);
+
+        inst
     }
 
     <span class="doccomment">/// Moves the cursor to the previous instruction in the function. If the cursor points
     /// after the block, this is the last instruction. If it points before, this does
     /// nothing. If it points at nothing, this does nothing.
     </span><span class="kw">fn </span>prev_inst(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;Inst&gt; {
-        <span class="kw">let </span>block_and_inst = <span class="kw">match </span><span class="self">self</span>.pos() {
-            CursorPos::Nothing | CursorPos::Before(<span class="kw">_</span>) =&gt; <span class="prelude-val">None</span>,
-            CursorPos::At(block, inst) =&gt; <span class="self">self</span>.layout().inst_prev(inst).map(|inst| (block, inst)),
-            CursorPos::After(block) =&gt; <span class="self">self
-                </span>.def()
-                .layout
-                .block_last_inst(block)
-                .map(|inst| (block, inst)),
+        <span class="kw">let </span>(maybe_inst, inst) = <span class="kw">match </span><span class="self">self</span>.pos() {
+            CursorPos::Nothing | CursorPos::Before(<span class="kw">_</span>) =&gt; (<span class="self">self</span>.pos(), <span class="prelude-val">None</span>),
+            CursorPos::At(block, inst) =&gt; <span class="kw">match </span><span class="self">self</span>.layout().inst_prev(inst) {
+                <span class="prelude-val">Some</span>(next) =&gt; (CursorPos::At(block, next), <span class="prelude-val">Some</span>(next)),
+                <span class="prelude-val">None </span>=&gt; (CursorPos::Before(block), <span class="prelude-val">None</span>),
+            },
+            CursorPos::After(block) =&gt; <span class="kw">match </span><span class="self">self</span>.layout().block_last_inst(block) {
+                <span class="prelude-val">Some</span>(first) =&gt; (CursorPos::At(block, first), <span class="prelude-val">Some</span>(first)),
+                <span class="prelude-val">None </span>=&gt; (CursorPos::Before(block), <span class="prelude-val">None</span>),
+            },
         };
 
-        move_to_inst_internal(<span class="self">self</span>, block_and_inst)
+        <span class="self">self</span>.set_pos(maybe_inst);
+
+        inst
+    }
+
+    <span class="doccomment">/// Converts an [`Inst`] into a [`Value`] that refers to the result
+    /// of the instruction if possible.
+    ///
+    /// Not all instructions actually yield results, those will return `None`
+    </span><span class="kw">fn </span>inst_to_result(<span class="kw-2">&amp;</span><span class="self">self</span>, inst: Inst) -&gt; <span class="prelude-ty">Option</span>&lt;Value&gt; {
+        <span class="self">self</span>.def().dfg.inst_to_result(inst)
+    }
+
+    <span class="doccomment">/// Converts a [`Value`] into an [`Inst`] that yields that value, if possible.
+    ///
+    /// A block param has no associated inst, that will return `None`.
+    </span><span class="kw">fn </span>value_to_inst(<span class="kw-2">&amp;</span><span class="self">self</span>, val: Value) -&gt; <span class="prelude-ty">Option</span>&lt;Inst&gt; {
+        <span class="self">self</span>.def().dfg.value_to_inst(val)
+    }
+
+    <span class="doccomment">/// Checks if a given block is the entry block to the function
+    </span><span class="kw">fn </span>is_entry_block(<span class="kw-2">&amp;</span><span class="self">self</span>, block: Block) -&gt; bool {
+        <span class="self">self</span>.def().layout.entry_block() == <span class="prelude-val">Some</span>(block)
+    }
+
+    <span class="doccomment">/// Gets the entry block of the function. Unless no blocks have been
+    /// appended to the function, this will be `Some`.
+    </span><span class="kw">fn </span>entry_block(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;Block&gt; {
+        <span class="self">self</span>.def().layout.entry_block()
+    }
+
+    <span class="doccomment">/// Gets the type of a value that was previously emitted by the builder.
+    </span><span class="kw">fn </span>ty(<span class="kw-2">&amp;</span><span class="self">self</span>, value: Value) -&gt; Type {
+        <span class="self">self</span>.def().dfg.ty(value)
+    }
+
+    <span class="doccomment">/// Gets the name of a block that has been inserted into the function
+    </span><span class="kw">fn </span>block_name(<span class="kw-2">&amp;</span><span class="self">self</span>, block: Block) -&gt; Str {
+        <span class="macro">debug_assert!</span>(<span class="self">self</span>.def().layout.is_block_inserted(block));
+
+        <span class="self">self</span>.def().dfg.block(block).name()
+    }
+
+    <span class="doccomment">/// Gets the block parameters of a given block.
+    </span><span class="kw">fn </span>block_params(<span class="kw-2">&amp;</span><span class="self">self</span>, block: Block) -&gt; <span class="kw-2">&amp;</span>[Value] {
+        <span class="macro">debug_assert!</span>(<span class="self">self</span>.def().layout.is_block_inserted(block));
+
+        <span class="self">self</span>.def().dfg.block(block).params()
+    }
+
+    <span class="doccomment">/// Gets the definition of a given value
+    </span><span class="kw">fn </span>value_def(<span class="kw-2">&amp;</span><span class="self">self</span>, value: Value) -&gt; ValueDef {
+        <span class="self">self</span>.def().dfg.value_def(value)
+    }
+
+    <span class="doccomment">/// Gets the data defining a given instruction
+    </span><span class="kw">fn </span>inst_data(<span class="kw-2">&amp;</span><span class="self">self</span>, inst: Inst) -&gt; <span class="kw-2">&amp;</span>InstData {
+        <span class="self">self</span>.def().dfg.data(inst)
+    }
+
+    <span class="doccomment">/// Gets the block that an instruction is defined in
+    </span><span class="kw">fn </span>inst_block(<span class="kw-2">&amp;</span><span class="self">self</span>, inst: Inst) -&gt; Block {
+        <span class="self">self</span>.layout().inst_block(inst)
+    }
+
+    <span class="doccomment">/// If the instruction given is a branch instruction, returns the potential
+    /// branch targets.
+    ///
+    /// Note that this does not care about if they are actually *reachable* targets,
+    /// this cares about if the instruction mentions them or not. `condbr false a, b` would
+    /// return `a` and `b` here.
+    </span><span class="kw">fn </span>branch_info(<span class="kw-2">&amp;</span><span class="self">self</span>, inst: Inst) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>[BlockWithParams]&gt; {
+        <span class="self">self</span>.dfg().branch_info(inst)
+    }
+
+    <span class="doccomment">/// Returns the debug information for a given instruction
+    </span><span class="kw">fn </span>inst_debug(<span class="kw-2">&amp;</span><span class="self">self</span>, inst: Inst) -&gt; DebugInfo {
+        <span class="self">self</span>.dfg().inst_debug(inst)
+    }
+
+    <span class="doccomment">/// Returns the debug information for a given instruction
+    </span><span class="kw">fn </span>val_debug(<span class="kw-2">&amp;</span><span class="self">self</span>, val: Value) -&gt; DebugInfo {
+        <span class="self">self</span>.dfg().debug(val)
+    }
+}
+
+<span class="doccomment">/// A builder that replaces an instruction with a new one
+</span><span class="kw">pub struct </span>ReplaceBuilder&lt;<span class="lifetime">&#39;b</span>&gt; {
+    def: <span class="kw-2">&amp;</span><span class="lifetime">&#39;b </span><span class="kw-2">mut </span>FunctionDefinition,
+    pos: Inst,
+}
+
+<span class="kw">impl</span>&lt;<span class="lifetime">&#39;b</span>&gt; InstBuilder&lt;<span class="lifetime">&#39;b</span>&gt; <span class="kw">for </span>ReplaceBuilder&lt;<span class="lifetime">&#39;b</span>&gt; {
+    <span class="kw">fn </span>dfg(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>DataFlowGraph {
+        <span class="kw-2">&amp;</span><span class="self">self</span>.def.dfg
+    }
+
+    <span class="kw">fn </span>build(<span class="self">self</span>, data: InstData, debug: DebugInfo) -&gt; (Inst, <span class="prelude-ty">Option</span>&lt;Value&gt;) {
+        <span class="macro">debug_assert_eq!</span>(
+            <span class="self">self</span>.def.dfg.data(<span class="self">self</span>.pos).result_ty(),
+            data.result_ty(),
+            <span class="string">&quot;cannot replace inst with inst of different result&quot;
+        </span>);
+
+        <span class="self">self</span>.def.dfg.replace_inst(<span class="self">self</span>.pos, data, debug)
+    }
+}
+
+<span class="doccomment">/// A builder that inserts an instruction between/before other ones.
+</span><span class="kw">pub struct </span>InsertBuilder&lt;<span class="lifetime">&#39;b</span>&gt; {
+    def: <span class="kw-2">&amp;</span><span class="lifetime">&#39;b </span><span class="kw-2">mut </span>FunctionDefinition,
+    pos: CursorPos,
+}
+
+<span class="kw">impl</span>&lt;<span class="lifetime">&#39;b</span>&gt; InstBuilder&lt;<span class="lifetime">&#39;b</span>&gt; <span class="kw">for </span>InsertBuilder&lt;<span class="lifetime">&#39;b</span>&gt; {
+    <span class="kw">fn </span>dfg(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>DataFlowGraph {
+        <span class="kw-2">&amp;</span><span class="self">self</span>.def.dfg
+    }
+
+    <span class="kw">fn </span>build(<span class="self">self</span>, data: InstData, debug: DebugInfo) -&gt; (Inst, <span class="prelude-ty">Option</span>&lt;Value&gt;) {
+        <span class="kw">let </span>(inst, val) = <span class="self">self</span>.def.dfg.create_inst(data, debug);
+
+        <span class="kw">match </span><span class="self">self</span>.pos {
+            CursorPos::At(<span class="kw">_</span>, before) =&gt; <span class="self">self</span>.def.layout.insert_inst_before(inst, before),
+            CursorPos::After(bb) =&gt; <span class="self">self</span>.def.layout.append_inst(inst, bb),
+            <span class="kw">_ </span>=&gt; <span class="macro">panic!</span>(<span class="string">&quot;move to either At(inst) or After(block) before inserting&quot;</span>),
+        }
+
+        (inst, val)
+    }
+}
+
+<span class="doccomment">/// A cursor with additional methods for mutating the IR.
+</span><span class="kw">pub trait </span>CursorMut: Cursor {
+    <span class="doccomment">/// Gets a mutable reference to the function&#39;s definition.
+    </span><span class="kw">fn </span>def_mut(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;mut </span>FunctionDefinition;
+
+    <span class="doccomment">/// Returns an instruction builder that replaces the current instruction.
+    </span><span class="kw">fn </span>replace(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; ReplaceBuilder&lt;<span class="lifetime">&#39;_</span>&gt; {
+        <span class="kw">let </span>pos = <span class="self">self</span>.pos();
+
+        ReplaceBuilder {
+            def: <span class="self">self</span>.def_mut(),
+            pos: <span class="kw">match </span>pos {
+                CursorPos::At(<span class="kw">_</span>, inst) =&gt; inst,
+                <span class="kw">_ </span>=&gt; <span class="macro">panic!</span>(<span class="string">&quot;move cursor to At(inst) before replacing&quot;</span>),
+            },
+        }
+    }
+
+    <span class="doccomment">/// Allows an instruction to be inserted before the current one being pointed at.
+    ///
+    /// If this points at `At(inst)`, an instruction is inserted before `inst`. If
+    /// this is pointing at `After(bb)`, an instruction is appended. Either way, the cursor
+    /// is not moved, so repeated [`Self::insert`] calls make the instructions appear
+    /// in the same order in the program.
+    </span><span class="kw">fn </span>insert(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; InsertBuilder&lt;<span class="lifetime">&#39;_</span>&gt; {
+        <span class="kw">let </span>pos = <span class="self">self</span>.pos();
+
+        InsertBuilder {
+            def: <span class="self">self</span>.def_mut(),
+            pos,
+        }
+    }
+
+    <span class="doccomment">/// Replaces any uses of `original` in the function with `new`.
+    </span><span class="kw">fn </span>replace_uses_with(<span class="kw-2">&amp;mut </span><span class="self">self</span>, original: Value, new: Value) {
+        <span class="self">self</span>.def_mut().dfg.replace_uses_with(original, new)
+    }
+
+    <span class="doccomment">/// Removes the current instruction and leaves the cursor pointing at the instruction
+    /// immediately following the one that was removed.
+    ///
+    /// Returns the instruction that was removed.
+    </span><span class="kw">fn </span>remove_inst(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; Inst {
+        <span class="kw">let </span>inst = <span class="self">self
+            </span>.current_inst()
+            .expect(<span class="string">&quot;must be pointing at inst to remove&quot;</span>);
+
+        <span class="self">self</span>.next_inst();
+        <span class="self">self</span>.def_mut().layout.remove_inst(inst);
+
+        inst
+    }
+
+    <span class="doccomment">/// Removes the current instruction and leaves the cursor pointing at the instruction
+    /// immediately before the one that was removed.
+    ///
+    /// Returns the instruction that was removed.
+    </span><span class="kw">fn </span>remove_inst_and_move_back(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; Inst {
+        <span class="kw">let </span>inst = <span class="self">self
+            </span>.current_inst()
+            .expect(<span class="string">&quot;must be pointing at inst to remove&quot;</span>);
+
+        <span class="self">self</span>.prev_inst();
+        <span class="self">self</span>.def_mut().layout.remove_inst(inst);
+
+        inst
+    }
+
+    <span class="doccomment">/// Removes a block parameter from a given block.
+    </span><span class="kw">fn </span>remove_block_param(<span class="kw-2">&amp;mut </span><span class="self">self</span>, block: Block, param: Value) {
+        <span class="macro">debug_assert!</span>(<span class="self">self</span>.layout().is_block_inserted(block));
+        <span class="macro">debug_assert!</span>(<span class="macro">matches!</span>(<span class="self">self</span>.value_def(param), ValueDef::Param(bb, <span class="kw">_</span>) <span class="kw">if </span>bb == block));
+
+        <span class="self">self</span>.def_mut().dfg.remove_block_param(block, param);
+    }
+
+    <span class="doccomment">/// Rewrites the arguments of a given branch to match `new`
+    </span><span class="kw">fn </span>rewrite_branch_args(<span class="kw-2">&amp;mut </span><span class="self">self</span>, branch: Inst, target: Block, new: <span class="kw-2">&amp;</span>[Value]) {
+        <span class="self">self</span>.def_mut().dfg.rewrite_branch_args(branch, target, new)
+    }
+
+    <span class="doccomment">/// Rewrites a branch to `target` to have `new` as the `index`th argument
+    </span><span class="kw">fn </span>replace_branch_arg(<span class="kw-2">&amp;mut </span><span class="self">self</span>, branch: Inst, target: Block, index: usize, new: Value) {
+        <span class="self">self</span>.def_mut()
+            .dfg
+            .replace_branch_arg(branch, target, index, new)
     }
 }
 
@@ -512,8 +1011,39 @@
 
 <span class="doccomment">/// Similar to [`FuncBuilder`] but for in-place modification of functions.
 </span><span class="kw">pub struct </span>FuncCursor&lt;<span class="lifetime">&#39;f</span>&gt; {
-    func: <span class="kw-2">&amp;</span><span class="lifetime">&#39;f </span><span class="kw-2">mut </span>Function,
+    <span class="doccomment">/// The function being moved over, public so it can be re-borrowed.
+    </span><span class="kw">pub </span>func: <span class="kw-2">&amp;</span><span class="lifetime">&#39;f </span><span class="kw-2">mut </span>Function,
     pos: CursorPos,
+}
+
+<span class="kw">impl</span>&lt;<span class="lifetime">&#39;f</span>&gt; FuncCursor&lt;<span class="lifetime">&#39;f</span>&gt; {
+    <span class="doccomment">/// Creates a [`FuncCursor`] that allows the given function to be modified.
+    </span><span class="kw">pub fn </span>over(func: <span class="kw-2">&amp;</span><span class="lifetime">&#39;f </span><span class="kw-2">mut </span>Function) -&gt; <span class="self">Self </span>{
+        <span class="self">Self </span>{
+            func,
+            pos: CursorPos::Nothing,
+        }
+    }
+}
+
+<span class="kw">impl</span>&lt;<span class="lifetime">&#39;f</span>&gt; Cursor <span class="kw">for </span>FuncCursor&lt;<span class="lifetime">&#39;f</span>&gt; {
+    <span class="kw">fn </span>pos(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; CursorPos {
+        <span class="self">self</span>.pos
+    }
+
+    <span class="kw">fn </span>set_pos(<span class="kw-2">&amp;mut </span><span class="self">self</span>, pos: CursorPos) {
+        <span class="self">self</span>.pos = pos;
+    }
+
+    <span class="kw">fn </span>def(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>FunctionDefinition {
+        <span class="self">self</span>.func.definition().unwrap()
+    }
+}
+
+<span class="kw">impl</span>&lt;<span class="lifetime">&#39;f</span>&gt; CursorMut <span class="kw">for </span>FuncCursor&lt;<span class="lifetime">&#39;f</span>&gt; {
+    <span class="kw">fn </span>def_mut(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;mut </span>FunctionDefinition {
+        <span class="self">self</span>.func.definition_mut().unwrap()
+    }
 }
 </code></pre></div>
 </section></main><script>
@@ -526,4 +1056,4 @@ renderMathInElement(document.body, {
     ]
 });
 </script>
-<div id="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="sapphire" data-themes="" data-resource-suffix="" data-rustdoc-version="1.69.0-nightly (d7948c843 2023-01-26)" data-search-js="search-98d53477a794af0b.js" data-settings-js="settings-a43118d2dfb2799d.js" data-settings-css="settings-7c23ac01f615ce90.css" ></div></body></html>
+<div id="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="sapphire" data-themes="" data-resource-suffix="" data-rustdoc-version="1.69.0-nightly (658fad6c5 2023-02-03)" data-search-js="search-98d53477a794af0b.js" data-settings-js="settings-f0c5c39777a9a2f6.js" data-settings-css="settings-0bcba95ff279c1db.css" ></div></body></html>

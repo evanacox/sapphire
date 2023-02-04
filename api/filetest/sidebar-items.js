@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":[["main",""],["subtest",""]],"mod":[["discovery",""],["display",""],["runner",""],["runners",""],["subtest",""],["testcase",""]]};
+window.SIDEBAR_ITEMS = {"fn":[["main",""],["subtest",""]],"mod":[["discovery",""],["display",""],["runner",""],["runners",""],["subtest",""],["testcase",""]],"opaque":[["",""]]};

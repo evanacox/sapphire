@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":[["domtree",""],["flowgraph",""],["parse",""]]};
+window.SIDEBAR_ITEMS = {"mod":[["dce",""],["domtree",""],["flowgraph",""],["mem2reg",""],["parse",""]]};

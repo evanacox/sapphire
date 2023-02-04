@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `src/analysis/dominators.rs`."><meta name="keywords" content="rust, rustlang, rust-lang"><title>dominators.rs - source</title><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/SourceSerif4-Regular-1f7d512b176f0f72.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/FiraSans-Regular-018c141bf0843ffd.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/FiraSans-Medium-8f9a781e4970d388.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/SourceSerif4-Bold-124a1ca42af929b6.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2"><link rel="stylesheet" href="../../../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../../../static.files/rustdoc-14bb2392d96a38da.css" id="mainThemeStyle"><link rel="stylesheet" id="themeStyle" href="../../../static.files/light-5f7299aa2b503fb1.css"><link rel="stylesheet" disabled href="../../../static.files/dark-dfb18ef8114bb428.css"><link rel="stylesheet" disabled href="../../../static.files/ayu-4047a6aaddd3789d.css"><script id="default-settings" ></script><script src="../../../static.files/storage-d43fa987303ecbbb.js"></script><script defer src="../../../static.files/source-script-ea63cb6500f71309.js"></script><script defer src="../../../source-files.js"></script><script defer src="../../../static.files/main-3367e395607fafc1.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-13285aec31fa243e.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-16x16-8b506e7a72182f1c.png"><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-2c020d218678b618.svg"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.6.0/katex.min.css">
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `src/analysis/dominators.rs`."><title>dominators.rs - source</title><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/SourceSerif4-Regular-46f98efaafac5295.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/FiraSans-Regular-018c141bf0843ffd.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/FiraSans-Medium-8f9a781e4970d388.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/SourceSerif4-Bold-a2c9cd1067f8b328.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2"><link rel="stylesheet" href="../../../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../../../static.files/rustdoc-505eba68f310f6bf.css" id="mainThemeStyle"><link rel="stylesheet" id="themeStyle" href="../../../static.files/light-f501212b8b071243.css"><link rel="stylesheet" disabled href="../../../static.files/dark-e92fc12c34ff89d3.css"><link rel="stylesheet" disabled href="../../../static.files/ayu-c8c85693c8a4f9db.css"><script id="default-settings" ></script><script src="../../../static.files/storage-3891ce972e3a2bf8.js"></script><script defer src="../../../static.files/source-script-ea63cb6500f71309.js"></script><script defer src="../../../source-files.js"></script><script defer src="../../../static.files/main-364b95f387bc3166.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-13285aec31fa243e.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-16x16-8b506e7a72182f1c.png"><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-2c020d218678b618.svg"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.6.0/katex.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.6.0/katex.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.6.0/contrib/auto-render.min.js"></script>
 </head><body class="rustdoc source"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"></nav><main><nav class="sub"><a class="sub-logo-container" href="../../../sapphire/index.html"><img class="rust-logo" src="../../../static.files/rust-logo-151179464ae7ed46.svg" alt="logo"></a><form class="search-form"><span></span><input class="search-input" name="search" aria-label="Run search in the documentation" autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"><div id="help-button" title="help" tabindex="-1"><a href="../../../help.html">?</a></div><div id="settings-menu" tabindex="-1"><a href="../../../settings.html" title="settings"><img width="22" height="22" alt="Change settings" src="../../../static.files/wheel-5ec35bf9ca753509.svg"></a></div></form></nav><section id="main-content" class="content"><div class="example-wrap"><pre class="src-line-numbers"><a href="#1" id="1">1</a>
@@ -979,6 +979,166 @@
 <a href="#976" id="976">976</a>
 <a href="#977" id="977">977</a>
 <a href="#978" id="978">978</a>
+<a href="#979" id="979">979</a>
+<a href="#980" id="980">980</a>
+<a href="#981" id="981">981</a>
+<a href="#982" id="982">982</a>
+<a href="#983" id="983">983</a>
+<a href="#984" id="984">984</a>
+<a href="#985" id="985">985</a>
+<a href="#986" id="986">986</a>
+<a href="#987" id="987">987</a>
+<a href="#988" id="988">988</a>
+<a href="#989" id="989">989</a>
+<a href="#990" id="990">990</a>
+<a href="#991" id="991">991</a>
+<a href="#992" id="992">992</a>
+<a href="#993" id="993">993</a>
+<a href="#994" id="994">994</a>
+<a href="#995" id="995">995</a>
+<a href="#996" id="996">996</a>
+<a href="#997" id="997">997</a>
+<a href="#998" id="998">998</a>
+<a href="#999" id="999">999</a>
+<a href="#1000" id="1000">1000</a>
+<a href="#1001" id="1001">1001</a>
+<a href="#1002" id="1002">1002</a>
+<a href="#1003" id="1003">1003</a>
+<a href="#1004" id="1004">1004</a>
+<a href="#1005" id="1005">1005</a>
+<a href="#1006" id="1006">1006</a>
+<a href="#1007" id="1007">1007</a>
+<a href="#1008" id="1008">1008</a>
+<a href="#1009" id="1009">1009</a>
+<a href="#1010" id="1010">1010</a>
+<a href="#1011" id="1011">1011</a>
+<a href="#1012" id="1012">1012</a>
+<a href="#1013" id="1013">1013</a>
+<a href="#1014" id="1014">1014</a>
+<a href="#1015" id="1015">1015</a>
+<a href="#1016" id="1016">1016</a>
+<a href="#1017" id="1017">1017</a>
+<a href="#1018" id="1018">1018</a>
+<a href="#1019" id="1019">1019</a>
+<a href="#1020" id="1020">1020</a>
+<a href="#1021" id="1021">1021</a>
+<a href="#1022" id="1022">1022</a>
+<a href="#1023" id="1023">1023</a>
+<a href="#1024" id="1024">1024</a>
+<a href="#1025" id="1025">1025</a>
+<a href="#1026" id="1026">1026</a>
+<a href="#1027" id="1027">1027</a>
+<a href="#1028" id="1028">1028</a>
+<a href="#1029" id="1029">1029</a>
+<a href="#1030" id="1030">1030</a>
+<a href="#1031" id="1031">1031</a>
+<a href="#1032" id="1032">1032</a>
+<a href="#1033" id="1033">1033</a>
+<a href="#1034" id="1034">1034</a>
+<a href="#1035" id="1035">1035</a>
+<a href="#1036" id="1036">1036</a>
+<a href="#1037" id="1037">1037</a>
+<a href="#1038" id="1038">1038</a>
+<a href="#1039" id="1039">1039</a>
+<a href="#1040" id="1040">1040</a>
+<a href="#1041" id="1041">1041</a>
+<a href="#1042" id="1042">1042</a>
+<a href="#1043" id="1043">1043</a>
+<a href="#1044" id="1044">1044</a>
+<a href="#1045" id="1045">1045</a>
+<a href="#1046" id="1046">1046</a>
+<a href="#1047" id="1047">1047</a>
+<a href="#1048" id="1048">1048</a>
+<a href="#1049" id="1049">1049</a>
+<a href="#1050" id="1050">1050</a>
+<a href="#1051" id="1051">1051</a>
+<a href="#1052" id="1052">1052</a>
+<a href="#1053" id="1053">1053</a>
+<a href="#1054" id="1054">1054</a>
+<a href="#1055" id="1055">1055</a>
+<a href="#1056" id="1056">1056</a>
+<a href="#1057" id="1057">1057</a>
+<a href="#1058" id="1058">1058</a>
+<a href="#1059" id="1059">1059</a>
+<a href="#1060" id="1060">1060</a>
+<a href="#1061" id="1061">1061</a>
+<a href="#1062" id="1062">1062</a>
+<a href="#1063" id="1063">1063</a>
+<a href="#1064" id="1064">1064</a>
+<a href="#1065" id="1065">1065</a>
+<a href="#1066" id="1066">1066</a>
+<a href="#1067" id="1067">1067</a>
+<a href="#1068" id="1068">1068</a>
+<a href="#1069" id="1069">1069</a>
+<a href="#1070" id="1070">1070</a>
+<a href="#1071" id="1071">1071</a>
+<a href="#1072" id="1072">1072</a>
+<a href="#1073" id="1073">1073</a>
+<a href="#1074" id="1074">1074</a>
+<a href="#1075" id="1075">1075</a>
+<a href="#1076" id="1076">1076</a>
+<a href="#1077" id="1077">1077</a>
+<a href="#1078" id="1078">1078</a>
+<a href="#1079" id="1079">1079</a>
+<a href="#1080" id="1080">1080</a>
+<a href="#1081" id="1081">1081</a>
+<a href="#1082" id="1082">1082</a>
+<a href="#1083" id="1083">1083</a>
+<a href="#1084" id="1084">1084</a>
+<a href="#1085" id="1085">1085</a>
+<a href="#1086" id="1086">1086</a>
+<a href="#1087" id="1087">1087</a>
+<a href="#1088" id="1088">1088</a>
+<a href="#1089" id="1089">1089</a>
+<a href="#1090" id="1090">1090</a>
+<a href="#1091" id="1091">1091</a>
+<a href="#1092" id="1092">1092</a>
+<a href="#1093" id="1093">1093</a>
+<a href="#1094" id="1094">1094</a>
+<a href="#1095" id="1095">1095</a>
+<a href="#1096" id="1096">1096</a>
+<a href="#1097" id="1097">1097</a>
+<a href="#1098" id="1098">1098</a>
+<a href="#1099" id="1099">1099</a>
+<a href="#1100" id="1100">1100</a>
+<a href="#1101" id="1101">1101</a>
+<a href="#1102" id="1102">1102</a>
+<a href="#1103" id="1103">1103</a>
+<a href="#1104" id="1104">1104</a>
+<a href="#1105" id="1105">1105</a>
+<a href="#1106" id="1106">1106</a>
+<a href="#1107" id="1107">1107</a>
+<a href="#1108" id="1108">1108</a>
+<a href="#1109" id="1109">1109</a>
+<a href="#1110" id="1110">1110</a>
+<a href="#1111" id="1111">1111</a>
+<a href="#1112" id="1112">1112</a>
+<a href="#1113" id="1113">1113</a>
+<a href="#1114" id="1114">1114</a>
+<a href="#1115" id="1115">1115</a>
+<a href="#1116" id="1116">1116</a>
+<a href="#1117" id="1117">1117</a>
+<a href="#1118" id="1118">1118</a>
+<a href="#1119" id="1119">1119</a>
+<a href="#1120" id="1120">1120</a>
+<a href="#1121" id="1121">1121</a>
+<a href="#1122" id="1122">1122</a>
+<a href="#1123" id="1123">1123</a>
+<a href="#1124" id="1124">1124</a>
+<a href="#1125" id="1125">1125</a>
+<a href="#1126" id="1126">1126</a>
+<a href="#1127" id="1127">1127</a>
+<a href="#1128" id="1128">1128</a>
+<a href="#1129" id="1129">1129</a>
+<a href="#1130" id="1130">1130</a>
+<a href="#1131" id="1131">1131</a>
+<a href="#1132" id="1132">1132</a>
+<a href="#1133" id="1133">1133</a>
+<a href="#1134" id="1134">1134</a>
+<a href="#1135" id="1135">1135</a>
+<a href="#1136" id="1136">1136</a>
+<a href="#1137" id="1137">1137</a>
+<a href="#1138" id="1138">1138</a>
 </pre><pre class="rust"><code><span class="comment">//======---------------------------------------------------------------======//
 //                                                                           //
 // Copyright 2022-2023 Evan Cox &lt;evanacox00@gmail.com&gt;. All rights reserved. //
@@ -1015,7 +1175,7 @@
     <span class="comment">// maps B -&gt; idom(B) for given block B. &quot;tree&quot; structure comes from going farther
     // up the tree, e.g. tree[idom(b)].
     </span>tree: SecondaryMap&lt;Block, Block&gt;,
-    <span class="comment">// A valid postorder of the basic blocks in the control-flow graph
+    <span class="comment">// A valid postorder of the basic blocks in the control-flow graph.
     </span>postorder: Vec&lt;Block&gt;,
 }
 
@@ -1090,17 +1250,29 @@
     </span><span class="kw">pub fn </span>reverse_postorder(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw">impl </span>Iterator&lt;Item = Block&gt; + <span class="lifetime">&#39;_ </span>{
         <span class="self">self</span>.postorder().iter().copied().rev()
     }
+
+    <span class="doccomment">/// Walks over the **dominator tree** in DFS preorder. This is only
+    /// here for use in the `mem2reg` pass right now (as this is required
+    /// for the correctness of the renaming algorithm).
+    </span><span class="kw">pub fn </span>compute_tree_dfs_preorder(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Vec&lt;Block&gt; {
+        compute_domtree_dfs_preorder(<span class="self">self</span>.root(), <span class="kw-2">&amp;</span><span class="self">self</span>.tree)
+    }
+
+    <span class="doccomment">/// Checks if a block is reachable from the entry node
+    </span><span class="kw">pub fn </span>is_reachable(<span class="kw-2">&amp;</span><span class="self">self</span>, block: Block) -&gt; bool {
+        <span class="self">self</span>.tree.contains(block)
+    }
 }
 
-<span class="kw">impl </span>IntoTree&lt;<span class="lifetime">&#39;_</span>&gt; <span class="kw">for </span>DominatorTree {
+<span class="kw">impl </span>IntoTree&lt;<span class="lifetime">&#39;_</span>, <span class="number">12</span>&gt; <span class="kw">for </span>DominatorTree {
     <span class="kw">type </span>Node = Block;
 
     <span class="kw">fn </span>root(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="self">Self</span>::Node {
         <span class="self">self</span>.root()
     }
 
-    <span class="kw">fn </span>children(<span class="kw-2">&amp;</span><span class="self">self</span>, node: <span class="self">Self</span>::Node) -&gt; Vec&lt;<span class="self">Self</span>::Node&gt; {
-        <span class="kw">let </span><span class="kw-2">mut </span>result: Vec&lt;Block&gt; = <span class="self">self
+    <span class="kw">fn </span>children(<span class="kw-2">&amp;</span><span class="self">self</span>, node: <span class="self">Self</span>::Node) -&gt; SmallVec&lt;[<span class="self">Self</span>::Node; <span class="number">12</span>]&gt; {
+        <span class="kw">let </span><span class="kw-2">mut </span>result: SmallVec&lt;[Block; <span class="number">12</span>]&gt; = <span class="self">self
             </span>.tree
             .iter()
             .filter(|(<span class="kw">_</span>, idom)| <span class="kw-2">**</span>idom == node)
@@ -1131,6 +1303,9 @@
 }
 
 <span class="doccomment">/// Models the dominance frontier information for a function.
+///
+/// Note that this implementation only models dominance frontier info for the reachable
+/// nodes in the graph.
 ///
 /// The dominance frontier effectively models the &quot;join points&quot; of the program,
 /// a block&#39;s dominance frontier is the set of nodes directly outside of the
@@ -1173,9 +1348,20 @@
             // multiple predecessors. we can&#39;t necessarily trust size_hint for
             // the correctness of the algorithm
             </span><span class="kw">if let </span>(<span class="prelude-val">Some</span>(one), <span class="prelude-val">Some</span>(two)) = (one, two) {
-                <span class="kw">for </span>pred <span class="kw">in </span>iter::once(one) <span class="comment">// I apologize for my sins
+                <span class="comment">// we need to filter out any unreachable blocks that may be preds here, consider:
+                //
+                // entry:
+                //   br a
+                // a:
+                //   br c
+                // b:
+                //   br c
+                // c:
+                //   a and b are preds, only a is reachable
+                </span><span class="kw">for </span>pred <span class="kw">in </span>iter::once(one) <span class="comment">// I apologize
                     </span>.chain(iter::once(two))
                     .chain(preds)
+                    .filter(|pred| domtree.is_reachable(<span class="kw-2">*</span>pred))
                 {
                     <span class="kw">let </span><span class="kw-2">mut </span>runner = pred;
 
@@ -1204,6 +1390,24 @@
     /// of dominance.
     </span><span class="kw">pub fn </span>frontier(<span class="kw-2">&amp;</span><span class="self">self</span>, block: Block) -&gt; <span class="kw-2">&amp;</span>[Block] {
         <span class="kw-2">&amp;</span><span class="self">self</span>.frontier[block]
+    }
+}
+
+<span class="doccomment">/// Wrapper analysis that generates a [`DominanceFrontier`].
+</span><span class="kw">pub struct </span>DominanceFrontierAnalysis;
+
+<span class="kw">impl </span>FunctionAnalysisPass <span class="kw">for </span>DominanceFrontierAnalysis {
+    <span class="kw">type </span><span class="prelude-ty">Result </span>= DominanceFrontier;
+
+    <span class="kw">fn </span>expects_preserved(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span><span class="lifetime">&#39;static </span>[TypeId] {
+        <span class="macro">analysis_preserved!</span>(ControlFlowGraphAnalysis)
+    }
+
+    <span class="kw">fn </span>run(<span class="kw-2">&amp;mut </span><span class="self">self</span>, func: <span class="kw-2">&amp;</span>Function, am: <span class="kw-2">&amp;</span>FunctionAnalysisManager) -&gt; <span class="self">Self</span>::Result {
+        <span class="kw">let </span>cfg = am.get::&lt;ControlFlowGraphAnalysis&gt;(func);
+        <span class="kw">let </span>domtree = am.get::&lt;DominatorTreeAnalysis&gt;(func);
+
+        DominanceFrontier::compute(<span class="kw-2">&amp;</span>cfg, <span class="kw-2">&amp;</span>domtree)
     }
 }
 
@@ -1261,6 +1465,28 @@
     }
 
     order.push(curr);
+}
+
+<span class="kw">fn </span>compute_domtree_dfs_preorder(root: Block, tree: <span class="kw-2">&amp;</span>SecondaryMap&lt;Block, Block&gt;) -&gt; Vec&lt;Block&gt; {
+    <span class="kw">let </span><span class="kw-2">mut </span>out = Vec::default();
+
+    compute_domtree_dfs_preorder_recursive(root, tree, <span class="kw-2">&amp;mut </span>out);
+
+    out
+}
+
+<span class="kw">fn </span>compute_domtree_dfs_preorder_recursive(
+    curr: Block,
+    tree: <span class="kw-2">&amp;</span>SecondaryMap&lt;Block, Block&gt;,
+    out: <span class="kw-2">&amp;mut </span>Vec&lt;Block&gt;,
+) {
+    out.push(curr);
+
+    <span class="comment">// unfortunately we optimize for the child -&gt; idom case, not the idom -&gt; child case.
+    // in most situations this is a good call, but here it is not
+    </span><span class="kw">for </span>(child, <span class="kw">_</span>) <span class="kw">in </span>tree.iter().filter(|(<span class="kw">_</span>, idom)| <span class="kw-2">**</span>idom == curr) {
+        compute_domtree_dfs_preorder_recursive(child, tree, out);
+    }
 }
 
 <span class="kw">fn </span>intersect(
@@ -1956,6 +2182,100 @@
         <span class="macro">assert_eq!</span>(df.frontier(bb7), <span class="kw-2">&amp;</span>[bb3]);
         <span class="macro">assert_eq!</span>(df.frontier(bb8), <span class="kw-2">&amp;</span>[bb7]);
     }
+
+    <span class="attr">#[test]
+    </span><span class="kw">fn </span>test_dominance_frontier2() {
+        <span class="kw">let </span><span class="kw-2">mut </span>module = Module::new(<span class="string">&quot;test&quot;</span>);
+        <span class="kw">let </span>sig_rand = SigBuilder::new().ret(<span class="prelude-val">Some</span>(Type::bool())).build();
+        <span class="kw">let </span>rand = module.declare_function(<span class="string">&quot;rand&quot;</span>, sig_rand.clone());
+        <span class="kw">let </span>sig = SigBuilder::new().param(Type::bool()).build();
+        <span class="kw">let </span><span class="kw-2">mut </span>b = module.define_function(<span class="string">&quot;main&quot;</span>, sig);
+        <span class="kw">let </span>rand_sig = b.import_signature(<span class="kw-2">&amp;</span>sig_rand);
+
+        <span class="comment">// fn bool @rand()
+        //
+        // fn void @main() {
+        // r:
+        //     %0 = call bool @rand()
+        //     br a
+        //
+        // a:
+        //     condbr bool %0, b, c
+        //
+        // b:
+        //     br d
+        //
+        // c:
+        //     condbr bool %0, d, e
+        //
+        // d:
+        //     condbr bool %0, a, e
+        //
+        // e:
+        //     ret void
+        // }
+        </span><span class="kw">let </span>bbr = b.create_block(<span class="string">&quot;r&quot;</span>);
+        <span class="kw">let </span>bba = b.create_block(<span class="string">&quot;a&quot;</span>);
+        <span class="kw">let </span>bbb = b.create_block(<span class="string">&quot;b&quot;</span>);
+        <span class="kw">let </span>bbc = b.create_block(<span class="string">&quot;c&quot;</span>);
+        <span class="kw">let </span>bbd = b.create_block(<span class="string">&quot;d&quot;</span>);
+        <span class="kw">let </span>bbe = b.create_block(<span class="string">&quot;e&quot;</span>);
+
+        b.switch_to(bbr);
+        <span class="kw">let </span>v0 = b.append().call(rand, rand_sig, <span class="kw-2">&amp;</span>[], DebugInfo::fake());
+        <span class="kw">let </span>v0 = b.inst_to_result(v0).unwrap();
+        b.append().br(BlockWithParams::to(bba), DebugInfo::fake());
+
+        b.switch_to(bba);
+        b.append().condbr(
+            v0,
+            BlockWithParams::to(bbb),
+            BlockWithParams::to(bbc),
+            DebugInfo::fake(),
+        );
+
+        b.switch_to(bbb);
+        b.append().br(BlockWithParams::to(bbd), DebugInfo::fake());
+
+        b.switch_to(bbc);
+        b.append().condbr(
+            v0,
+            BlockWithParams::to(bbd),
+            BlockWithParams::to(bbe),
+            DebugInfo::fake(),
+        );
+
+        b.switch_to(bbd);
+        b.append().condbr(
+            v0,
+            BlockWithParams::to(bba),
+            BlockWithParams::to(bbe),
+            DebugInfo::fake(),
+        );
+
+        b.switch_to(bbe);
+        b.append().ret_void(DebugInfo::fake());
+
+        <span class="kw">let </span>func = b.define();
+        <span class="kw">let </span>main = module.function(func);
+
+        <span class="kw">let </span>cfg = ControlFlowGraph::compute(main);
+        <span class="kw">let </span>domtree = DominatorTree::compute(main, <span class="kw-2">&amp;</span>cfg);
+        <span class="kw">let </span>df = DominanceFrontier::compute(<span class="kw-2">&amp;</span>cfg, <span class="kw-2">&amp;</span>domtree);
+
+        <span class="kw">let </span><span class="kw-2">mut </span>bbc_df: Vec&lt;Block&gt; = df.frontier(bbc).to_vec();
+        <span class="kw">let </span><span class="kw-2">mut </span>bbd_df: Vec&lt;Block&gt; = df.frontier(bbd).to_vec();
+
+        bbc_df.sort();
+        bbd_df.sort();
+
+        <span class="macro">assert_eq!</span>(df.frontier(bbr), <span class="kw-2">&amp;</span>[]);
+        <span class="macro">assert_eq!</span>(df.frontier(bba), <span class="kw-2">&amp;</span>[bba]);
+        <span class="macro">assert_eq!</span>(df.frontier(bbb), <span class="kw-2">&amp;</span>[bbd]);
+        <span class="macro">assert_eq!</span>(<span class="kw-2">&amp;</span>bbc_df, <span class="kw-2">&amp;</span>[bbd, bbe]);
+        <span class="macro">assert_eq!</span>(<span class="kw-2">&amp;</span>bbd_df, <span class="kw-2">&amp;</span>[bba, bbe]);
+        <span class="macro">assert_eq!</span>(df.frontier(bbe), <span class="kw-2">&amp;</span>[]);
+    }
 }
 </code></pre></div>
 </section></main><script>
@@ -1968,4 +2288,4 @@ renderMathInElement(document.body, {
     ]
 });
 </script>
-<div id="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="sapphire" data-themes="" data-resource-suffix="" data-rustdoc-version="1.69.0-nightly (d7948c843 2023-01-26)" data-search-js="search-98d53477a794af0b.js" data-settings-js="settings-a43118d2dfb2799d.js" data-settings-css="settings-7c23ac01f615ce90.css" ></div></body></html>
+<div id="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="sapphire" data-themes="" data-resource-suffix="" data-rustdoc-version="1.69.0-nightly (658fad6c5 2023-02-03)" data-search-js="search-98d53477a794af0b.js" data-settings-js="settings-f0c5c39777a9a2f6.js" data-settings-css="settings-0bcba95ff279c1db.css" ></div></body></html>

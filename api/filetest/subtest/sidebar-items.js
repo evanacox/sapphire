@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":[["BACKTRACE",""]],"enum":[["TestResult",""]],"struct":[["Subtest",""],["TestDetails",""]]};
+window.SIDEBAR_ITEMS = {"enum":[["TestResult",""]],"struct":[["Subtest",""],["TestDetails",""]]};

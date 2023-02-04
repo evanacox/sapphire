@@ -211,15 +211,19 @@ entry(i32 %argc, ptr %argv):
 </code></pre>
 <h3 id="match-section"><a class="header" href="#match-section"><code>MATCH-SECTION</code></a></h3>
 <p>This directive allows defining an exact textual structure that should appear somewhere in the output. After
-the <code>MATCH-SECTION</code> directive, an empty <code>;</code> line denotes the beginning and the end of the section to
-look for in the output.</p>
+the <code>MATCH-SECTION</code> directive, an <code>;;</code> line denotes the end of the section to look for in the output, and
+the first line after is expected to be an empty <code>;</code> line.</p>
+<blockquote>
+<p>Note: While a bit odd, this makes it easier to read the test cases and allows blank lines to be
+part of the tests.</p>
+</blockquote>
 <pre><code class="language-llvm">; MATCH-SECTION
 ;
 ; fn void @test() {
 ; entry:
 ;   ret void
 ; }
-;
+;;
 fn void @test() {
 entry:
   ret void
