@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":[["SUBTESTS",""]],"fn":[["pool_for_jobs",""],["run_all",""],["run_subtest",""],["run_tests",""]]};
+window.SIDEBAR_ITEMS = {"constant":["SUBTESTS"],"fn":["pool_for_jobs","run_all","run_subtest","run_tests"]};

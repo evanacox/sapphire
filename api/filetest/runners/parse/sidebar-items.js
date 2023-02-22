@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":[["parse_subtest",""],["parser_output",""]]};
+window.SIDEBAR_ITEMS = {"fn":["parse_subtest","parser_output"]};

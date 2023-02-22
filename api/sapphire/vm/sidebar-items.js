@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":[["GenericForeignValue","Provides a translation layer between the specific values that a given engine implementation understands internally and the outside world."]],"struct":[["Runtime","An implementation of an engine as a SIR interpreter."]],"trait":[["Engine","Abstract interface for an “engine” that can execute SIR."]]};
+window.SIDEBAR_ITEMS = {"enum":["GenericForeignValue"],"struct":["Runtime"],"trait":["Engine"]};

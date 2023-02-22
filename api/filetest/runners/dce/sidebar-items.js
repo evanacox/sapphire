@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":[["dce",""],["dce_subtest",""]]};
+window.SIDEBAR_ITEMS = {"fn":["dce","dce_subtest"]};
