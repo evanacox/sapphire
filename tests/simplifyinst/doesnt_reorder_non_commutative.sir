@@ -1,0 +1,13 @@
+; MATCH-SECTION
+;
+; fn i32 @div(i32, i32) {
+; entry(i32 %0, i32 %1):
+;   %2 = sdiv i32 %1, %0
+;   ret i32 %2
+; }
+;;
+fn i32 @div(i32, i32) {
+entry(i32 %0, i32 %1):
+  %2 = sdiv i32 %1, %0
+  ret i32 %2
+}

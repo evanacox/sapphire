@@ -1,0 +1,13 @@
+; MATCH-SECTION
+;
+; fn bool @icmp_ne(i32, i32) {
+; entry(i32 %0, i32 %1):
+;   %2 = icmp ne i32 %0, %1
+;   ret bool %2
+; }
+;;
+fn bool @icmp_ne(i32, i32) {
+entry(i32 %0, i32 %1):
+  %2 = icmp ne i32 %1, %0
+  ret bool %2
+}

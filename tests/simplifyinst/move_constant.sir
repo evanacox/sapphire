@@ -1,0 +1,17 @@
+; MATCH-SECTION
+;
+; fn i32 @add_mul_16(i32, i32) {
+; entry(i32 %0, i32 %1):
+;   %2 = iconst i32 15
+;   %3 = iadd i32 %0, %1
+;   %4 = imul i32 %3, %2
+;   ret i32 %4
+; }
+;;
+fn i32 @add_mul_16(i32, i32) {
+entry(i32 %0, i32 %1):
+  %2 = iconst i32 15
+  %3 = iadd i32 %0, %1
+  %4 = imul i32 %2, %3
+  ret i32 %4
+}

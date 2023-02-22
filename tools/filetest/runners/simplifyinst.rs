@@ -10,10 +10,13 @@
 
 use crate::runners::optimization_runner::*;
 use crate::subtest::{Subtest, TestResult};
-use sapphire::transforms::Mem2RegPass;
+use sapphire::transforms::{Mem2RegPass, SimplifyInstPass};
 
-runner_for_opt!(mem2reg, FunctionToModulePassAdapter::adapt(Mem2RegPass));
+runner_for_opt!(
+    simplifyinst,
+    FunctionToModulePassAdapter::adapt(SimplifyInstPass)
+);
 
-pub const fn mem2reg_subtest() -> Subtest {
-    Subtest::new("mem2reg", mem2reg)
+pub const fn simplifyinst_subtest() -> Subtest {
+    Subtest::new("simplifyinst", simplifyinst)
 }

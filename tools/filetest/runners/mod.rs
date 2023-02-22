@@ -15,6 +15,7 @@ mod gvn;
 mod mem2reg;
 mod optimization_runner;
 mod parse;
+mod simplifyinst;
 
 pub use dce::*;
 pub use domtree::*;
@@ -22,3 +23,4 @@ pub use flowgraph::*;
 pub use gvn::*;
 pub use mem2reg::*;
 pub use parse::*;
+pub use simplifyinst::*;

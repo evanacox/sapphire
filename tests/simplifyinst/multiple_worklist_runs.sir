@@ -1,0 +1,18 @@
+; MATCH-SECTION
+;
+; fn i32 @test(i32) {
+; entry(i32 %0):
+;   %1 = iconst i32 128
+;   %2 = iconst i32 7
+;   %3 = shl i32 %0, %2
+;   ret i32 %3
+; }
+;;
+fn i32 @test(i32) {
+entry(i32 %0):
+  %1 = iconst i32 128
+  ; requires one run to reorder to %0, %1 and another
+  ; to recognize x * <pow2>
+  %2 = imul i32 %1, %0
+  ret i32 %2
+}
