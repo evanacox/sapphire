@@ -1,0 +1,35 @@
+; MATCH-SECTION
+;
+; fn i32 @maybe_undef(bool) {
+; entry(bool %0):
+;   condbr bool %0, a, b
+;
+; a:
+;   %1 = undef i32
+;   br merge(i32 %1)
+;
+; b:
+;   %2 = iconst i32 42
+;   br merge(i32 %2)
+;
+; merge(i32 %3):
+;   ret i32 %3
+; }
+;;
+fn i32 @maybe_undef(bool) {
+entry(bool %0):
+  %1 = alloca i32
+  condbr bool %0, a, b
+
+a:
+  br merge
+
+b:
+  %2 = iconst i32 42
+  store i32 %2, ptr %1
+  br merge
+
+merge:
+  %3 = load i32, ptr %1
+  ret i32 %3
+}

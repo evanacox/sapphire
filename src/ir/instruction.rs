@@ -74,11 +74,11 @@ pub enum InstData {
     /// `fneg T %a`, performs floating-point negation
     FNeg(FloatUnaryInst),
     /// `fadd T %a, %b`, performs floating-point addition
-    FAdd(ArithInst),
+    FAdd(CommutativeArithInst),
     /// `fadd T %a, %b`, performs floating-point subtraction
     FSub(ArithInst),
     /// `fadd T %a, %b`, performs floating-point multiplication
-    FMul(ArithInst),
+    FMul(CommutativeArithInst),
     /// `fadd T %a, %b`, performs floating-point division
     FDiv(ArithInst),
     /// `fadd T %a, %b`, gets the remainder of performing floating-point division
@@ -155,6 +155,19 @@ impl InstData {
             self,
             InstData::BConst(_) | InstData::IConst(_) | InstData::FConst(_) | InstData::Null(_)
         )
+    }
+
+    /// Gets the constant value as a u64 that can be manipulated directly.
+    pub fn constant_raw(&self) -> u64 {
+        assert!(self.is_constant());
+
+        match self {
+            InstData::BConst(bconst) => bconst.value() as u64,
+            InstData::IConst(iconst) => iconst.value(),
+            InstData::FConst(fconst) => fconst.value(),
+            InstData::Null(_) => 0,
+            _ => unreachable!(),
+        }
     }
 }
 

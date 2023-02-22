@@ -44,7 +44,7 @@ ty = { bool_ty | ptr_ty | int_ty | float_ty | array_ty | struct_ty }
 //
 ty_or_void = { ty | "void" }
 variadic = @{ "..." }
-abi = @{ "ccc" | "sysv" | "win64" | "fastcc" }
+abi = @{ "ccc" | "fastcc" }
 param_list = {
      ("(" ~ variadic? ~ ")") |
      ("(" ~ ty_list ~ ("," ~ variadic)? ~ ")")

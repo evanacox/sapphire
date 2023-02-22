@@ -8,7 +8,15 @@
 //                                                                           //
 //======---------------------------------------------------------------======//
 
-/// Performs Sparse Conditional Constant Propagation.
-///
-/// This uses the same constant folder internally as `InstSimplify`
-pub struct SCCPPass;
+use crate::runners::optimization_runner::*;
+use crate::subtest::{Subtest, TestResult};
+use sapphire::transforms::SimplifyInstPass;
+
+runner_for_opt!(
+    simplifyinst,
+    FunctionToModulePassAdapter::adapt(SimplifyInstPass)
+);
+
+pub const fn simplifyinst_subtest() -> Subtest {
+    Subtest::new("simplifyinst", simplifyinst)
+}

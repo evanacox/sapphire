@@ -8,35 +8,11 @@
 //                                                                           //
 //======---------------------------------------------------------------======//
 
+use crate::runners::optimization_runner::*;
 use crate::subtest::{Subtest, TestResult};
-use sapphire::analysis::*;
-use sapphire::pass::*;
-use sapphire::transforms;
 use sapphire::transforms::Mem2RegPass;
 
-fn mem2reg(name: &str, content: &str) -> TestResult {
-    match sapphire::parse_sir(name, content) {
-        Ok(mut module) => {
-            transforms::verify_module_panic(&module);
-
-            let mut fam = FunctionAnalysisManager::default();
-            fam.add_analysis(ControlFlowGraphAnalysis);
-            fam.add_analysis(DominatorTreeAnalysis);
-            fam.add_analysis(DominanceFrontierAnalysis);
-
-            let mut mam = ModuleAnalysisManager::default();
-            mam.add_analysis(FunctionAnalysisManagerModuleProxy::wrap(fam));
-
-            let mut mpm = ModulePassManager::new();
-            mpm.add_pass(FunctionToModulePassAdapter::adapt(Mem2RegPass));
-
-            mpm.run(&mut module, &mut mam);
-
-            TestResult::Output(stringify_module(&module))
-        }
-        Err(err) => TestResult::CompileError(format!("{err}")),
-    }
-}
+runner_for_opt!(mem2reg, FunctionToModulePassAdapter::adapt(Mem2RegPass));
 
 pub const fn mem2reg_subtest() -> Subtest {
     Subtest::new("mem2reg", mem2reg)

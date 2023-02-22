@@ -17,6 +17,7 @@ required-features = ["dev-tools"]
 ahash = "0.8.1"
 bitflags = "1.3.2"
 bpaf = "0.7.7"
+paste = "1.0.11"
 pest = "2.5.2"
 pest_derive = "2.5.2"
 smallbitvec = "2.5.1"

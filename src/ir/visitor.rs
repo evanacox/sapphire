@@ -198,13 +198,13 @@ pub trait SIRVisitor<'a> {
     fn visit_fneg(&mut self, inst: Inst, data: &FloatUnaryInst, def: &FunctionDefinition);
 
     /// Visits an `fadd` instruction.
-    fn visit_fadd(&mut self, inst: Inst, data: &ArithInst, def: &FunctionDefinition);
+    fn visit_fadd(&mut self, inst: Inst, data: &CommutativeArithInst, def: &FunctionDefinition);
 
     /// Visits an `fsub` instruction.
     fn visit_fsub(&mut self, inst: Inst, data: &ArithInst, def: &FunctionDefinition);
 
     /// Visits an `fmul` instruction.
-    fn visit_fmul(&mut self, inst: Inst, data: &ArithInst, def: &FunctionDefinition);
+    fn visit_fmul(&mut self, inst: Inst, data: &CommutativeArithInst, def: &FunctionDefinition);
 
     /// Visits an `fdiv` instruction.
     fn visit_fdiv(&mut self, inst: Inst, data: &ArithInst, def: &FunctionDefinition);
@@ -426,13 +426,13 @@ pub trait GenericInstVisitor<T> {
     fn visit_fneg(&mut self, data: &FloatUnaryInst) -> T;
 
     /// Visits an `fadd` instruction.
-    fn visit_fadd(&mut self, data: &ArithInst) -> T;
+    fn visit_fadd(&mut self, data: &CommutativeArithInst) -> T;
 
     /// Visits an `fsub` instruction.
     fn visit_fsub(&mut self, data: &ArithInst) -> T;
 
     /// Visits an `fmul` instruction.
-    fn visit_fmul(&mut self, data: &ArithInst) -> T;
+    fn visit_fmul(&mut self, data: &CommutativeArithInst) -> T;
 
     /// Visits an `fdiv` instruction.
     fn visit_fdiv(&mut self, data: &ArithInst) -> T;

@@ -8,7 +8,7 @@
 //                                                                           //
 //======---------------------------------------------------------------======//
 
-/// Performs Sparse Conditional Constant Propagation.
+/// Simplifies a CFG by performing the following simplifications:
 ///
-/// This uses the same constant folder internally as `InstSimplify`
-pub struct SCCPPass;
+/// 1.
+pub struct SimplifyCFGPass;

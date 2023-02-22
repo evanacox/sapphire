@@ -209,8 +209,6 @@ pub(crate) fn stringify_abi(abi: CallConv) -> &'static str {
     match abi {
         CallConv::C => "ccc",
         CallConv::Fast => "fastcc",
-        CallConv::SysV => "sysv",
-        CallConv::Win64 => "win64",
     }
 }
 
@@ -679,16 +677,16 @@ impl<'m> SIRVisitor<'m> for WriterImpl<'m> {
         self.state.whole += &format!("fneg {ty} {val}");
     }
 
-    fn visit_fadd(&mut self, inst: Inst, data: &ArithInst, def: &FunctionDefinition) {
-        self.arith("fadd", inst, data, def);
+    fn visit_fadd(&mut self, inst: Inst, data: &CommutativeArithInst, def: &FunctionDefinition) {
+        self.commutative_arith("fadd", inst, data, def);
     }
 
     fn visit_fsub(&mut self, inst: Inst, data: &ArithInst, def: &FunctionDefinition) {
         self.arith("fsub", inst, data, def);
     }
 
-    fn visit_fmul(&mut self, inst: Inst, data: &ArithInst, def: &FunctionDefinition) {
-        self.arith("fmul", inst, data, def);
+    fn visit_fmul(&mut self, inst: Inst, data: &CommutativeArithInst, def: &FunctionDefinition) {
+        self.commutative_arith("fmul", inst, data, def);
     }
 
     fn visit_fdiv(&mut self, inst: Inst, data: &ArithInst, def: &FunctionDefinition) {

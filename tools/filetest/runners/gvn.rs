@@ -8,7 +8,12 @@
 //                                                                           //
 //======---------------------------------------------------------------======//
 
-/// Performs Sparse Conditional Constant Propagation.
-///
-/// This uses the same constant folder internally as `InstSimplify`
-pub struct SCCPPass;
+use crate::runners::optimization_runner::*;
+use crate::subtest::{Subtest, TestResult};
+use sapphire::transforms::GVNPass;
+
+runner_for_opt!(gvn, FunctionToModulePassAdapter::adapt(GVNPass));
+
+pub const fn gvn_subtest() -> Subtest {
+    Subtest::new("gvn", gvn)
+}

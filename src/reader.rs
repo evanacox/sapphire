@@ -231,8 +231,6 @@ impl SIRParser {
 
         match pair.as_str() {
             "ccc" => Ok(CallConv::C),
-            "sysv" => Ok(CallConv::SysV),
-            "win64" => Ok(CallConv::Win64),
             "fastcc" => Ok(CallConv::Fast),
             _ => unreachable!(),
         }

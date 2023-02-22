@@ -74,3 +74,13 @@ fn test_mem2reg() {
 fn test_dce() {
     assert!(matches!(run_subtest("dce", Some(1)), Ok(())));
 }
+
+#[test]
+fn test_gvn() {
+    assert!(matches!(run_subtest("gvn", Some(1)), Ok(())));
+}
+
+#[test]
+fn test_simplifyinst() {
+    assert!(matches!(run_subtest("simplifyinst", Some(1)), Ok(())))
+}

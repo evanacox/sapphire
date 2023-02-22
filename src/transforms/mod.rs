@@ -25,7 +25,8 @@ mod gvn;
 mod mem2reg;
 mod printers;
 mod sccp;
-mod simplify;
+mod simplifycfg;
+mod simplifyinst;
 mod verify;
 
 pub use dce::*;
@@ -33,5 +34,6 @@ pub use gvn::*;
 pub use mem2reg::*;
 pub use printers::*;
 pub use sccp::*;
-pub use simplify::*;
+pub use simplifycfg::*;
+pub use simplifyinst::*;
 pub use verify::*;

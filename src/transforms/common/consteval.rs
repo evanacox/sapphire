@@ -50,12 +50,11 @@ impl<'f, 'c> InPlaceConstantFolder<'f, 'c> {
     /// Attempts to perform trivial constant folding on a single instruction.
     ///
     /// Returns whether or not the folder was able to make a simplification.
-    pub fn try_fold(inst: Inst, cursor: &'c mut FuncCursor<'f>) -> bool {
+    pub fn try_fold(inst: Inst, data: &InstData, cursor: &'c mut FuncCursor<'f>) -> bool {
         // TODO: redesign this so we don't need to clone every single instruction that we even attempt to fold
         let mut obj = Self { cursor, inst };
-        let data = obj.cursor.inst_data(inst).clone();
 
-        obj.dispatch_inst(&data).is_some()
+        obj.dispatch_inst(data).is_some()
     }
 
     fn val_is_constant(&self, val: Value) -> bool {
@@ -177,78 +176,213 @@ impl<'f, 'c> GenericInstVisitor<Option<()>> for InPlaceConstantFolder<'f, 'c> {
     }
 
     fn visit_br(&mut self, _: &BrInst) -> Option<()> {
-        todo!()
+        None
     }
 
     fn visit_condbr(&mut self, _: &CondBrInst) -> Option<()> {
-        todo!()
+        None
     }
 
     fn visit_unreachable(&mut self, _: &UnreachableInst) -> Option<()> {
-        todo!()
+        None
     }
 
     fn visit_ret(&mut self, _: &RetInst) -> Option<()> {
-        todo!()
-    }
-
-    fn visit_and(&mut self, _: &CommutativeArithInst) -> Option<()> {
-        todo!()
-    }
-
-    fn visit_or(&mut self, _: &CommutativeArithInst) -> Option<()> {
-        todo!()
-    }
-
-    fn visit_xor(&mut self, _: &CommutativeArithInst) -> Option<()> {
-        todo!()
-    }
-
-    fn visit_shl(&mut self, _: &ArithInst) -> Option<()> {
-        todo!()
-    }
-
-    fn visit_ashr(&mut self, _: &ArithInst) -> Option<()> {
-        todo!()
-    }
-
-    fn visit_lshr(&mut self, _: &ArithInst) -> Option<()> {
-        todo!()
-    }
-
-    fn visit_iadd(&mut self, _: &CommutativeArithInst) -> Option<()> {
-        todo!()
-    }
-
-    fn visit_isub(&mut self, _: &ArithInst) -> Option<()> {
-        todo!()
-    }
-
-    fn visit_imul(&mut self, _: &CommutativeArithInst) -> Option<()> {
-        todo!()
-    }
-
-    fn visit_sdiv(&mut self, _: &ArithInst) -> Option<()> {
         None
     }
 
-    fn visit_udiv(&mut self, _: &ArithInst) -> Option<()> {
-        None
+    fn visit_and(&mut self, and: &CommutativeArithInst) -> Option<()> {
+        let lhs = self.val_as_int_constant(and.lhs())?;
+        let rhs = self.val_as_int_constant(and.rhs())?;
+        let ty = self.cursor.ty(and.lhs());
+        let dbg = self.cursor.current_inst_dbg().unwrap();
+
+        self.cursor
+            .replace()
+            .iconst(ty, (lhs & rhs) & ty.unwrap_int().mask(), dbg);
+
+        Some(())
     }
 
-    fn visit_srem(&mut self, _: &ArithInst) -> Option<()> {
-        None
+    fn visit_or(&mut self, or: &CommutativeArithInst) -> Option<()> {
+        let lhs = self.val_as_int_constant(or.lhs())?;
+        let rhs = self.val_as_int_constant(or.rhs())?;
+        let ty = self.cursor.ty(or.lhs());
+        let dbg = self.cursor.current_inst_dbg().unwrap();
+
+        self.cursor
+            .replace()
+            .iconst(ty, (lhs | rhs) & ty.unwrap_int().mask(), dbg);
+
+        Some(())
     }
 
-    fn visit_urem(&mut self, _: &ArithInst) -> Option<()> {
-        None
+    fn visit_xor(&mut self, xor: &CommutativeArithInst) -> Option<()> {
+        let lhs = self.val_as_int_constant(xor.lhs())?;
+        let rhs = self.val_as_int_constant(xor.rhs())?;
+        let ty = self.cursor.ty(xor.lhs());
+        let dbg = self.cursor.current_inst_dbg().unwrap();
+
+        self.cursor
+            .replace()
+            .iconst(ty, (lhs ^ rhs) & ty.unwrap_int().mask(), dbg);
+
+        Some(())
+    }
+
+    fn visit_shl(&mut self, shl: &ArithInst) -> Option<()> {
+        let lhs = self.val_as_int_constant(shl.lhs())?;
+        let rhs = self.val_as_int_constant(shl.rhs())?;
+        let ty = self.cursor.ty(shl.lhs());
+        let dbg = self.cursor.current_inst_dbg().unwrap();
+
+        self.cursor
+            .replace()
+            .iconst(ty, (lhs << rhs) & ty.unwrap_int().mask(), dbg);
+
+        Some(())
+    }
+
+    fn visit_ashr(&mut self, ashr: &ArithInst) -> Option<()> {
+        let lhs = self.val_as_int_constant(ashr.lhs())?;
+        let rhs = self.val_as_int_constant(ashr.rhs())?;
+        let ty = self.cursor.ty(ashr.lhs());
+        let dbg = self.cursor.current_inst_dbg().unwrap();
+
+        // we need to cast to i64 here so we get arithmetic right shift behavior
+        self.cursor.replace().iconst(
+            ty,
+            (((lhs as i64) >> (rhs as i64)) as u64) & ty.unwrap_int().mask(),
+            dbg,
+        );
+
+        Some(())
+    }
+
+    fn visit_lshr(&mut self, lshr: &ArithInst) -> Option<()> {
+        let lhs = self.val_as_int_constant(lshr.lhs())?;
+        let rhs = self.val_as_int_constant(lshr.rhs())?;
+        let ty = self.cursor.ty(lshr.lhs());
+        let dbg = self.cursor.current_inst_dbg().unwrap();
+
+        // we need to cast to i64 here so we get arithmetic right shift behavior
+        self.cursor
+            .replace()
+            .iconst(ty, (lhs >> rhs) & ty.unwrap_int().mask(), dbg);
+
+        Some(())
+    }
+
+    fn visit_iadd(&mut self, iadd: &CommutativeArithInst) -> Option<()> {
+        let lhs = self.val_as_int_constant(iadd.lhs())?;
+        let rhs = self.val_as_int_constant(iadd.rhs())?;
+        let ty = self.cursor.ty(iadd.lhs());
+        let dbg = self.cursor.current_inst_dbg().unwrap();
+
+        self.cursor
+            .replace()
+            .iconst(ty, (lhs + rhs) & ty.unwrap_int().mask(), dbg);
+
+        Some(())
+    }
+
+    fn visit_isub(&mut self, isub: &ArithInst) -> Option<()> {
+        let lhs = self.val_as_int_constant(isub.lhs())?;
+        let rhs = self.val_as_int_constant(isub.rhs())?;
+        let ty = self.cursor.ty(isub.lhs());
+        let dbg = self.cursor.current_inst_dbg().unwrap();
+
+        self.cursor
+            .replace()
+            .iconst(ty, (lhs - rhs) & ty.unwrap_int().mask(), dbg);
+
+        Some(())
+    }
+
+    fn visit_imul(&mut self, imul: &CommutativeArithInst) -> Option<()> {
+        let lhs = self.val_as_int_constant(imul.lhs())?;
+        let rhs = self.val_as_int_constant(imul.rhs())?;
+        let ty = self.cursor.ty(imul.lhs());
+        let dbg = self.cursor.current_inst_dbg().unwrap();
+
+        self.cursor
+            .replace()
+            .iconst(ty, (lhs * rhs) & ty.unwrap_int().mask(), dbg);
+
+        Some(())
+    }
+
+    fn visit_sdiv(&mut self, sdiv: &ArithInst) -> Option<()> {
+        let lhs = self.val_as_int_constant(sdiv.lhs())?;
+        let rhs = self.val_as_int_constant(sdiv.rhs())?;
+
+        if rhs == 0 {
+            return None;
+        }
+
+        let ty = self.cursor.ty(sdiv.lhs());
+        let dbg = self.cursor.current_inst_dbg().unwrap();
+
+        self.cursor.replace().iconst(
+            ty,
+            (((lhs as i64) / (rhs as i64)) as u64) & ty.unwrap_int().mask(),
+            dbg,
+        );
+
+        Some(())
+    }
+
+    fn visit_udiv(&mut self, udiv: &ArithInst) -> Option<()> {
+        let lhs = self.val_as_int_constant(udiv.lhs())?;
+        let rhs = self.val_as_int_constant(udiv.rhs())?;
+        let ty = self.cursor.ty(udiv.lhs());
+        let dbg = self.cursor.current_inst_dbg().unwrap();
+
+        self.cursor
+            .replace()
+            .iconst(ty, (lhs / rhs) & ty.unwrap_int().mask(), dbg);
+
+        Some(())
+    }
+
+    fn visit_srem(&mut self, srem: &ArithInst) -> Option<()> {
+        let lhs = self.val_as_int_constant(srem.lhs())?;
+        let rhs = self.val_as_int_constant(srem.rhs())?;
+
+        if rhs == 0 {
+            return None;
+        }
+
+        let ty = self.cursor.ty(srem.lhs());
+        let dbg = self.cursor.current_inst_dbg().unwrap();
+
+        self.cursor.replace().iconst(
+            ty,
+            (((lhs as i64) % (rhs as i64)) as u64) & ty.unwrap_int().mask(),
+            dbg,
+        );
+
+        Some(())
+    }
+
+    fn visit_urem(&mut self, urem: &ArithInst) -> Option<()> {
+        let lhs = self.val_as_int_constant(urem.lhs())?;
+        let rhs = self.val_as_int_constant(urem.rhs())?;
+        let ty = self.cursor.ty(urem.lhs());
+        let dbg = self.cursor.current_inst_dbg().unwrap();
+
+        self.cursor
+            .replace()
+            .iconst(ty, (lhs % rhs) & ty.unwrap_int().mask(), dbg);
+
+        Some(())
     }
 
     fn visit_fneg(&mut self, _: &FloatUnaryInst) -> Option<()> {
         None
     }
 
-    fn visit_fadd(&mut self, _: &ArithInst) -> Option<()> {
+    fn visit_fadd(&mut self, _: &CommutativeArithInst) -> Option<()> {
         None
     }
 
@@ -256,7 +390,7 @@ impl<'f, 'c> GenericInstVisitor<Option<()>> for InPlaceConstantFolder<'f, 'c> {
         None
     }
 
-    fn visit_fmul(&mut self, _: &ArithInst) -> Option<()> {
+    fn visit_fmul(&mut self, _: &CommutativeArithInst) -> Option<()> {
         None
     }
 
