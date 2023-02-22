@@ -79,6 +79,12 @@ macro_rules! arith_float {
     }};
 }
 
+macro_rules! commutative_arith_float {
+    ($var:ident, $self:expr, operands: (lhs: $lhs:expr, rhs: $rhs:expr), $debug:expr) => {{
+        base_binary_inst!(CommutativeArithInst, $var, $self, operands: (lhs: $lhs, rhs: $rhs, check: is_float), $debug)
+    }};
+}
+
 /// Helper trait that allows easy creation of instruction builders. This trait
 /// provides a variety of helper methods that build instructions and inserts them
 /// in whatever way the trait implementor defines.
@@ -290,7 +296,7 @@ pub trait InstBuilder<'dfg>: Sized {
 
     /// Builds an `fadd` instruction
     fn fadd(self, lhs: Value, rhs: Value, debug: DebugInfo) -> Value {
-        arith_float!(FAdd, self, operands: (lhs: lhs, rhs: rhs), debug)
+        commutative_arith_float!(FAdd, self, operands: (lhs: lhs, rhs: rhs), debug)
     }
 
     /// Builds an `fsub` instruction
@@ -300,7 +306,7 @@ pub trait InstBuilder<'dfg>: Sized {
 
     /// Builds an `fmul` instruction
     fn fmul(self, lhs: Value, rhs: Value, debug: DebugInfo) -> Value {
-        arith_float!(FMul, self, operands: (lhs: lhs, rhs: rhs), debug)
+        commutative_arith_float!(FMul, self, operands: (lhs: lhs, rhs: rhs), debug)
     }
 
     /// Builds an `fdiv` instruction

@@ -29,7 +29,7 @@ arena_key! {
 #[repr(usize)]
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
 #[cfg_attr(feature = "enable-serde", derive(Serialize, Deserialize))]
-enum CompoundTypeData {
+pub(crate) enum CompoundTypeData {
     Array(Type, u64),
     Struct(Vec<Type>),
 }
@@ -86,6 +86,14 @@ impl TypePool {
         let key = self.arena.insert(data);
 
         Type::struct_from_ref(key)
+    }
+
+    /// Allows all the types currently in the pool to be iterated over.
+    pub(crate) fn all_types(&self) -> impl Iterator<Item = Type> + '_ {
+        self.arena.iter().map(|(k, v)| match v {
+            CompoundTypeData::Array(_, _) => Type::array_from_ref(k),
+            CompoundTypeData::Struct(_) => Type::struct_from_ref(k),
+        })
     }
 
     #[inline]

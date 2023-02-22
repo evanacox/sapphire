@@ -662,7 +662,7 @@ impl<'m> SIRVisitor<'m> for Verifier<'m> {
         );
     }
 
-    fn visit_fadd(&mut self, inst: Inst, data: &ArithInst, def: &FunctionDefinition) {
+    fn visit_fadd(&mut self, inst: Inst, data: &CommutativeArithInst, def: &FunctionDefinition) {
         verify_float_binop!(self, inst, "fadd", data, def);
     }
 
@@ -670,7 +670,7 @@ impl<'m> SIRVisitor<'m> for Verifier<'m> {
         verify_float_binop!(self, inst, "fsub", data, def);
     }
 
-    fn visit_fmul(&mut self, inst: Inst, data: &ArithInst, def: &FunctionDefinition) {
+    fn visit_fmul(&mut self, inst: Inst, data: &CommutativeArithInst, def: &FunctionDefinition) {
         verify_float_binop!(self, inst, "fmul", data, def);
     }
 
