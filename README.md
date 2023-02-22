@@ -20,7 +20,7 @@ int factorial(int x) {
 fn i32 @factorial(i32) {
 entry(i32 %x):
   %0 = iconst i32 2
-  %1 = icmp lt i32 %x, %0
+  %1 = icmp slt i32 %x, %0
   condbr bool %1, lessThanTwo, recurse
 
 lessThanTwo:
@@ -64,7 +64,7 @@ entry(i32 %0):
   br loop.head(i32 %1, i32 %1, i32 %2)
  
 loop.head(i32 %i, i32 %a, i32 %b)
-  %3 = icmp lt i32 %i, %0
+  %3 = icmp slt i32 %i, %0
   condbr bool %3, loop(i32 %a, i32 %b), exit(i32 %a)
  
 loop(i32 %a, i32 %b):
@@ -77,3 +77,4 @@ exit(i32 %a)
 }
 ```
 
+## License
