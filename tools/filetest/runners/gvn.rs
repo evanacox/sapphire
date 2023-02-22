@@ -1,6 +1,6 @@
 //======---------------------------------------------------------------======//
 //                                                                           //
-// Copyright 2022-2023 Evan Cox <evanacox00@gmail.com>. All rights reserved. //
+// Copyright 2022 Evan Cox <evanacox00@gmail.com>. All rights reserved.      //
 //                                                                           //
 // Use of this source code is governed by a BSD-style license that can be    //
 // found in the LICENSE.txt file at the root of this project, or at the      //
@@ -8,17 +8,12 @@
 //                                                                           //
 //======---------------------------------------------------------------======//
 
-mod dce;
-mod domtree;
-mod flowgraph;
-mod gvn;
-mod mem2reg;
-mod optimization_runner;
-mod parse;
+use crate::runners::optimization_runner::*;
+use crate::subtest::{Subtest, TestResult};
+use sapphire::transforms::GVNPass;
 
-pub use dce::*;
-pub use domtree::*;
-pub use flowgraph::*;
-pub use gvn::*;
-pub use mem2reg::*;
-pub use parse::*;
+runner_for_opt!(gvn, FunctionToModulePassAdapter::adapt(GVNPass));
+
+pub const fn gvn_subtest() -> Subtest {
+    Subtest::new("gvn", gvn)
+}

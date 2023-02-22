@@ -8,37 +8,14 @@
 //                                                                           //
 //======---------------------------------------------------------------======//
 
+use crate::runners::optimization_runner::*;
 use crate::subtest::{Subtest, TestResult};
-use sapphire::analysis::*;
-use sapphire::pass::*;
-use sapphire::transforms;
 use sapphire::transforms::DeadCodeEliminationPass;
 
-fn dce(name: &str, content: &str) -> TestResult {
-    match sapphire::parse_sir(name, content) {
-        Ok(mut module) => {
-            transforms::verify_module_panic(&module);
-
-            let mut fam = FunctionAnalysisManager::default();
-            fam.add_analysis(ControlFlowGraphAnalysis);
-            fam.add_analysis(DominatorTreeAnalysis);
-
-            let mut mam = ModuleAnalysisManager::default();
-            mam.add_analysis(FunctionAnalysisManagerModuleProxy::wrap(fam));
-
-            let mut fpm = FunctionPassManager::new();
-            fpm.add_pass(DeadCodeEliminationPass);
-
-            let mut mpm = ModulePassManager::new();
-            mpm.add_pass(FunctionToModulePassAdapter::adapt(fpm));
-
-            mpm.run(&mut module, &mut mam);
-
-            TestResult::Output(stringify_module(&module))
-        }
-        Err(err) => TestResult::CompileError(format!("{err}")),
-    }
-}
+runner_for_opt!(
+    dce,
+    FunctionToModulePassAdapter::adapt(DeadCodeEliminationPass)
+);
 
 pub const fn dce_subtest() -> Subtest {
     Subtest::new("dce", dce)

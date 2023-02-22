@@ -15,11 +15,12 @@ use std::io;
 use std::time::Duration;
 use threadpool::ThreadPool;
 
-const SUBTESTS: [Subtest; 4] = [
+const SUBTESTS: [Subtest; 5] = [
     parse_subtest(),
     domtree_subtest(),
     dce_subtest(),
     mem2reg_subtest(),
+    gvn_subtest(),
 ];
 
 fn pool_for_jobs(jobs: Option<usize>) -> ThreadPool {
@@ -75,6 +76,7 @@ pub fn run_subtest(name: &str, jobs: Option<usize>) -> io::Result<()> {
         "domtree" => run_tests(&SUBTESTS[1..2], &mut pool),
         "dce" => run_tests(&SUBTESTS[2..3], &mut pool),
         "mem2reg" => run_tests(&SUBTESTS[3..4], &mut pool),
+        "gvn" => run_tests(&SUBTESTS[4..5], &mut pool),
         _ => unreachable!(),
     }
 }

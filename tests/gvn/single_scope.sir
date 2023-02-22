@@ -1,0 +1,19 @@
+; MATCH-SECTION
+;
+; fn i32 @main() {
+; entry:
+;   %0 = iconst i32 42
+;   %1 = iadd i32 %0, %0
+;   %2 = isub i32 %1, %1
+;   ret i32 %2
+; }
+;;
+fn i32 @main() {
+entry:
+  %0 = iconst i32 42
+  %1 = iconst i32 42
+  %2 = iadd i32 %0, %1
+  %3 = iadd i32 %0, %1
+  %4 = isub i32 %2, %3
+  ret i32 %4
+}
