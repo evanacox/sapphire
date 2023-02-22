@@ -10,7 +10,7 @@
 
 use crate::runners::optimization_runner::*;
 use crate::subtest::{Subtest, TestResult};
-use sapphire::transforms::{Mem2RegPass, SimplifyInstPass};
+use sapphire::transforms::SimplifyInstPass;
 
 runner_for_opt!(
     simplifyinst,

@@ -25,7 +25,7 @@
 //! b.append().ret_val(v4, DebugInfo::fake());
 //!
 //! let f = b.define();
-//! let dfg = module.function(f).definition().unwrap().dfg();
+//! let dfg = &module.function(f).definition().unwrap().dfg;
 //!
 //! let iconst_42 = iconst_val(42);
 //! let iconst_i32 = iconst_ty(Type::i32());
