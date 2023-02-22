@@ -160,7 +160,7 @@ impl InstData {
     /// Gets the constant value as a u64 that can be manipulated directly.
     pub fn constant_raw(&self) -> u64 {
         assert!(self.is_constant());
-        
+
         match self {
             InstData::BConst(bconst) => bconst.value() as u64,
             InstData::IConst(iconst) => iconst.value(),
