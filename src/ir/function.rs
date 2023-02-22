@@ -60,10 +60,6 @@ bitflags! {
 pub enum CallConv {
     /// The default C convention for the given target platform.
     C,
-    /// The System-V calling convention for the target architecture.
-    SysV,
-    /// The Windows calling convention for the target
-    Win64,
     /// Similar to `fastcc` on LLVM, makes calls fast
     Fast,
 }
