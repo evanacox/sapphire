@@ -537,6 +537,12 @@
 <a href="#534" id="534">534</a>
 <a href="#535" id="535">535</a>
 <a href="#536" id="536">536</a>
+<a href="#537" id="537">537</a>
+<a href="#538" id="538">538</a>
+<a href="#539" id="539">539</a>
+<a href="#540" id="540">540</a>
+<a href="#541" id="541">541</a>
+<a href="#542" id="542">542</a>
 </pre><pre class="rust"><code><span class="comment">//======---------------------------------------------------------------======//
 //                                                                           //
 // Copyright 2022-2023 Evan Cox &lt;evanacox00@gmail.com&gt;. All rights reserved. //
@@ -615,6 +621,12 @@
 <span class="macro">macro_rules! </span>arith_float {
     (<span class="macro-nonterminal">$var</span>:ident, <span class="macro-nonterminal">$self</span>:expr, operands: (lhs: <span class="macro-nonterminal">$lhs</span>:expr, rhs: <span class="macro-nonterminal">$rhs</span>:expr), <span class="macro-nonterminal">$debug</span>:expr) =&gt; {{
         <span class="macro">base_binary_inst!</span>(ArithInst, <span class="macro-nonterminal">$var</span>, <span class="macro-nonterminal">$self</span>, operands: (lhs: <span class="macro-nonterminal">$lhs</span>, rhs: <span class="macro-nonterminal">$rhs</span>, check: is_float), <span class="macro-nonterminal">$debug</span>)
+    }};
+}
+
+<span class="macro">macro_rules! </span>commutative_arith_float {
+    (<span class="macro-nonterminal">$var</span>:ident, <span class="macro-nonterminal">$self</span>:expr, operands: (lhs: <span class="macro-nonterminal">$lhs</span>:expr, rhs: <span class="macro-nonterminal">$rhs</span>:expr), <span class="macro-nonterminal">$debug</span>:expr) =&gt; {{
+        <span class="macro">base_binary_inst!</span>(CommutativeArithInst, <span class="macro-nonterminal">$var</span>, <span class="macro-nonterminal">$self</span>, operands: (lhs: <span class="macro-nonterminal">$lhs</span>, rhs: <span class="macro-nonterminal">$rhs</span>, check: is_float), <span class="macro-nonterminal">$debug</span>)
     }};
 }
 
@@ -829,7 +841,7 @@
 
     <span class="doccomment">/// Builds an `fadd` instruction
     </span><span class="kw">fn </span>fadd(<span class="self">self</span>, lhs: Value, rhs: Value, debug: DebugInfo) -&gt; Value {
-        <span class="macro">arith_float!</span>(FAdd, <span class="self">self</span>, operands: (lhs: lhs, rhs: rhs), debug)
+        <span class="macro">commutative_arith_float!</span>(FAdd, <span class="self">self</span>, operands: (lhs: lhs, rhs: rhs), debug)
     }
 
     <span class="doccomment">/// Builds an `fsub` instruction
@@ -839,7 +851,7 @@
 
     <span class="doccomment">/// Builds an `fmul` instruction
     </span><span class="kw">fn </span>fmul(<span class="self">self</span>, lhs: Value, rhs: Value, debug: DebugInfo) -&gt; Value {
-        <span class="macro">arith_float!</span>(FMul, <span class="self">self</span>, operands: (lhs: lhs, rhs: rhs), debug)
+        <span class="macro">commutative_arith_float!</span>(FMul, <span class="self">self</span>, operands: (lhs: lhs, rhs: rhs), debug)
     }
 
     <span class="doccomment">/// Builds an `fdiv` instruction

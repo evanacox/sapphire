@@ -81,6 +81,10 @@
 <a href="#78" id="78">78</a>
 <a href="#79" id="79">79</a>
 <a href="#80" id="80">80</a>
+<a href="#81" id="81">81</a>
+<a href="#82" id="82">82</a>
+<a href="#83" id="83">83</a>
+<a href="#84" id="84">84</a>
 </pre><pre class="rust"><code><span class="comment">//======---------------------------------------------------------------======//
 //                                                                           //
 // Copyright 2022-2023 Evan Cox &lt;evanacox00@gmail.com&gt;. All rights reserved. //
@@ -92,17 +96,19 @@
 //======---------------------------------------------------------------======//
 
 </span><span class="kw">use </span><span class="kw">crate</span>::display;
-<span class="kw">use </span><span class="kw">crate</span>::runners::{dce_subtest, domtree_subtest, mem2reg_subtest, parse_subtest};
+<span class="kw">use </span><span class="kw">crate</span>::runners::<span class="kw-2">*</span>;
 <span class="kw">use </span><span class="kw">crate</span>::subtest::Subtest;
 <span class="kw">use </span>std::io;
 <span class="kw">use </span>std::time::Duration;
 <span class="kw">use </span>threadpool::ThreadPool;
 
-<span class="kw">const </span>SUBTESTS: [Subtest; <span class="number">4</span>] = [
+<span class="kw">const </span>SUBTESTS: [Subtest; <span class="number">6</span>] = [
     parse_subtest(),
     domtree_subtest(),
     dce_subtest(),
     mem2reg_subtest(),
+    gvn_subtest(),
+    simplifyinst_subtest(),
 ];
 
 <span class="kw">fn </span>pool_for_jobs(jobs: <span class="prelude-ty">Option</span>&lt;usize&gt;) -&gt; ThreadPool {
@@ -158,6 +164,8 @@
         <span class="string">&quot;domtree&quot; </span>=&gt; run_tests(<span class="kw-2">&amp;</span>SUBTESTS[<span class="number">1</span>..<span class="number">2</span>], <span class="kw-2">&amp;mut </span>pool),
         <span class="string">&quot;dce&quot; </span>=&gt; run_tests(<span class="kw-2">&amp;</span>SUBTESTS[<span class="number">2</span>..<span class="number">3</span>], <span class="kw-2">&amp;mut </span>pool),
         <span class="string">&quot;mem2reg&quot; </span>=&gt; run_tests(<span class="kw-2">&amp;</span>SUBTESTS[<span class="number">3</span>..<span class="number">4</span>], <span class="kw-2">&amp;mut </span>pool),
+        <span class="string">&quot;gvn&quot; </span>=&gt; run_tests(<span class="kw-2">&amp;</span>SUBTESTS[<span class="number">4</span>..<span class="number">5</span>], <span class="kw-2">&amp;mut </span>pool),
+        <span class="string">&quot;simplifyinst&quot; </span>=&gt; run_tests(<span class="kw-2">&amp;</span>SUBTESTS[<span class="number">5</span>..<span class="number">6</span>], <span class="kw-2">&amp;mut </span>pool),
         <span class="kw">_ </span>=&gt; <span class="macro">unreachable!</span>(),
     }
 }

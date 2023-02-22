@@ -1724,7 +1724,7 @@
         </span>);
     }
 
-    <span class="kw">fn </span>visit_fadd(<span class="kw-2">&amp;mut </span><span class="self">self</span>, inst: Inst, data: <span class="kw-2">&amp;</span>ArithInst, def: <span class="kw-2">&amp;</span>FunctionDefinition) {
+    <span class="kw">fn </span>visit_fadd(<span class="kw-2">&amp;mut </span><span class="self">self</span>, inst: Inst, data: <span class="kw-2">&amp;</span>CommutativeArithInst, def: <span class="kw-2">&amp;</span>FunctionDefinition) {
         <span class="macro">verify_float_binop!</span>(<span class="self">self</span>, inst, <span class="string">&quot;fadd&quot;</span>, data, def);
     }
 
@@ -1732,7 +1732,7 @@
         <span class="macro">verify_float_binop!</span>(<span class="self">self</span>, inst, <span class="string">&quot;fsub&quot;</span>, data, def);
     }
 
-    <span class="kw">fn </span>visit_fmul(<span class="kw-2">&amp;mut </span><span class="self">self</span>, inst: Inst, data: <span class="kw-2">&amp;</span>ArithInst, def: <span class="kw-2">&amp;</span>FunctionDefinition) {
+    <span class="kw">fn </span>visit_fmul(<span class="kw-2">&amp;mut </span><span class="self">self</span>, inst: Inst, data: <span class="kw-2">&amp;</span>CommutativeArithInst, def: <span class="kw-2">&amp;</span>FunctionDefinition) {
         <span class="macro">verify_float_binop!</span>(<span class="self">self</span>, inst, <span class="string">&quot;fmul&quot;</span>, data, def);
     }
 

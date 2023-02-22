@@ -1430,8 +1430,6 @@
 <a href="#1427" id="1427">1427</a>
 <a href="#1428" id="1428">1428</a>
 <a href="#1429" id="1429">1429</a>
-<a href="#1430" id="1430">1430</a>
-<a href="#1431" id="1431">1431</a>
 </pre><pre class="rust"><code><span class="comment">//======---------------------------------------------------------------======//
 //                                                                           //
 // Copyright 2022-2023 Evan Cox &lt;evanacox00@gmail.com&gt;. All rights reserved. //
@@ -1643,8 +1641,6 @@
     <span class="kw">match </span>abi {
         CallConv::C =&gt; <span class="string">&quot;ccc&quot;</span>,
         CallConv::Fast =&gt; <span class="string">&quot;fastcc&quot;</span>,
-        CallConv::SysV =&gt; <span class="string">&quot;sysv&quot;</span>,
-        CallConv::Win64 =&gt; <span class="string">&quot;win64&quot;</span>,
     }
 }
 
@@ -2113,16 +2109,16 @@
         <span class="self">self</span>.state.whole += <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">&quot;fneg {ty} {val}&quot;</span>);
     }
 
-    <span class="kw">fn </span>visit_fadd(<span class="kw-2">&amp;mut </span><span class="self">self</span>, inst: Inst, data: <span class="kw-2">&amp;</span>ArithInst, def: <span class="kw-2">&amp;</span>FunctionDefinition) {
-        <span class="self">self</span>.arith(<span class="string">&quot;fadd&quot;</span>, inst, data, def);
+    <span class="kw">fn </span>visit_fadd(<span class="kw-2">&amp;mut </span><span class="self">self</span>, inst: Inst, data: <span class="kw-2">&amp;</span>CommutativeArithInst, def: <span class="kw-2">&amp;</span>FunctionDefinition) {
+        <span class="self">self</span>.commutative_arith(<span class="string">&quot;fadd&quot;</span>, inst, data, def);
     }
 
     <span class="kw">fn </span>visit_fsub(<span class="kw-2">&amp;mut </span><span class="self">self</span>, inst: Inst, data: <span class="kw-2">&amp;</span>ArithInst, def: <span class="kw-2">&amp;</span>FunctionDefinition) {
         <span class="self">self</span>.arith(<span class="string">&quot;fsub&quot;</span>, inst, data, def);
     }
 
-    <span class="kw">fn </span>visit_fmul(<span class="kw-2">&amp;mut </span><span class="self">self</span>, inst: Inst, data: <span class="kw-2">&amp;</span>ArithInst, def: <span class="kw-2">&amp;</span>FunctionDefinition) {
-        <span class="self">self</span>.arith(<span class="string">&quot;fmul&quot;</span>, inst, data, def);
+    <span class="kw">fn </span>visit_fmul(<span class="kw-2">&amp;mut </span><span class="self">self</span>, inst: Inst, data: <span class="kw-2">&amp;</span>CommutativeArithInst, def: <span class="kw-2">&amp;</span>FunctionDefinition) {
+        <span class="self">self</span>.commutative_arith(<span class="string">&quot;fmul&quot;</span>, inst, data, def);
     }
 
     <span class="kw">fn </span>visit_fdiv(<span class="kw-2">&amp;mut </span><span class="self">self</span>, inst: Inst, data: <span class="kw-2">&amp;</span>ArithInst, def: <span class="kw-2">&amp;</span>FunctionDefinition) {

@@ -38,6 +38,8 @@
 <a href="#35" id="35">35</a>
 <a href="#36" id="36">36</a>
 <a href="#37" id="37">37</a>
+<a href="#38" id="38">38</a>
+<a href="#39" id="39">39</a>
 </pre><pre class="rust"><code><span class="comment">//======---------------------------------------------------------------======//
 //                                                                           //
 // Copyright 2022-2023 Evan Cox &lt;evanacox00@gmail.com&gt;. All rights reserved. //
@@ -65,7 +67,8 @@
 <span class="kw">mod </span>mem2reg;
 <span class="kw">mod </span>printers;
 <span class="kw">mod </span>sccp;
-<span class="kw">mod </span>simplify;
+<span class="kw">mod </span>simplifycfg;
+<span class="kw">mod </span>simplifyinst;
 <span class="kw">mod </span>verify;
 
 <span class="kw">pub use </span>dce::<span class="kw-2">*</span>;
@@ -73,7 +76,8 @@
 <span class="kw">pub use </span>mem2reg::<span class="kw-2">*</span>;
 <span class="kw">pub use </span>printers::<span class="kw-2">*</span>;
 <span class="kw">pub use </span>sccp::<span class="kw-2">*</span>;
-<span class="kw">pub use </span>simplify::<span class="kw-2">*</span>;
+<span class="kw">pub use </span>simplifycfg::<span class="kw-2">*</span>;
+<span class="kw">pub use </span>simplifyinst::<span class="kw-2">*</span>;
 <span class="kw">pub use </span>verify::<span class="kw-2">*</span>;
 </code></pre></div>
 </section></main><script>

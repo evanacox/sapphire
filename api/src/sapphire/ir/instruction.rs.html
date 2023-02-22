@@ -1717,6 +1717,19 @@
 <a href="#1714" id="1714">1714</a>
 <a href="#1715" id="1715">1715</a>
 <a href="#1716" id="1716">1716</a>
+<a href="#1717" id="1717">1717</a>
+<a href="#1718" id="1718">1718</a>
+<a href="#1719" id="1719">1719</a>
+<a href="#1720" id="1720">1720</a>
+<a href="#1721" id="1721">1721</a>
+<a href="#1722" id="1722">1722</a>
+<a href="#1723" id="1723">1723</a>
+<a href="#1724" id="1724">1724</a>
+<a href="#1725" id="1725">1725</a>
+<a href="#1726" id="1726">1726</a>
+<a href="#1727" id="1727">1727</a>
+<a href="#1728" id="1728">1728</a>
+<a href="#1729" id="1729">1729</a>
 </pre><pre class="rust"><code><span class="comment">//======---------------------------------------------------------------======//
 //                                                                           //
 // Copyright 2022-2023 Evan Cox &lt;evanacox00@gmail.com&gt;. All rights reserved. //
@@ -1793,11 +1806,11 @@
     <span class="doccomment">/// `fneg T %a`, performs floating-point negation
     </span>FNeg(FloatUnaryInst),
     <span class="doccomment">/// `fadd T %a, %b`, performs floating-point addition
-    </span>FAdd(ArithInst),
+    </span>FAdd(CommutativeArithInst),
     <span class="doccomment">/// `fadd T %a, %b`, performs floating-point subtraction
     </span>FSub(ArithInst),
     <span class="doccomment">/// `fadd T %a, %b`, performs floating-point multiplication
-    </span>FMul(ArithInst),
+    </span>FMul(CommutativeArithInst),
     <span class="doccomment">/// `fadd T %a, %b`, performs floating-point division
     </span>FDiv(ArithInst),
     <span class="doccomment">/// `fadd T %a, %b`, gets the remainder of performing floating-point division
@@ -1874,6 +1887,19 @@
             <span class="self">self</span>,
             InstData::BConst(<span class="kw">_</span>) | InstData::IConst(<span class="kw">_</span>) | InstData::FConst(<span class="kw">_</span>) | InstData::Null(<span class="kw">_</span>)
         )
+    }
+
+    <span class="doccomment">/// Gets the constant value as a u64 that can be manipulated directly.
+    </span><span class="kw">pub fn </span>constant_raw(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; u64 {
+        <span class="macro">assert!</span>(<span class="self">self</span>.is_constant());
+
+        <span class="kw">match </span><span class="self">self </span>{
+            InstData::BConst(bconst) =&gt; bconst.value() <span class="kw">as </span>u64,
+            InstData::IConst(iconst) =&gt; iconst.value(),
+            InstData::FConst(fconst) =&gt; fconst.value(),
+            InstData::Null(<span class="kw">_</span>) =&gt; <span class="number">0</span>,
+            <span class="kw">_ </span>=&gt; <span class="macro">unreachable!</span>(),
+        }
     }
 }
 

@@ -110,7 +110,7 @@
 <span class="item-spacer"></span>    fn <a href="#tymethod.visit_fadd" class="fn">visit_fadd</a>(
         &amp;mut self,
         inst: <a class="struct" href="struct.Inst.html" title="struct sapphire::ir::Inst">Inst</a>,
-        data: &amp;<a class="type" href="type.ArithInst.html" title="type sapphire::ir::ArithInst">ArithInst</a>,
+        data: &amp;<a class="type" href="type.CommutativeArithInst.html" title="type sapphire::ir::CommutativeArithInst">CommutativeArithInst</a>,
         def: &amp;<a class="struct" href="struct.FunctionDefinition.html" title="struct sapphire::ir::FunctionDefinition">FunctionDefinition</a>
     );
 <span class="item-spacer"></span>    fn <a href="#tymethod.visit_fsub" class="fn">visit_fsub</a>(
@@ -122,7 +122,7 @@
 <span class="item-spacer"></span>    fn <a href="#tymethod.visit_fmul" class="fn">visit_fmul</a>(
         &amp;mut self,
         inst: <a class="struct" href="struct.Inst.html" title="struct sapphire::ir::Inst">Inst</a>,
-        data: &amp;<a class="type" href="type.ArithInst.html" title="type sapphire::ir::ArithInst">ArithInst</a>,
+        data: &amp;<a class="type" href="type.CommutativeArithInst.html" title="type sapphire::ir::CommutativeArithInst">CommutativeArithInst</a>,
         def: &amp;<a class="struct" href="struct.FunctionDefinition.html" title="struct sapphire::ir::FunctionDefinition">FunctionDefinition</a>
     );
 <span class="item-spacer"></span>    fn <a href="#tymethod.visit_fdiv" class="fn">visit_fdiv</a>(
@@ -336,9 +336,19 @@ patterns that need to be matched this is not the right API.</p>
     data: &amp;<a class="struct" href="struct.FloatUnaryInst.html" title="struct sapphire::ir::FloatUnaryInst">FloatUnaryInst</a>,
     def: &amp;<a class="struct" href="struct.FunctionDefinition.html" title="struct sapphire::ir::FunctionDefinition">FunctionDefinition</a>
 )</h4></section></summary><div class="docblock"><p>Visits an <code>fneg</code> instruction.</p>
-</div></details><details class="toggle method-toggle" open><summary><section id="tymethod.visit_fadd" class="method"><a class="srclink rightside" href="../../src/sapphire/ir/visitor.rs.html#201">source</a><h4 class="code-header">fn <a href="#tymethod.visit_fadd" class="fn">visit_fadd</a>(&amp;mut self, inst: <a class="struct" href="struct.Inst.html" title="struct sapphire::ir::Inst">Inst</a>, data: &amp;<a class="type" href="type.ArithInst.html" title="type sapphire::ir::ArithInst">ArithInst</a>, def: &amp;<a class="struct" href="struct.FunctionDefinition.html" title="struct sapphire::ir::FunctionDefinition">FunctionDefinition</a>)</h4></section></summary><div class="docblock"><p>Visits an <code>fadd</code> instruction.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="tymethod.visit_fadd" class="method"><a class="srclink rightside" href="../../src/sapphire/ir/visitor.rs.html#201">source</a><h4 class="code-header">fn <a href="#tymethod.visit_fadd" class="fn">visit_fadd</a>(
+    &amp;mut self,
+    inst: <a class="struct" href="struct.Inst.html" title="struct sapphire::ir::Inst">Inst</a>,
+    data: &amp;<a class="type" href="type.CommutativeArithInst.html" title="type sapphire::ir::CommutativeArithInst">CommutativeArithInst</a>,
+    def: &amp;<a class="struct" href="struct.FunctionDefinition.html" title="struct sapphire::ir::FunctionDefinition">FunctionDefinition</a>
+)</h4></section></summary><div class="docblock"><p>Visits an <code>fadd</code> instruction.</p>
 </div></details><details class="toggle method-toggle" open><summary><section id="tymethod.visit_fsub" class="method"><a class="srclink rightside" href="../../src/sapphire/ir/visitor.rs.html#204">source</a><h4 class="code-header">fn <a href="#tymethod.visit_fsub" class="fn">visit_fsub</a>(&amp;mut self, inst: <a class="struct" href="struct.Inst.html" title="struct sapphire::ir::Inst">Inst</a>, data: &amp;<a class="type" href="type.ArithInst.html" title="type sapphire::ir::ArithInst">ArithInst</a>, def: &amp;<a class="struct" href="struct.FunctionDefinition.html" title="struct sapphire::ir::FunctionDefinition">FunctionDefinition</a>)</h4></section></summary><div class="docblock"><p>Visits an <code>fsub</code> instruction.</p>
-</div></details><details class="toggle method-toggle" open><summary><section id="tymethod.visit_fmul" class="method"><a class="srclink rightside" href="../../src/sapphire/ir/visitor.rs.html#207">source</a><h4 class="code-header">fn <a href="#tymethod.visit_fmul" class="fn">visit_fmul</a>(&amp;mut self, inst: <a class="struct" href="struct.Inst.html" title="struct sapphire::ir::Inst">Inst</a>, data: &amp;<a class="type" href="type.ArithInst.html" title="type sapphire::ir::ArithInst">ArithInst</a>, def: &amp;<a class="struct" href="struct.FunctionDefinition.html" title="struct sapphire::ir::FunctionDefinition">FunctionDefinition</a>)</h4></section></summary><div class="docblock"><p>Visits an <code>fmul</code> instruction.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="tymethod.visit_fmul" class="method"><a class="srclink rightside" href="../../src/sapphire/ir/visitor.rs.html#207">source</a><h4 class="code-header">fn <a href="#tymethod.visit_fmul" class="fn">visit_fmul</a>(
+    &amp;mut self,
+    inst: <a class="struct" href="struct.Inst.html" title="struct sapphire::ir::Inst">Inst</a>,
+    data: &amp;<a class="type" href="type.CommutativeArithInst.html" title="type sapphire::ir::CommutativeArithInst">CommutativeArithInst</a>,
+    def: &amp;<a class="struct" href="struct.FunctionDefinition.html" title="struct sapphire::ir::FunctionDefinition">FunctionDefinition</a>
+)</h4></section></summary><div class="docblock"><p>Visits an <code>fmul</code> instruction.</p>
 </div></details><details class="toggle method-toggle" open><summary><section id="tymethod.visit_fdiv" class="method"><a class="srclink rightside" href="../../src/sapphire/ir/visitor.rs.html#210">source</a><h4 class="code-header">fn <a href="#tymethod.visit_fdiv" class="fn">visit_fdiv</a>(&amp;mut self, inst: <a class="struct" href="struct.Inst.html" title="struct sapphire::ir::Inst">Inst</a>, data: &amp;<a class="type" href="type.ArithInst.html" title="type sapphire::ir::ArithInst">ArithInst</a>, def: &amp;<a class="struct" href="struct.FunctionDefinition.html" title="struct sapphire::ir::FunctionDefinition">FunctionDefinition</a>)</h4></section></summary><div class="docblock"><p>Visits an <code>fdiv</code> instruction.</p>
 </div></details><details class="toggle method-toggle" open><summary><section id="tymethod.visit_frem" class="method"><a class="srclink rightside" href="../../src/sapphire/ir/visitor.rs.html#213">source</a><h4 class="code-header">fn <a href="#tymethod.visit_frem" class="fn">visit_frem</a>(&amp;mut self, inst: <a class="struct" href="struct.Inst.html" title="struct sapphire::ir::Inst">Inst</a>, data: &amp;<a class="type" href="type.ArithInst.html" title="type sapphire::ir::ArithInst">ArithInst</a>, def: &amp;<a class="struct" href="struct.FunctionDefinition.html" title="struct sapphire::ir::FunctionDefinition">FunctionDefinition</a>)</h4></section></summary><div class="docblock"><p>Visits an <code>frem</code> instruction.</p>
 </div></details><details class="toggle method-toggle" open><summary><section id="tymethod.visit_alloca" class="method"><a class="srclink rightside" href="../../src/sapphire/ir/visitor.rs.html#216">source</a><h4 class="code-header">fn <a href="#tymethod.visit_alloca" class="fn">visit_alloca</a>(&amp;mut self, inst: <a class="struct" href="struct.Inst.html" title="struct sapphire::ir::Inst">Inst</a>, data: &amp;<a class="struct" href="struct.AllocaInst.html" title="struct sapphire::ir::AllocaInst">AllocaInst</a>, def: &amp;<a class="struct" href="struct.FunctionDefinition.html" title="struct sapphire::ir::FunctionDefinition">FunctionDefinition</a>)</h4></section></summary><div class="docblock"><p>Visits an <code>alloca</code> instruction.</p>

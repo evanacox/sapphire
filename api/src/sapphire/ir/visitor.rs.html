@@ -772,13 +772,13 @@
     </span><span class="kw">fn </span>visit_fneg(<span class="kw-2">&amp;mut </span><span class="self">self</span>, inst: Inst, data: <span class="kw-2">&amp;</span>FloatUnaryInst, def: <span class="kw-2">&amp;</span>FunctionDefinition);
 
     <span class="doccomment">/// Visits an `fadd` instruction.
-    </span><span class="kw">fn </span>visit_fadd(<span class="kw-2">&amp;mut </span><span class="self">self</span>, inst: Inst, data: <span class="kw-2">&amp;</span>ArithInst, def: <span class="kw-2">&amp;</span>FunctionDefinition);
+    </span><span class="kw">fn </span>visit_fadd(<span class="kw-2">&amp;mut </span><span class="self">self</span>, inst: Inst, data: <span class="kw-2">&amp;</span>CommutativeArithInst, def: <span class="kw-2">&amp;</span>FunctionDefinition);
 
     <span class="doccomment">/// Visits an `fsub` instruction.
     </span><span class="kw">fn </span>visit_fsub(<span class="kw-2">&amp;mut </span><span class="self">self</span>, inst: Inst, data: <span class="kw-2">&amp;</span>ArithInst, def: <span class="kw-2">&amp;</span>FunctionDefinition);
 
     <span class="doccomment">/// Visits an `fmul` instruction.
-    </span><span class="kw">fn </span>visit_fmul(<span class="kw-2">&amp;mut </span><span class="self">self</span>, inst: Inst, data: <span class="kw-2">&amp;</span>ArithInst, def: <span class="kw-2">&amp;</span>FunctionDefinition);
+    </span><span class="kw">fn </span>visit_fmul(<span class="kw-2">&amp;mut </span><span class="self">self</span>, inst: Inst, data: <span class="kw-2">&amp;</span>CommutativeArithInst, def: <span class="kw-2">&amp;</span>FunctionDefinition);
 
     <span class="doccomment">/// Visits an `fdiv` instruction.
     </span><span class="kw">fn </span>visit_fdiv(<span class="kw-2">&amp;mut </span><span class="self">self</span>, inst: Inst, data: <span class="kw-2">&amp;</span>ArithInst, def: <span class="kw-2">&amp;</span>FunctionDefinition);
@@ -1000,13 +1000,13 @@
     </span><span class="kw">fn </span>visit_fneg(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>FloatUnaryInst) -&gt; T;
 
     <span class="doccomment">/// Visits an `fadd` instruction.
-    </span><span class="kw">fn </span>visit_fadd(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>ArithInst) -&gt; T;
+    </span><span class="kw">fn </span>visit_fadd(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>CommutativeArithInst) -&gt; T;
 
     <span class="doccomment">/// Visits an `fsub` instruction.
     </span><span class="kw">fn </span>visit_fsub(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>ArithInst) -&gt; T;
 
     <span class="doccomment">/// Visits an `fmul` instruction.
-    </span><span class="kw">fn </span>visit_fmul(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>ArithInst) -&gt; T;
+    </span><span class="kw">fn </span>visit_fmul(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>CommutativeArithInst) -&gt; T;
 
     <span class="doccomment">/// Visits an `fdiv` instruction.
     </span><span class="kw">fn </span>visit_fdiv(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>ArithInst) -&gt; T;

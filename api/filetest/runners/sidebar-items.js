@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["dce","domtree","flowgraph","mem2reg","parse"]};
+window.SIDEBAR_ITEMS = {"mod":["dce","domtree","flowgraph","gvn","mem2reg","optimization_runner","parse","simplifyinst"]};
