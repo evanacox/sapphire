@@ -1,0 +1,19 @@
+; MATCH-SECTION
+;
+; fn void @test(i32) {
+;   $0 = stack i32
+;
+; entry(i32 %0):
+;   %1 = stackslot $0
+;   store i32 %0, ptr %1
+;   ret void
+; }
+;;
+fn void @test(i32) {
+  $0 = stack i32
+
+entry(i32 %0):
+  %1 = stackslot $0
+  store i32 %0, ptr %1
+  ret void
+}

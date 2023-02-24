@@ -10,8 +10,6 @@
 
 use crate::discovery;
 use crate::testcase::TestFailure;
-use backtrace::Backtrace;
-use serde_test::Configure;
 use std::cell::RefCell;
 use std::panic;
 use std::panic::PanicInfo;

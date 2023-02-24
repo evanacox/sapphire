@@ -1,0 +1,21 @@
+; MATCH-SECTION
+;
+; fn i32 @main(i32) {
+;   $1 = stack i32
+;
+; entry(i32 %0):
+;   %1 = stackslot $1
+;   store i32 %0, ptr %1
+;   ret i32 %0
+; }
+;;
+fn i32 @main(i32) {
+  $0 = stack i32
+  $1 = stack i32
+
+entry(i32 %0):
+  %1 = stackslot $0
+  %2 = stackslot $1
+  store i32 %0, ptr %2
+  ret i32 %0
+}
