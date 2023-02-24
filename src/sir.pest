@@ -19,6 +19,7 @@ LINE_COMMENT = _{ ";" ~ (!NEWLINE ~ ANY)* ~ NEWLINE }
 
 ident = @{ XID_START ~ (XID_CONTINUE | ".")* }
 local = @{ "%" ~ (ident | ASCII_DIGIT+) }
+stack = @{ "$" ~ (ident | ASCII_DIGIT+) }
 global = @{ "@" ~ ident }
 
 // types
@@ -53,13 +54,20 @@ function_prototype = { "fn" ~ ty_or_void ~ global ~ param_list ~ abi? }
 function_body = {
 	"{" ~ (NEWLINE | LINE_COMMENT) ~
     (PATTERN_WHITE_SPACE*) ~
-    (basic_block | LINE_COMMENT)* ~
+    (stack_slot | LINE_COMMENT)* ~
+    (PATTERN_WHITE_SPACE*) ~
+    (basic_block | LINE_COMMENT)+ ~
     (PATTERN_WHITE_SPACE*) ~
     "}"
 }
 function = {
     function_prototype ~ function_body? ~ (LINE_COMMENT*) ~ NEWLINE
 }
+
+//
+// stack slot
+//   $0 = stack <ty>
+stack_slot = { stack ~ "=" ~ "stack" ~ ty ~ NEWLINE }
 
 //
 // single basic block
@@ -128,6 +136,7 @@ inst = {
     bconst |
     undef |
     null |
+    stackslot |
     globaladdr
 }
 
@@ -260,6 +269,9 @@ undef = { result ~ "undef" ~ ty }
 
 // %0 = null i32
 null = { result ~ "null" ~ ty }
+
+// %0 = stackslot
+stackslot = { result ~ "stackslot" ~ stack }
 
 // %0 = globaladdr @printf
 globaladdr = { result ~ "globaladdr" ~ global }

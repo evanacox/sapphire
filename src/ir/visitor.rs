@@ -119,6 +119,7 @@ pub trait SIRVisitor<'a> {
             InstData::BConst(i) => self.visit_bconst(inst, i, def),
             InstData::Undef(i) => self.visit_undef(inst, i, def),
             InstData::Null(i) => self.visit_null(inst, i, def),
+            InstData::StackSlot(i) => self.visit_stackslot(inst, i, def),
             InstData::GlobalAddr(i) => self.visit_globaladdr(inst, i, def),
         }
     }
@@ -287,6 +288,9 @@ pub trait SIRVisitor<'a> {
     /// Visits a `null` instruction.
     fn visit_null(&mut self, inst: Inst, data: &NullConstInst, def: &FunctionDefinition);
 
+    /// Visits a `stackslot` instruction.
+    fn visit_stackslot(&mut self, inst: Inst, data: &StackSlotInst, def: &FunctionDefinition);
+
     /// Visits a `globaladdr` instruction.
     fn visit_globaladdr(&mut self, inst: Inst, data: &GlobalAddrInst, def: &FunctionDefinition);
 }
@@ -352,6 +356,7 @@ pub trait GenericInstVisitor<T> {
             InstData::BConst(i) => self.visit_bconst(i),
             InstData::Undef(i) => self.visit_undef(i),
             InstData::Null(i) => self.visit_null(i),
+            InstData::StackSlot(i) => self.visit_stackslot(i),
             InstData::GlobalAddr(i) => self.visit_globaladdr(i),
         }
     }
@@ -514,6 +519,9 @@ pub trait GenericInstVisitor<T> {
 
     /// Visits a `null` instruction.
     fn visit_null(&mut self, data: &NullConstInst) -> T;
+
+    /// Visits a `stackslot` instruction.
+    fn visit_stackslot(&mut self, data: &StackSlotInst) -> T;
 
     /// Visits a `globaladdr` instruction.
     fn visit_globaladdr(&mut self, data: &GlobalAddrInst) -> T;

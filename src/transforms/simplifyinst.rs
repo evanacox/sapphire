@@ -517,6 +517,10 @@ impl<'f> GenericInstVisitor<Option<Simplification<'f>>> for SimplifyVisitor<'f> 
         None
     }
 
+    fn visit_stackslot(&mut self, _: &StackSlotInst) -> Option<Simplification<'f>> {
+        None
+    }
+
     fn visit_globaladdr(&mut self, _: &GlobalAddrInst) -> Option<Simplification<'f>> {
         None
     }

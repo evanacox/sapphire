@@ -120,6 +120,7 @@ struct SIRParser {
     next: u32,
     filename: Str,
     resolver: SaHashMap<LocalIdent, Value>,
+    stack_slots: SaHashMap<String, StackSlot>,
 }
 
 impl SIRParser {
@@ -130,6 +131,7 @@ impl SIRParser {
             filename: Str::reserved(),
             next: 0,
             resolver: SaHashMap::default(),
+            stack_slots: SaHashMap::default(),
         };
 
         obj.filename = module.insert_string(filename);
@@ -274,15 +276,16 @@ impl SIRParser {
     ) -> ParseResult<()> {
         debug_assert!(matches!(pair.as_rule(), Rule::function_body));
 
-        self.next = 0;
-        self.resolver.clear();
-
         // similar deal to how functions are pre-processed by the parser,
         // we need to go ahead and parse the blocks and form block nodes
         // inside of the function before we parse code that may potentially
         // jump between them.
         let mut delayed = Vec::default();
-        let rest = pair.into_inner();
+        let mut rest = pair.into_inner();
+
+        self.next = 0;
+        self.resolver.clear();
+        self.stack_slots = self.parse_stack_slots(&mut rest, &mut builder)?;
 
         for block in rest {
             delayed.push(self.preprocess_block(block, &mut builder)?);
@@ -301,6 +304,30 @@ impl SIRParser {
         builder.define();
 
         Ok(())
+    }
+
+    fn parse_stack_slots(
+        &mut self,
+        pairs: &mut Pairs<'_, Rule>,
+        builder: &mut FuncBuilder<'_>,
+    ) -> ParseResult<SaHashMap<String, StackSlot>> {
+        let mut result = SaHashMap::default();
+
+        while pairs
+            .peek()
+            .filter(|pair| matches!(pair.as_rule(), Rule::stack_slot))
+            .is_some()
+        {
+            let mut pairs = pairs.next_or("expected stack slot").into_inner();
+            let name_pair = pairs.next_or("expected stack slot name");
+            let ty_pair = pairs.next_or("expected stack slot ty");
+            let name = name_pair.as_str().trim_start_matches('$');
+            let ty = self.parse_ty(ty_pair, &mut builder.ctx().types_mut())?;
+
+            result.insert(name.to_string(), builder.create_stack_slot(name, ty));
+        }
+
+        Ok(result)
     }
 
     fn preprocess_block<'a>(
@@ -465,6 +492,7 @@ impl SIRParser {
             Rule::bconst => self.parse_bconst(inner, builder),
             Rule::undef => self.parse_undef(inner, builder),
             Rule::null => self.parse_null(inner, builder),
+            Rule::stackslot => self.parse_stackslot(inner, builder),
             Rule::globaladdr => self.parse_globaladdr(inner, builder),
             _ => unreachable!(),
         }
@@ -1710,6 +1738,37 @@ expected {expected} arguments but got {count}"
         let ty = self.parse_ty(ty_pair, &mut builder.ctx().types_mut())?;
 
         self.append_val(builder, name).null(ty, info);
+
+        Ok(())
+    }
+
+    fn parse_stackslot(
+        &mut self,
+        pair: Pair<'_, Rule>,
+        builder: &mut FuncBuilder<'_>,
+    ) -> ParseResult<()> {
+        debug_assert!(matches!(pair.as_rule(), Rule::stackslot));
+
+        let mut inner = pair.into_inner();
+        let result_pair = inner.next_or("expected result");
+        let name_pair = inner.next_or("expected name");
+
+        let (name, info) = self.parse_result(result_pair, builder)?;
+        let slot = match self
+            .stack_slots
+            .get(name_pair.as_str().trim_start_matches('$'))
+            .copied()
+        {
+            Some(val) => val,
+            None => {
+                return Err(string_into_err(
+                    name_pair.as_span(),
+                    format!("unknown stack slot '{}'", name_pair.as_str()),
+                ))
+            }
+        };
+
+        self.append_val(builder, name).stackslot(slot, info);
 
         Ok(())
     }

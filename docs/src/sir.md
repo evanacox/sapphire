@@ -151,7 +151,91 @@ Structures are padded, and their size is thus determined by the order of each el
 
 # Functions
 
-Functions are made up of a name, a call signature, and a list of basic blocks.
+Functions are made up of a name, a call signature, a list of stack slots, and a list of basic blocks.
+
+# Stack Slots
+
+Stack slots are how stack memory is allocated in SIR. They explicitly mark all the (static) stack memory that will
+be needed by a function, all this memory is allocated before the entry block of a function is entered.
+
+Pointers into this memory are obtained through the `stackslot` instruction, which yields a `ptr` to a specified slot.
+
+Stack memory is not guaranteed to be maintained unless it escapes a function, it simply provides a way for languages
+like C to easily represent variables and whatnot. Stack memory can be legally promoted into SSA values provided
+the pointer value is not observed in any way (i.e. is not used in any way besides either `load`ing from that memory
+or `store`ing to that memory).
+
+Consider this implementation of `max` in C:
+
+```c
+int max(int x, int y) {
+    return (x < y) ? y : x;
+}
+```
+
+A C frontend could translate it naively into code that uses stack slots for every variable and 
+the return value, and simply generates loads/stores when those values are accessed/modified. This
+allows the front-end to be **much** simpler, and the middle-end can use the correct algorithms
+it already has to promote these values into registers where possible. 
+
+One such translation looks like this:
+
+```other
+fn i32 @max(i32, i32) {
+  $x = stack i32
+  $y = stack i32
+  $ret = stack i32
+  
+entry(i32 %0, i32 %1):
+  %x = stackslot $x
+  %y = stackslot $y
+  %ret = stackslot $ret
+  store i32 %0, ptr %x
+  store i32 %1, ptr %y
+  %5 = load i32, ptr %x
+  %6 = load i32, ptr %y
+  %7 = icmp slt i32 %5, %6
+  condbr bool %7, lhs, rhs
+  
+lhs:
+  %8 = load i32, ptr %y
+  store i32 %8, ptr %ret
+  br exit
+  
+rhs:
+  %9 = load i32, ptr %x
+  store i32 %9, ptr %ret
+  br exit
+  
+exit:
+  %10 = load i32, ptr %ret
+  ret i32 %10
+}
+```
+
+While this is very ugly code, it's also very fast for a front-end to generate and is obviously correct. This
+can then be optimized by Sapphire with `mem2reg` (the stack -> register promotion pass) into the code that the 
+front-end wanted:
+
+```other
+fn i32 @max(i32, i32) {
+entry(i32 %x, i32 %y):
+  %0 = icmp slt i32 %x, %y
+  condbr bool %7, lhs, rhs
+  
+lhs:
+  br exit(i32 %y)
+  
+rhs:
+  br exit(i32 %x)
+  
+exit(i32 %ret):
+  ret i32 %ret
+}
+```
+
+Other optimizations could turn this into `sel`, but the initial transform into SSA values (and therefore virtual registers)
+is the key one. 
 
 # Basic Blocks
 
@@ -673,7 +757,7 @@ Returns the remainder of the floating-point division on the two arguments.
 
 ### Memory
 
-#### '`alloca`‘ - Allocate in Stack Frame
+#### '`alloca`‘ - Dynamically Allocate in Stack Frame
 
 Allocates memory in the current function’s stack frame. The memory is always automatically returned when the function in which the memory was allocated returns to its caller.
 
@@ -909,6 +993,39 @@ Converts a pointer into the equivalent bit-pattern in an integer. If the integer
 ```
 
 ### Constant Materialization
+
+#### '`stackslot`' - Pointer to Stack Memory
+
+Materializes a `ptr` that points to memory allocated by a `stack` slot. These will always
+produce the same `ptr` for the duration that a given function is executing (the value across
+multiple calls to the function containing this is unspecified).
+
+```other
+  ; given that $x = stack i32
+  %0 = stackslot $x
+```
+
+Syntax:
+
+```other
+<val> = stackslot <stack slot name>
+```
+
+#### '`globaladdr`' - Pointer to Global
+
+Materializes a `ptr` that points to some global entity. This could be a function, a global 
+variable, etc. 
+
+```other
+  ; given that fn i32 @printf(ptr, ...)
+  %0 = globaladdr @printf
+```
+
+Syntax:
+
+```other
+<val> = globaladdr <global name>
+```
 
 #### '`bconst`' - Boolean Constant
 

@@ -799,9 +799,14 @@ mod tests {
 
     #[test]
     fn debug() {
-        let mut m1: ArenaMap<E, i32> = ArenaMap::new();
-        let _ = m1.insert(15);
-        let _ = m1.insert(20);
+        let m1: ArenaMap<E, i32> = {
+            let mut m = ArenaMap::new();
+
+            let _ = m.insert(15);
+            let _ = m.insert(20);
+
+            m
+        };
 
         {
             let debug_normal = format!("{m1:?}");

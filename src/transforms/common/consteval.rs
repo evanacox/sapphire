@@ -534,6 +534,10 @@ impl<'f, 'c> GenericInstVisitor<Option<()>> for InPlaceConstantFolder<'f, 'c> {
         None
     }
 
+    fn visit_stackslot(&mut self, _: &StackSlotInst) -> Option<()> {
+        None
+    }
+
     fn visit_globaladdr(&mut self, _: &GlobalAddrInst) -> Option<()> {
         None
     }

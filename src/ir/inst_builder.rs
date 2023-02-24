@@ -539,4 +539,14 @@ pub trait InstBuilder<'dfg>: Sized {
     fn null(self, into: Type, debug: DebugInfo) -> Value {
         self.build_result(InstData::Null(NullConstInst::new(into)), debug)
     }
+
+    /// Builds a `stackslot` instruction
+    fn stackslot(self, slot: StackSlot, debug: DebugInfo) -> Value {
+        self.build_result(InstData::StackSlot(StackSlotInst::new(slot)), debug)
+    }
+
+    /// Builds a `globaladdr` instruction
+    fn globaladdr(self, global: String, debug: DebugInfo) -> Value {
+        self.build_result(InstData::GlobalAddr(GlobalAddrInst::new(global)), debug)
+    }
 }

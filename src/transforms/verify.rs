@@ -1053,6 +1053,15 @@ impl<'m> SIRVisitor<'m> for Verifier<'m> {
 
     fn visit_null(&mut self, _: Inst, _: &NullConstInst, _: &FunctionDefinition) {}
 
+    fn visit_stackslot(&mut self, inst: Inst, stackslot: &StackSlotInst, def: &FunctionDefinition) {
+        verify_assert!(
+            self,
+            def.dfg.inst_debug(inst),
+            def.dfg.is_stack_slot_inserted(stackslot.slot()),
+            "stack slot must be valid"
+        );
+    }
+
     fn visit_globaladdr(&mut self, _: Inst, _: &GlobalAddrInst, _: &FunctionDefinition) {
         todo!()
     }

@@ -24,6 +24,12 @@ use serde::{Deserialize, Serialize};
 dense_arena_key! {
     struct EntityRef;
 
+    /// A reference to a single slot on a function's pre-allocated stack.
+    ///
+    /// These are defined by the `$name = stack <ty>` directives before the first
+    /// basic block in a function.
+    pub struct StackSlot;
+
     /// A basic reference to some value, either the result of some computation
     /// or an argument into a basic block. Since everything is based around
     /// function-scoped values in SIR, this is effectively equivalent to a
@@ -77,6 +83,13 @@ struct BlockParam {
     index: u32,
 }
 
+#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
+#[cfg_attr(feature = "enable-serde", derive(Serialize, Deserialize))]
+struct StackSlotData {
+    name: Str,
+    ty: Type,
+}
+
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
 #[cfg_attr(feature = "enable-serde", derive(Serialize, Deserialize))]
 enum EntityData {
@@ -128,6 +141,7 @@ pub struct DataFlowGraph {
     params: SecondaryMap<Block, SmallVec<[Value; 4]>>,
     debug: SecondaryMap<EntityRef, DebugInfo>,
     uses: SecondaryMap<Value, SmallVec<[Inst; 4]>>,
+    stack_slots: ArenaMap<StackSlot, StackSlotData>,
 }
 
 impl DataFlowGraph {
@@ -508,6 +522,34 @@ impl DataFlowGraph {
         if !self.uses[new].contains(&inst) {
             self.uses[new].push(inst);
         }
+    }
+
+    /// Creates a new stack slot with a given name and type.
+    pub fn create_stack_slot(&mut self, name: Str, ty: Type) -> StackSlot {
+        debug_assert!(
+            !self.stack_slots.values().any(|data| data.name == name),
+            "no stack slots should have the same name"
+        );
+
+        self.stack_slots.insert(StackSlotData { name, ty })
+    }
+
+    /// Gets the information about a particular stack slot
+    pub fn stack_slot_info(&self, slot: StackSlot) -> (Str, Type) {
+        self.stack_slots
+            .get(slot)
+            .map(|data| (data.name, data.ty))
+            .expect("tried to access invalid stack slot")
+    }
+
+    /// Provides an iterator over every stack slot in the function
+    pub fn stack_slots(&self) -> impl Iterator<Item = StackSlot> {
+        self.stack_slots.keys()
+    }
+
+    /// Checks if a given slot is actually a valid stack slot
+    pub fn is_stack_slot_inserted(&self, slot: StackSlot) -> bool {
+        self.stack_slots.contains(slot)
     }
 
     fn maybe_result(&mut self, key: EntityRef, result: Option<Type>) -> (Inst, Option<Value>) {
