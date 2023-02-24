@@ -1,0 +1,10 @@
+; COMPILE-ERROR: mismatched types for value '%1', expected 'i32' but value actually is of type 'ptr'
+fn i32 @printf(ptr)
+
+fn void @test() {
+entry:
+  %0 = null ptr
+  %1 = null ptr
+  %2 = call i32 @printf(ptr %0, i32 %1)
+  ret void
+}

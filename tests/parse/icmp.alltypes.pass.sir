@@ -1,0 +1,17 @@
+; MATCH-ENTIRE
+fn void @test() {
+entry:
+  %0 = null ptr
+  %1 = null i8
+  %2 = null i16
+  %3 = null i32
+  %4 = null i64
+  %5 = null bool
+  %6 = icmp eq ptr %0, %0
+  %7 = icmp eq i8 %1, %1
+  %8 = icmp eq i16 %2, %2
+  %9 = icmp eq i32 %3, %3
+  %10 = icmp eq i64 %4, %4
+  %11 = icmp eq bool %5, %5
+  ret void
+}

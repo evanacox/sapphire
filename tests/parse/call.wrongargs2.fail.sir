@@ -1,0 +1,10 @@
+; COMPILE-ERROR: while parsing args for function with signature 'i32 (ptr)', unexpected parameter 'i32 %1'
+fn i32 @printf(ptr)
+
+fn void @test() {
+entry:
+  %0 = null ptr
+  %1 = null i32
+  %2 = call i32 @printf(ptr %0, i32 %1)
+  ret void
+}

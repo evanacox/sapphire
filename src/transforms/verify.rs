@@ -454,21 +454,21 @@ impl<'m> SIRVisitor<'m> for Verifier<'m> {
         verify_assert!(
             self,
             def.dfg.inst_debug(inst),
-            lhs.is_int(),
-            "can only `icmp` on integral types"
+            lhs.is_bool_or_int() || lhs.is_ptr(),
+            "can only `icmp` on integral types and pointers"
         );
         verify_assert!(
             self,
             def.dfg.inst_debug(inst),
-            rhs.is_int(),
-            "can only `icmp` on integral types"
+            rhs.is_bool_or_int() || rhs.is_ptr(),
+            "can only `icmp` on integral types and pointers"
         );
         verify_assert_eq!(
             self,
             def.dfg.inst_debug(inst),
             lhs,
             rhs,
-            "operands to `icmp` must be the same type"
+            "can only `icmp` on integral types and pointers"
         );
     }
 

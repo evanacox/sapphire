@@ -158,6 +158,19 @@ Functions are made up of a name, a call signature, a list of stack slots, and a 
 Stack slots are how stack memory is allocated in SIR. They explicitly mark all the (static) stack memory that will
 be needed by a function, all this memory is allocated before the entry block of a function is entered.
 
+```other
+$name = stack T
+```
+
+`T` is what defines the specific stack slot, as the slot is allocated to have exactly enough space for a `T`, and
+has the correct alignment for a `T`. 
+
+> > Note: While data of types besides `T` can be stored into/read from the slot, the type of the data must
+> > fit within the layout bounds of `T`. Do keep in mind that doing so will prevent the data from being 
+> > promoted into virtual registers. 
+> >
+> > If it does not, the behavior is undefined due to out-of-bounds accesses or unaligned accesses.
+
 Pointers into this memory are obtained through the `stackslot` instruction, which yields a `ptr` to a specified slot.
 
 Stack memory is not guaranteed to be maintained unless it escapes a function, it simply provides a way for languages
@@ -169,7 +182,11 @@ Consider this implementation of `max` in C:
 
 ```c
 int max(int x, int y) {
-    return (x < y) ? y : x;
+    if (x < y) {
+        return y;
+    } else {
+        return x;
+    }
 }
 ```
 
@@ -195,14 +212,14 @@ entry(i32 %0, i32 %1):
   %5 = load i32, ptr %x
   %6 = load i32, ptr %y
   %7 = icmp slt i32 %5, %6
-  condbr bool %7, lhs, rhs
+  condbr bool %7, if.then, if.else
   
-lhs:
+if.then:
   %8 = load i32, ptr %y
   store i32 %8, ptr %ret
   br exit
   
-rhs:
+if.else:
   %9 = load i32, ptr %x
   store i32 %9, ptr %ret
   br exit
@@ -221,12 +238,12 @@ front-end wanted:
 fn i32 @max(i32, i32) {
 entry(i32 %x, i32 %y):
   %0 = icmp slt i32 %x, %y
-  condbr bool %7, lhs, rhs
+  condbr bool %7, if.then, if.else
   
-lhs:
+if.then:
   br exit(i32 %y)
   
-rhs:
+if.else:
   br exit(i32 %x)
   
 exit(i32 %ret):
@@ -269,11 +286,11 @@ Basic block can also contain one or more *parameters*, these implement the φ (`
 jumping to a block with a parameter, different control flow paths can pass different values for the parameter, effectively
 implementing `phi`s while automatically enforcing the ideal `phi` properties just through the structure of the IR. 
 
-> Note: This avoids the usual special-casing of instructions in transform passes, LLVM has to treat `phi` as magic
-> and move it around differently than anything else, but it's still an instruction.
-> 
-> This also lends well to "magic" instructions, so things like `landingpad` and `invoke` would be representable
-> in a normal way instead of adding magical rules like LLVM had to. 
+> > Note: This avoids the usual special-casing of instructions in transform passes, LLVM has to treat `phi` as magic
+> > and move it around differently than anything else, but it's still an instruction.
+> >
+> > This also lends well to "magic" instructions, so things like `landingpad` and `invoke` would be representable
+> > in a normal way instead of adding magical rules like LLVM had to. 
  
 Consider the following IR:
 
@@ -353,9 +370,9 @@ Syntax:
 (<val> =)? call <fn-sig>, <ty> <val>((<ty> <val>) (, <ty> <val>)*)
 ```
 
-### '`icmp`‘ - Integer Compare
+### '`icmp`‘ - Integral Comparison
 
-Compares two given integer or boolean values using a given comparison operation, and returns a `bool` representing the result of the comparison.
+Compares two given integer, boolean or pointer values using a given comparison operation, and returns a `bool` representing the result of the comparison.
 
 ```other
 %0 = icmp eq i32 %a, %b

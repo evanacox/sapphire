@@ -151,7 +151,7 @@ indirectcall = { result? ~ "indirectcall" ~ signature ~ "," ~ ptr_ty ~ local ~ a
 
 // %2 = icmp eq i32 %0, %1
 icmp_opcode = @{ "eq" | "ne" | "ugt" | "ult" | "uge" | "ule" | "sgt" | "slt" | "sge" | "sle" }
-icmp = { result ~ "icmp" ~ icmp_opcode ~ (bool_ty | int_ty) ~ binary_operands }
+icmp = { result ~ "icmp" ~ icmp_opcode ~ (bool_ty | int_ty | ptr_ty) ~ binary_operands }
 
 // %2 = fcmp oeq f32 %0, %1
 fcmp_opcode = @{ "ord" | "uno" | "ueq" | "une" | "ugt" | "ult" | "uge" | "ule" | "oeq" | "one" | "ogt" | "olt" | "oge" | "ole"  }

@@ -616,12 +616,12 @@ impl SIRParser {
         debug_assert!(matches!(pair.as_rule(), Rule::args_with_types));
 
         let expected = param_tys.len();
-        let clone = pair.clone();
         let inner = pair.into_inner();
         let mut vec = Vec::default();
         let mut count = 0;
 
         for operand in inner {
+            let clone = operand.clone();
             let val = self.parse_operand(operand, builder)?;
 
             match (param_tys.next(), builder.ty(val)) {
@@ -875,7 +875,7 @@ expected {expected} arguments but got {count}"
             _ => unreachable!(),
         };
 
-        let (lhs, rhs) = self.parse_existing_bitwise_binary_ops(&mut inner, builder)?;
+        let (lhs, rhs) = self.parse_existing_icmp_ops(&mut inner, builder)?;
 
         self.append_val(builder, ident).icmp(opc, lhs, rhs, info);
 
@@ -1816,7 +1816,10 @@ expected {expected} arguments but got {count}"
         let bb = match builder.find_block(name) {
             Some(bb) => bb,
             None => {
-                return Err(message_into_err(name_pair.as_span(), "unknown basic block"));
+                return Err(string_into_err(
+                    name_pair.as_span(),
+                    format!("unknown basic block '{name}'"),
+                ));
             }
         };
 
@@ -1847,6 +1850,29 @@ expected {expected} arguments but got {count}"
             if !ty.is_bool_or_int() {
                 let msg = format!(
                     "unexpected type for value, expected 'bool' or integer but got '{}'",
+                    stringify_ty(&builder.ctx().types(), ty)
+                );
+
+                return Err(string_into_err(span, msg));
+            }
+        }
+
+        Ok((lhs.0, rhs.0))
+    }
+
+    fn parse_existing_icmp_ops(
+        &mut self,
+        pairs: &mut Pairs<'_, Rule>,
+        builder: &mut FuncBuilder<'_>,
+    ) -> ParseResult<(Value, Value)> {
+        let (lhs, rhs) = self.parse_existing_ty_binary_ops(pairs, builder)?;
+
+        for (val, span) in [lhs, rhs] {
+            let ty = builder.ty(val);
+
+            if !ty.is_bool_or_int() && !ty.is_ptr() {
+                let msg = format!(
+                    "unexpected type for value, expected 'bool', 'ptr' or integer but got '{}'",
                     stringify_ty(&builder.ctx().types(), ty)
                 );
 
@@ -1942,7 +1968,7 @@ expected {expected} arguments but got {count}"
             let expected = stringify_ty(&builder.ctx().types(), ty);
             let got = stringify_ty(&builder.ctx().types(), builder.ty(val));
             let err = format!(
-                "mismatched types for value '{}', expected '{}' but got '{}'",
+                "mismatched types for value '{}', expected '{}' but value actually is of type '{}'",
                 name_span.as_str(),
                 expected,
                 got
