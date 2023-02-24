@@ -27,10 +27,11 @@ fn run_pass(mut module: Module) {
 
     let mut fpm = FunctionPassManager::new();
     fpm.add_pass(Mem2RegPass);
-    fpm.add_pass(DeadCodeEliminationPass);
 
     let mut mpm = ModulePassManager::new();
+    mpm.add_pass(VerifyModulePass);
     mpm.add_pass(FunctionToModulePassAdapter::adapt(fpm));
+    mpm.add_pass(VerifyModulePass);
 
     print_module(&module);
 
