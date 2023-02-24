@@ -102,6 +102,24 @@
 <a href="#99" id="99">99</a>
 <a href="#100" id="100">100</a>
 <a href="#101" id="101">101</a>
+<a href="#102" id="102">102</a>
+<a href="#103" id="103">103</a>
+<a href="#104" id="104">104</a>
+<a href="#105" id="105">105</a>
+<a href="#106" id="106">106</a>
+<a href="#107" id="107">107</a>
+<a href="#108" id="108">108</a>
+<a href="#109" id="109">109</a>
+<a href="#110" id="110">110</a>
+<a href="#111" id="111">111</a>
+<a href="#112" id="112">112</a>
+<a href="#113" id="113">113</a>
+<a href="#114" id="114">114</a>
+<a href="#115" id="115">115</a>
+<a href="#116" id="116">116</a>
+<a href="#117" id="117">117</a>
+<a href="#118" id="118">118</a>
+<a href="#119" id="119">119</a>
 </pre><pre class="rust"><code><span class="comment">//======---------------------------------------------------------------======//
 //                                                                           //
 // Copyright 2022 Evan Cox &lt;evanacox00@gmail.com&gt;. All rights reserved.      //
@@ -116,7 +134,7 @@
     ControlFlowGraph, ControlFlowGraphAnalysis, DominatorTree, DominatorTreeAnalysis,
 };
 <span class="kw">use </span><span class="kw">crate</span>::arena::SecondaryMap;
-<span class="kw">use </span><span class="kw">crate</span>::ir::{Cursor, CursorMut, FuncCursor, Function, Instruction, Value};
+<span class="kw">use </span><span class="kw">crate</span>::ir::{Cursor, CursorMut, FuncCursor, Function, InstData, Instruction, StackSlot, Value};
 <span class="kw">use </span><span class="kw">crate</span>::pass::{FunctionAnalysisManager, FunctionTransformPass, PreservedAnalyses};
 <span class="kw">use </span><span class="kw">crate</span>::transforms::common::{has_side_effect, rewrite_and_remove_block_param};
 <span class="kw">use </span>smallvec::SmallVec;
@@ -140,9 +158,16 @@
     cfg: <span class="kw-2">&amp;</span>ControlFlowGraph,
     domtree: <span class="kw-2">&amp;</span>DominatorTree,
 ) {
-    <span class="kw">let </span><span class="kw-2">mut </span>cursor = FuncCursor::over(func);
-    <span class="kw">let </span><span class="kw-2">mut </span>live = SecondaryMap::fill(cursor.dfg().next_value(), <span class="number">0u32</span>);
+    <span class="kw">let </span>slots: SmallVec&lt;[StackSlot; <span class="number">16</span>]&gt; = func.definition().unwrap().dfg.stack_slots().collect();
+    <span class="kw">let </span><span class="kw-2">mut </span>live_stack_slots = SecondaryMap::new();
     <span class="kw">let </span><span class="kw-2">mut </span>params = SmallVec::&lt;[Value; <span class="number">16</span>]&gt;::new();
+    <span class="kw">let </span><span class="kw-2">mut </span>cursor = FuncCursor::over(func);
+    <span class="kw">let </span><span class="kw-2">mut </span>live = SecondaryMap::fill(cursor.dfg().next_value(), <span class="bool-val">false</span>);
+
+    <span class="comment">// need to do this before making the cursor, since cursor borrows mutably
+    </span><span class="kw">for </span>slot <span class="kw">in </span>slots.iter().copied() {
+        live_stack_slots.insert(slot, <span class="bool-val">false</span>);
+    }
 
     <span class="comment">// iterate in postorder, we see uses before defs
     </span><span class="kw">for </span><span class="kw-2">&amp;</span>block <span class="kw">in </span>domtree.postorder() {
@@ -150,18 +175,22 @@
 
         <span class="comment">// iterate blocks backwards for same reason, we need to see uses before defs
         </span><span class="kw">while let </span><span class="prelude-val">Some</span>(inst) = cursor.prev_inst() {
-            <span class="kw">let </span>is_result_live = cursor
-                .inst_to_result(inst)
-                .map_or(<span class="bool-val">false</span>, |val| live[val] != <span class="number">0</span>);
+            <span class="kw">let </span>is_result_live = cursor.inst_to_result(inst).map_or(<span class="bool-val">false</span>, |val| live[val]);
 
             <span class="comment">// this DCE pass considers being used in a branch to be a side effect,
             // but those will be removed later if the block argument itself
             // is unused.
             //
             // other side effects are being used in memory, calls, etc.
-            </span><span class="kw">if </span>has_side_effect(cursor.dfg(), inst) || is_result_live {
-                <span class="kw">for </span>operand <span class="kw">in </span>cursor.inst_data(inst).operands() {
-                    live[<span class="kw-2">*</span>operand] += <span class="number">1</span>;
+            </span><span class="kw">if </span>is_result_live || has_side_effect(cursor.dfg(), inst) {
+                <span class="kw">let </span>data = cursor.inst_data(inst);
+
+                <span class="kw">for </span>operand <span class="kw">in </span>data.operands() {
+                    live[<span class="kw-2">*</span>operand] = <span class="bool-val">true</span>;
+                }
+
+                <span class="kw">if let </span>InstData::StackSlot(stackslot) = data {
+                    live_stack_slots.insert(stackslot.slot(), <span class="bool-val">true</span>);
                 }
 
                 <span class="kw">continue</span>;
@@ -180,15 +209,22 @@
             params.extend(cursor.block_params(block).iter().copied());
 
             <span class="kw">for </span>param <span class="kw">in </span>params.drain(..) {
-                <span class="kw">if </span>live[param] != <span class="number">0 </span>{
-                    <span class="kw">continue</span>;
+                <span class="kw">if </span>!live[param] {
+                    <span class="comment">// we don&#39;t need to update liveness information of these, when we get
+                    // to the rewritten branches it will check that info with the
+                    // current state of the branches.
+                    </span>rewrite_and_remove_block_param(<span class="kw-2">&amp;mut </span>cursor, cfg, block, param);
                 }
-
-                <span class="comment">// we don&#39;t need to update liveness information of these, when we get
-                // to the rewritten branches it will check that info with the
-                // current state of the branches.
-                </span>rewrite_and_remove_block_param(<span class="kw-2">&amp;mut </span>cursor, cfg, block, param);
             }
+        }
+    }
+
+    <span class="comment">// we also want to remove any stack slots we didn&#39;t end up using.
+    // if we ever found a `stackslot` instruction that was live, we marked the
+    // slot being used as live. if not, we remove it.
+    </span><span class="kw">for </span>slot <span class="kw">in </span>slots.iter().copied() {
+        <span class="kw">if </span>!live_stack_slots[slot] {
+            cursor.remove_stack_slot(slot);
         }
     }
 }
@@ -214,4 +250,4 @@ renderMathInElement(document.body, {
     ]
 });
 </script>
-<div id="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="sapphire" data-themes="" data-resource-suffix="" data-rustdoc-version="1.69.0-nightly (246eae2fa 2023-02-21)" data-search-js="search-14421e1532aead08.js" data-settings-js="settings-f0c5c39777a9a2f6.js" data-settings-css="settings-0bcba95ff279c1db.css" ></div></body></html>
+<div id="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="sapphire" data-themes="" data-resource-suffix="" data-rustdoc-version="1.69.0-nightly (07c993eba 2023-02-23)" data-search-js="search-14421e1532aead08.js" data-settings-js="settings-f0c5c39777a9a2f6.js" data-settings-css="settings-0bcba95ff279c1db.css" ></div></body></html>

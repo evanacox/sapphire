@@ -1665,71 +1665,6 @@
 <a href="#1662" id="1662">1662</a>
 <a href="#1663" id="1663">1663</a>
 <a href="#1664" id="1664">1664</a>
-<a href="#1665" id="1665">1665</a>
-<a href="#1666" id="1666">1666</a>
-<a href="#1667" id="1667">1667</a>
-<a href="#1668" id="1668">1668</a>
-<a href="#1669" id="1669">1669</a>
-<a href="#1670" id="1670">1670</a>
-<a href="#1671" id="1671">1671</a>
-<a href="#1672" id="1672">1672</a>
-<a href="#1673" id="1673">1673</a>
-<a href="#1674" id="1674">1674</a>
-<a href="#1675" id="1675">1675</a>
-<a href="#1676" id="1676">1676</a>
-<a href="#1677" id="1677">1677</a>
-<a href="#1678" id="1678">1678</a>
-<a href="#1679" id="1679">1679</a>
-<a href="#1680" id="1680">1680</a>
-<a href="#1681" id="1681">1681</a>
-<a href="#1682" id="1682">1682</a>
-<a href="#1683" id="1683">1683</a>
-<a href="#1684" id="1684">1684</a>
-<a href="#1685" id="1685">1685</a>
-<a href="#1686" id="1686">1686</a>
-<a href="#1687" id="1687">1687</a>
-<a href="#1688" id="1688">1688</a>
-<a href="#1689" id="1689">1689</a>
-<a href="#1690" id="1690">1690</a>
-<a href="#1691" id="1691">1691</a>
-<a href="#1692" id="1692">1692</a>
-<a href="#1693" id="1693">1693</a>
-<a href="#1694" id="1694">1694</a>
-<a href="#1695" id="1695">1695</a>
-<a href="#1696" id="1696">1696</a>
-<a href="#1697" id="1697">1697</a>
-<a href="#1698" id="1698">1698</a>
-<a href="#1699" id="1699">1699</a>
-<a href="#1700" id="1700">1700</a>
-<a href="#1701" id="1701">1701</a>
-<a href="#1702" id="1702">1702</a>
-<a href="#1703" id="1703">1703</a>
-<a href="#1704" id="1704">1704</a>
-<a href="#1705" id="1705">1705</a>
-<a href="#1706" id="1706">1706</a>
-<a href="#1707" id="1707">1707</a>
-<a href="#1708" id="1708">1708</a>
-<a href="#1709" id="1709">1709</a>
-<a href="#1710" id="1710">1710</a>
-<a href="#1711" id="1711">1711</a>
-<a href="#1712" id="1712">1712</a>
-<a href="#1713" id="1713">1713</a>
-<a href="#1714" id="1714">1714</a>
-<a href="#1715" id="1715">1715</a>
-<a href="#1716" id="1716">1716</a>
-<a href="#1717" id="1717">1717</a>
-<a href="#1718" id="1718">1718</a>
-<a href="#1719" id="1719">1719</a>
-<a href="#1720" id="1720">1720</a>
-<a href="#1721" id="1721">1721</a>
-<a href="#1722" id="1722">1722</a>
-<a href="#1723" id="1723">1723</a>
-<a href="#1724" id="1724">1724</a>
-<a href="#1725" id="1725">1725</a>
-<a href="#1726" id="1726">1726</a>
-<a href="#1727" id="1727">1727</a>
-<a href="#1728" id="1728">1728</a>
-<a href="#1729" id="1729">1729</a>
 </pre><pre class="rust"><code><span class="comment">//======---------------------------------------------------------------======//
 //                                                                           //
 // Copyright 2022-2023 Evan Cox &lt;evanacox00@gmail.com&gt;. All rights reserved. //
@@ -1741,7 +1676,7 @@
 //======---------------------------------------------------------------======//
 
 </span><span class="kw">use </span><span class="kw">crate</span>::arena::ArenaKey;
-<span class="kw">use </span><span class="kw">crate</span>::ir::{Block, FloatFormat, Func, Sig, Type, Value};
+<span class="kw">use </span><span class="kw">crate</span>::ir::{Block, FloatFormat, Func, Sig, StackSlot, Type, Value};
 <span class="kw">use </span><span class="kw">crate</span>::utility::{PackedOption, TinyArray};
 <span class="kw">use </span>smallvec::SmallVec;
 <span class="kw">use </span>static_assertions::assert_eq_size;
@@ -1865,6 +1800,8 @@
     </span>Undef(UndefConstInst),
     <span class="doccomment">/// `null T N`, materializes a null value
     </span>Null(NullConstInst),
+    <span class="doccomment">/// `stackslot $name`, materializes a pointer to stack memory
+    </span>StackSlot(StackSlotInst),
     <span class="doccomment">/// `globaladdr @name`, materializes a pointer to a global value
     </span>GlobalAddr(GlobalAddrInst),
 }
@@ -1880,8 +1817,8 @@
         mem::discriminant(<span class="self">self</span>)
     }
 
-    <span class="doccomment">/// Checks if `self` is a constant materialization instruction. Note that `undef` is not
-    /// included here, as the value is not known at compile time.
+    <span class="doccomment">/// Checks if `self` is a constant materialization instruction. Note that `undef`, `stackslot`
+    /// and `globaladdr` are not included here, none of them produce values known at compile time.
     </span><span class="kw">pub fn </span>is_constant(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
         <span class="macro">matches!</span>(
             <span class="self">self</span>,
@@ -1903,182 +1840,79 @@
     }
 }
 
+<span class="macro">macro_rules! </span>for_each_inst {
+    (<span class="macro-nonterminal">$self</span>:expr, <span class="macro-nonterminal">$method</span>:ident) =&gt; {
+        <span class="kw">match </span><span class="macro-nonterminal">$self </span>{
+            InstData::Call(e) =&gt; e.<span class="macro-nonterminal">$method</span>(),
+            InstData::IndirectCall(e) =&gt; e.<span class="macro-nonterminal">$method</span>(),
+            InstData::ICmp(e) =&gt; e.<span class="macro-nonterminal">$method</span>(),
+            InstData::FCmp(e) =&gt; e.<span class="macro-nonterminal">$method</span>(),
+            InstData::Sel(e) =&gt; e.<span class="macro-nonterminal">$method</span>(),
+            InstData::Br(e) =&gt; e.<span class="macro-nonterminal">$method</span>(),
+            InstData::CondBr(e) =&gt; e.<span class="macro-nonterminal">$method</span>(),
+            InstData::Unreachable(e) =&gt; e.<span class="macro-nonterminal">$method</span>(),
+            InstData::Ret(e) =&gt; e.<span class="macro-nonterminal">$method</span>(),
+            InstData::And(e) =&gt; e.<span class="macro-nonterminal">$method</span>(),
+            InstData::Or(e) =&gt; e.<span class="macro-nonterminal">$method</span>(),
+            InstData::Xor(e) =&gt; e.<span class="macro-nonterminal">$method</span>(),
+            InstData::Shl(e) =&gt; e.<span class="macro-nonterminal">$method</span>(),
+            InstData::AShr(e) =&gt; e.<span class="macro-nonterminal">$method</span>(),
+            InstData::LShr(e) =&gt; e.<span class="macro-nonterminal">$method</span>(),
+            InstData::IAdd(e) =&gt; e.<span class="macro-nonterminal">$method</span>(),
+            InstData::ISub(e) =&gt; e.<span class="macro-nonterminal">$method</span>(),
+            InstData::IMul(e) =&gt; e.<span class="macro-nonterminal">$method</span>(),
+            InstData::SDiv(e) =&gt; e.<span class="macro-nonterminal">$method</span>(),
+            InstData::UDiv(e) =&gt; e.<span class="macro-nonterminal">$method</span>(),
+            InstData::SRem(e) =&gt; e.<span class="macro-nonterminal">$method</span>(),
+            InstData::URem(e) =&gt; e.<span class="macro-nonterminal">$method</span>(),
+            InstData::FNeg(e) =&gt; e.<span class="macro-nonterminal">$method</span>(),
+            InstData::FAdd(e) =&gt; e.<span class="macro-nonterminal">$method</span>(),
+            InstData::FSub(e) =&gt; e.<span class="macro-nonterminal">$method</span>(),
+            InstData::FMul(e) =&gt; e.<span class="macro-nonterminal">$method</span>(),
+            InstData::FDiv(e) =&gt; e.<span class="macro-nonterminal">$method</span>(),
+            InstData::FRem(e) =&gt; e.<span class="macro-nonterminal">$method</span>(),
+            InstData::Alloca(e) =&gt; e.<span class="macro-nonterminal">$method</span>(),
+            InstData::Load(e) =&gt; e.<span class="macro-nonterminal">$method</span>(),
+            InstData::Store(e) =&gt; e.<span class="macro-nonterminal">$method</span>(),
+            InstData::Offset(e) =&gt; e.<span class="macro-nonterminal">$method</span>(),
+            InstData::Extract(e) =&gt; e.<span class="macro-nonterminal">$method</span>(),
+            InstData::Insert(e) =&gt; e.<span class="macro-nonterminal">$method</span>(),
+            InstData::ElemPtr(e) =&gt; e.<span class="macro-nonterminal">$method</span>(),
+            InstData::Sext(e) =&gt; e.<span class="macro-nonterminal">$method</span>(),
+            InstData::Zext(e) =&gt; e.<span class="macro-nonterminal">$method</span>(),
+            InstData::Trunc(e) =&gt; e.<span class="macro-nonterminal">$method</span>(),
+            InstData::IToB(e) =&gt; e.<span class="macro-nonterminal">$method</span>(),
+            InstData::BToI(e) =&gt; e.<span class="macro-nonterminal">$method</span>(),
+            InstData::SIToF(e) =&gt; e.<span class="macro-nonterminal">$method</span>(),
+            InstData::UIToF(e) =&gt; e.<span class="macro-nonterminal">$method</span>(),
+            InstData::FToSI(e) =&gt; e.<span class="macro-nonterminal">$method</span>(),
+            InstData::FToUI(e) =&gt; e.<span class="macro-nonterminal">$method</span>(),
+            InstData::FExt(e) =&gt; e.<span class="macro-nonterminal">$method</span>(),
+            InstData::FTrunc(e) =&gt; e.<span class="macro-nonterminal">$method</span>(),
+            InstData::IToP(e) =&gt; e.<span class="macro-nonterminal">$method</span>(),
+            InstData::PToI(e) =&gt; e.<span class="macro-nonterminal">$method</span>(),
+            InstData::IConst(e) =&gt; e.<span class="macro-nonterminal">$method</span>(),
+            InstData::FConst(e) =&gt; e.<span class="macro-nonterminal">$method</span>(),
+            InstData::BConst(e) =&gt; e.<span class="macro-nonterminal">$method</span>(),
+            InstData::Undef(e) =&gt; e.<span class="macro-nonterminal">$method</span>(),
+            InstData::Null(e) =&gt; e.<span class="macro-nonterminal">$method</span>(),
+            InstData::StackSlot(e) =&gt; e.<span class="macro-nonterminal">$method</span>(),
+            InstData::GlobalAddr(e) =&gt; e.<span class="macro-nonterminal">$method</span>(),
+        }
+    };
+}
+
 <span class="kw">impl </span>Instruction <span class="kw">for </span>InstData {
     <span class="kw">fn </span>operands(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>[Value] {
-        <span class="kw">match </span><span class="self">self </span>{
-            InstData::Call(e) =&gt; e.operands(),
-            InstData::IndirectCall(e) =&gt; e.operands(),
-            InstData::ICmp(e) =&gt; e.operands(),
-            InstData::FCmp(e) =&gt; e.operands(),
-            InstData::Sel(e) =&gt; e.operands(),
-            InstData::Br(e) =&gt; e.operands(),
-            InstData::CondBr(e) =&gt; e.operands(),
-            InstData::Unreachable(e) =&gt; e.operands(),
-            InstData::Ret(e) =&gt; e.operands(),
-            InstData::And(e) =&gt; e.operands(),
-            InstData::Or(e) =&gt; e.operands(),
-            InstData::Xor(e) =&gt; e.operands(),
-            InstData::Shl(e) =&gt; e.operands(),
-            InstData::AShr(e) =&gt; e.operands(),
-            InstData::LShr(e) =&gt; e.operands(),
-            InstData::IAdd(e) =&gt; e.operands(),
-            InstData::ISub(e) =&gt; e.operands(),
-            InstData::IMul(e) =&gt; e.operands(),
-            InstData::SDiv(e) =&gt; e.operands(),
-            InstData::UDiv(e) =&gt; e.operands(),
-            InstData::SRem(e) =&gt; e.operands(),
-            InstData::URem(e) =&gt; e.operands(),
-            InstData::FNeg(e) =&gt; e.operands(),
-            InstData::FAdd(e) =&gt; e.operands(),
-            InstData::FSub(e) =&gt; e.operands(),
-            InstData::FMul(e) =&gt; e.operands(),
-            InstData::FDiv(e) =&gt; e.operands(),
-            InstData::FRem(e) =&gt; e.operands(),
-            InstData::Alloca(e) =&gt; e.operands(),
-            InstData::Load(e) =&gt; e.operands(),
-            InstData::Store(e) =&gt; e.operands(),
-            InstData::Offset(e) =&gt; e.operands(),
-            InstData::Extract(e) =&gt; e.operands(),
-            InstData::Insert(e) =&gt; e.operands(),
-            InstData::ElemPtr(e) =&gt; e.operands(),
-            InstData::Sext(e) =&gt; e.operands(),
-            InstData::Zext(e) =&gt; e.operands(),
-            InstData::Trunc(e) =&gt; e.operands(),
-            InstData::IToB(e) =&gt; e.operands(),
-            InstData::BToI(e) =&gt; e.operands(),
-            InstData::SIToF(e) =&gt; e.operands(),
-            InstData::UIToF(e) =&gt; e.operands(),
-            InstData::FToSI(e) =&gt; e.operands(),
-            InstData::FToUI(e) =&gt; e.operands(),
-            InstData::FExt(e) =&gt; e.operands(),
-            InstData::FTrunc(e) =&gt; e.operands(),
-            InstData::IToP(e) =&gt; e.operands(),
-            InstData::PToI(e) =&gt; e.operands(),
-            InstData::IConst(e) =&gt; e.operands(),
-            InstData::FConst(e) =&gt; e.operands(),
-            InstData::BConst(e) =&gt; e.operands(),
-            InstData::Undef(e) =&gt; e.operands(),
-            InstData::Null(e) =&gt; e.operands(),
-            InstData::GlobalAddr(e) =&gt; e.operands(),
-        }
+        <span class="macro">for_each_inst!</span>(<span class="self">self</span>, operands)
     }
 
     <span class="kw">fn </span>__operands_dfg_mut(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;mut </span>[Value] {
-        <span class="kw">match </span><span class="self">self </span>{
-            InstData::Call(e) =&gt; e.__operands_dfg_mut(),
-            InstData::IndirectCall(e) =&gt; e.__operands_dfg_mut(),
-            InstData::ICmp(e) =&gt; e.__operands_dfg_mut(),
-            InstData::FCmp(e) =&gt; e.__operands_dfg_mut(),
-            InstData::Sel(e) =&gt; e.__operands_dfg_mut(),
-            InstData::Br(e) =&gt; e.__operands_dfg_mut(),
-            InstData::CondBr(e) =&gt; e.__operands_dfg_mut(),
-            InstData::Unreachable(e) =&gt; e.__operands_dfg_mut(),
-            InstData::Ret(e) =&gt; e.__operands_dfg_mut(),
-            InstData::And(e) =&gt; e.__operands_dfg_mut(),
-            InstData::Or(e) =&gt; e.__operands_dfg_mut(),
-            InstData::Xor(e) =&gt; e.__operands_dfg_mut(),
-            InstData::Shl(e) =&gt; e.__operands_dfg_mut(),
-            InstData::AShr(e) =&gt; e.__operands_dfg_mut(),
-            InstData::LShr(e) =&gt; e.__operands_dfg_mut(),
-            InstData::IAdd(e) =&gt; e.__operands_dfg_mut(),
-            InstData::ISub(e) =&gt; e.__operands_dfg_mut(),
-            InstData::IMul(e) =&gt; e.__operands_dfg_mut(),
-            InstData::SDiv(e) =&gt; e.__operands_dfg_mut(),
-            InstData::UDiv(e) =&gt; e.__operands_dfg_mut(),
-            InstData::SRem(e) =&gt; e.__operands_dfg_mut(),
-            InstData::URem(e) =&gt; e.__operands_dfg_mut(),
-            InstData::FNeg(e) =&gt; e.__operands_dfg_mut(),
-            InstData::FAdd(e) =&gt; e.__operands_dfg_mut(),
-            InstData::FSub(e) =&gt; e.__operands_dfg_mut(),
-            InstData::FMul(e) =&gt; e.__operands_dfg_mut(),
-            InstData::FDiv(e) =&gt; e.__operands_dfg_mut(),
-            InstData::FRem(e) =&gt; e.__operands_dfg_mut(),
-            InstData::Alloca(e) =&gt; e.__operands_dfg_mut(),
-            InstData::Load(e) =&gt; e.__operands_dfg_mut(),
-            InstData::Store(e) =&gt; e.__operands_dfg_mut(),
-            InstData::Offset(e) =&gt; e.__operands_dfg_mut(),
-            InstData::Extract(e) =&gt; e.__operands_dfg_mut(),
-            InstData::Insert(e) =&gt; e.__operands_dfg_mut(),
-            InstData::ElemPtr(e) =&gt; e.__operands_dfg_mut(),
-            InstData::Sext(e) =&gt; e.__operands_dfg_mut(),
-            InstData::Zext(e) =&gt; e.__operands_dfg_mut(),
-            InstData::Trunc(e) =&gt; e.__operands_dfg_mut(),
-            InstData::IToB(e) =&gt; e.__operands_dfg_mut(),
-            InstData::BToI(e) =&gt; e.__operands_dfg_mut(),
-            InstData::SIToF(e) =&gt; e.__operands_dfg_mut(),
-            InstData::UIToF(e) =&gt; e.__operands_dfg_mut(),
-            InstData::FToSI(e) =&gt; e.__operands_dfg_mut(),
-            InstData::FToUI(e) =&gt; e.__operands_dfg_mut(),
-            InstData::FExt(e) =&gt; e.__operands_dfg_mut(),
-            InstData::FTrunc(e) =&gt; e.__operands_dfg_mut(),
-            InstData::IToP(e) =&gt; e.__operands_dfg_mut(),
-            InstData::PToI(e) =&gt; e.__operands_dfg_mut(),
-            InstData::IConst(e) =&gt; e.__operands_dfg_mut(),
-            InstData::FConst(e) =&gt; e.__operands_dfg_mut(),
-            InstData::BConst(e) =&gt; e.__operands_dfg_mut(),
-            InstData::Undef(e) =&gt; e.__operands_dfg_mut(),
-            InstData::Null(e) =&gt; e.__operands_dfg_mut(),
-            InstData::GlobalAddr(e) =&gt; e.__operands_dfg_mut(),
-        }
+        <span class="macro">for_each_inst!</span>(<span class="self">self</span>, __operands_dfg_mut)
     }
 
     <span class="kw">fn </span>result_ty(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;Type&gt; {
-        <span class="kw">match </span><span class="self">self </span>{
-            InstData::Call(e) =&gt; e.result_ty(),
-            InstData::IndirectCall(e) =&gt; e.result_ty(),
-            InstData::ICmp(e) =&gt; e.result_ty(),
-            InstData::FCmp(e) =&gt; e.result_ty(),
-            InstData::Sel(e) =&gt; e.result_ty(),
-            InstData::Br(e) =&gt; e.result_ty(),
-            InstData::CondBr(e) =&gt; e.result_ty(),
-            InstData::Unreachable(e) =&gt; e.result_ty(),
-            InstData::Ret(e) =&gt; e.result_ty(),
-            InstData::And(e) =&gt; e.result_ty(),
-            InstData::Or(e) =&gt; e.result_ty(),
-            InstData::Xor(e) =&gt; e.result_ty(),
-            InstData::Shl(e) =&gt; e.result_ty(),
-            InstData::AShr(e) =&gt; e.result_ty(),
-            InstData::LShr(e) =&gt; e.result_ty(),
-            InstData::IAdd(e) =&gt; e.result_ty(),
-            InstData::ISub(e) =&gt; e.result_ty(),
-            InstData::IMul(e) =&gt; e.result_ty(),
-            InstData::SDiv(e) =&gt; e.result_ty(),
-            InstData::UDiv(e) =&gt; e.result_ty(),
-            InstData::SRem(e) =&gt; e.result_ty(),
-            InstData::URem(e) =&gt; e.result_ty(),
-            InstData::FNeg(e) =&gt; e.result_ty(),
-            InstData::FAdd(e) =&gt; e.result_ty(),
-            InstData::FSub(e) =&gt; e.result_ty(),
-            InstData::FMul(e) =&gt; e.result_ty(),
-            InstData::FDiv(e) =&gt; e.result_ty(),
-            InstData::FRem(e) =&gt; e.result_ty(),
-            InstData::Alloca(e) =&gt; e.result_ty(),
-            InstData::Load(e) =&gt; e.result_ty(),
-            InstData::Store(e) =&gt; e.result_ty(),
-            InstData::Offset(e) =&gt; e.result_ty(),
-            InstData::Extract(e) =&gt; e.result_ty(),
-            InstData::Insert(e) =&gt; e.result_ty(),
-            InstData::ElemPtr(e) =&gt; e.result_ty(),
-            InstData::Sext(e) =&gt; e.result_ty(),
-            InstData::Zext(e) =&gt; e.result_ty(),
-            InstData::Trunc(e) =&gt; e.result_ty(),
-            InstData::IToB(e) =&gt; e.result_ty(),
-            InstData::BToI(e) =&gt; e.result_ty(),
-            InstData::SIToF(e) =&gt; e.result_ty(),
-            InstData::UIToF(e) =&gt; e.result_ty(),
-            InstData::FToSI(e) =&gt; e.result_ty(),
-            InstData::FToUI(e) =&gt; e.result_ty(),
-            InstData::FExt(e) =&gt; e.result_ty(),
-            InstData::FTrunc(e) =&gt; e.result_ty(),
-            InstData::IToP(e) =&gt; e.result_ty(),
-            InstData::PToI(e) =&gt; e.result_ty(),
-            InstData::IConst(e) =&gt; e.result_ty(),
-            InstData::FConst(e) =&gt; e.result_ty(),
-            InstData::BConst(e) =&gt; e.result_ty(),
-            InstData::Undef(e) =&gt; e.result_ty(),
-            InstData::Null(e) =&gt; e.result_ty(),
-            InstData::GlobalAddr(e) =&gt; e.result_ty(),
-        }
+        <span class="macro">for_each_inst!</span>(<span class="self">self</span>, result_ty)
     }
 }
 
@@ -2199,7 +2033,7 @@
     <span class="doccomment">/// Gets the block target by itself.
     </span><span class="attr">#[inline]
     </span><span class="kw">pub fn </span>block(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Block {
-        Block::new(<span class="self">self</span>.data[<span class="number">0</span>].index())
+        Block::key_new(<span class="self">self</span>.data[<span class="number">0</span>].key_index())
     }
 
     <span class="doccomment">/// Gets the block arguments being passed, if any
@@ -3424,7 +3258,43 @@
     }
 }
 
-<span class="doccomment">/// Models aa `globaladdr` instruction.
+<span class="doccomment">/// Models a `stackslot` instruction.
+///
+/// ```raw
+/// %0 = stackslot $x
+/// ```
+</span><span class="attr">#[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
+#[cfg_attr(feature = <span class="string">&quot;enable-serde&quot;</span>, derive(Serialize, Deserialize))]
+</span><span class="kw">pub struct </span>StackSlotInst {
+    slot: StackSlot,
+}
+
+<span class="kw">impl </span>StackSlotInst {
+    <span class="kw">pub</span>(<span class="kw">in </span><span class="kw">crate</span>::ir) <span class="kw">fn </span>new(slot: StackSlot) -&gt; <span class="self">Self </span>{
+        <span class="self">Self </span>{ slot }
+    }
+
+    <span class="doccomment">/// Gets the name of the symbol being referenced
+    </span><span class="kw">pub fn </span>slot(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; StackSlot {
+        <span class="self">self</span>.slot
+    }
+}
+
+<span class="kw">impl </span>Instruction <span class="kw">for </span>StackSlotInst {
+    <span class="kw">fn </span>operands(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>[Value] {
+        <span class="kw-2">&amp;</span>[]
+    }
+
+    <span class="kw">fn </span>__operands_dfg_mut(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;mut </span>[Value] {
+        <span class="kw-2">&amp;mut </span>[]
+    }
+
+    <span class="kw">fn </span>result_ty(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;Type&gt; {
+        <span class="prelude-val">Some</span>(Type::ptr())
+    }
+}
+
+<span class="doccomment">/// Models a `globaladdr` instruction.
 ///
 /// ```raw
 /// %0 = globaladdr @printf
@@ -3470,4 +3340,4 @@ renderMathInElement(document.body, {
     ]
 });
 </script>
-<div id="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="sapphire" data-themes="" data-resource-suffix="" data-rustdoc-version="1.69.0-nightly (246eae2fa 2023-02-21)" data-search-js="search-14421e1532aead08.js" data-settings-js="settings-f0c5c39777a9a2f6.js" data-settings-css="settings-0bcba95ff279c1db.css" ></div></body></html>
+<div id="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="sapphire" data-themes="" data-resource-suffix="" data-rustdoc-version="1.69.0-nightly (07c993eba 2023-02-23)" data-search-js="search-14421e1532aead08.js" data-settings-js="settings-f0c5c39777a9a2f6.js" data-settings-css="settings-0bcba95ff279c1db.css" ></div></body></html>

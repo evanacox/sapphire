@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["ArenaMap","SecondaryMap","UniqueArenaMap"],"trait":["ArenaKey"]};
+window.SIDEBAR_ITEMS = {"struct":["ArenaMap","IntoIter","Keys","SecondaryMap","UniqueArenaMap"],"trait":["ArenaKey"]};

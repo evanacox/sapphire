@@ -1430,6 +1430,33 @@
 <a href="#1427" id="1427">1427</a>
 <a href="#1428" id="1428">1428</a>
 <a href="#1429" id="1429">1429</a>
+<a href="#1430" id="1430">1430</a>
+<a href="#1431" id="1431">1431</a>
+<a href="#1432" id="1432">1432</a>
+<a href="#1433" id="1433">1433</a>
+<a href="#1434" id="1434">1434</a>
+<a href="#1435" id="1435">1435</a>
+<a href="#1436" id="1436">1436</a>
+<a href="#1437" id="1437">1437</a>
+<a href="#1438" id="1438">1438</a>
+<a href="#1439" id="1439">1439</a>
+<a href="#1440" id="1440">1440</a>
+<a href="#1441" id="1441">1441</a>
+<a href="#1442" id="1442">1442</a>
+<a href="#1443" id="1443">1443</a>
+<a href="#1444" id="1444">1444</a>
+<a href="#1445" id="1445">1445</a>
+<a href="#1446" id="1446">1446</a>
+<a href="#1447" id="1447">1447</a>
+<a href="#1448" id="1448">1448</a>
+<a href="#1449" id="1449">1449</a>
+<a href="#1450" id="1450">1450</a>
+<a href="#1451" id="1451">1451</a>
+<a href="#1452" id="1452">1452</a>
+<a href="#1453" id="1453">1453</a>
+<a href="#1454" id="1454">1454</a>
+<a href="#1455" id="1455">1455</a>
+<a href="#1456" id="1456">1456</a>
 </pre><pre class="rust"><code><span class="comment">//======---------------------------------------------------------------======//
 //                                                                           //
 // Copyright 2022-2023 Evan Cox &lt;evanacox00@gmail.com&gt;. All rights reserved. //
@@ -1681,6 +1708,10 @@
         stringify_signature_params(<span class="kw-2">&amp;</span><span class="self">self</span>.pool_guard, sig)
     }
 
+    <span class="kw">fn </span>stack_name(<span class="kw-2">&amp;</span><span class="self">self</span>, name: Str) -&gt; String {
+        <span class="macro">format!</span>(<span class="string">&quot;${}&quot;</span>, <span class="self">self</span>.module().context().strings().get(name).unwrap())
+    }
+
     <span class="kw">fn </span>func_name(<span class="kw-2">&amp;</span><span class="self">self</span>, func: Func) -&gt; String {
         <span class="macro">format!</span>(<span class="string">&quot;@{}&quot;</span>, <span class="self">self</span>.module().function(func).name())
     }
@@ -1833,7 +1864,7 @@
             <span class="comment">// &#39;fn T @name(tys) &#39;
             </span><span class="self">self</span>.state.whole += <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">&quot;fn {ty} {name}{params}&quot;</span>);
 
-            <span class="comment">// &#39;{fastcc|sysv|win64|ccc} &#39;
+            <span class="comment">// &#39;{fastcc|ccc} &#39;
             </span><span class="kw">match </span>sig.calling_conv() {
                 CallConv::C =&gt; {}
                 abi =&gt; <span class="self">self</span>.state.whole += <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">&quot;{} &quot;</span>, stringify_abi(abi)),
@@ -1842,6 +1873,20 @@
             <span class="comment">// body
             </span><span class="kw">if let </span><span class="prelude-val">Some</span>(def) = f.definition() {
                 <span class="self">self</span>.state.whole += <span class="string">&quot; {\n&quot;</span>;
+
+                <span class="comment">// stack slots
+                </span><span class="kw">for </span>slot <span class="kw">in </span>def.dfg.stack_slots() {
+                    <span class="kw">let </span>data = def.dfg.stack_slot(slot);
+                    <span class="kw">let </span>name = <span class="self">self</span>.stack_name(data.name());
+                    <span class="kw">let </span>ty = <span class="self">self</span>.ty(data.ty());
+
+                    <span class="self">self</span>.state.whole += <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">&quot;  {name} = stack {ty}\n&quot;</span>);
+                }
+
+                <span class="comment">// if we had any stack slots, add an extra \n gap
+                </span><span class="kw">if </span>!<span class="self">self</span>.state.whole.ends_with(<span class="string">&quot; {\n&quot;</span>) {
+                    <span class="self">self</span>.state.whole += <span class="string">&quot;\n&quot;</span>;
+                }
 
                 <span class="kw">for </span>block <span class="kw">in </span>def.layout.blocks() {
                     <span class="self">self</span>.visit_block(block, def);
@@ -2313,6 +2358,15 @@
         <span class="kw">let </span>ty = <span class="self">self</span>.ty(data.result_ty().unwrap());
 
         <span class="self">self</span>.state.whole += <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">&quot;null {ty}&quot;</span>);
+    }
+
+    <span class="kw">fn </span>visit_stackslot(<span class="kw-2">&amp;mut </span><span class="self">self</span>, inst: Inst, data: <span class="kw-2">&amp;</span>StackSlotInst, def: <span class="kw-2">&amp;</span>FunctionDefinition) {
+        <span class="self">self</span>.result(inst, def);
+
+        <span class="kw">let </span>data = def.dfg.stack_slot(data.slot());
+        <span class="kw">let </span>name = <span class="self">self</span>.stack_name(data.name());
+
+        <span class="self">self</span>.state.whole += <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">&quot;stackslot {name}&quot;</span>);
     }
 
     <span class="kw">fn </span>visit_globaladdr(<span class="kw-2">&amp;mut </span><span class="self">self</span>, inst: Inst, data: <span class="kw-2">&amp;</span>GlobalAddrInst, def: <span class="kw-2">&amp;</span>FunctionDefinition) {
@@ -2870,4 +2924,4 @@ renderMathInElement(document.body, {
     ]
 });
 </script>
-<div id="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="sapphire" data-themes="" data-resource-suffix="" data-rustdoc-version="1.69.0-nightly (246eae2fa 2023-02-21)" data-search-js="search-14421e1532aead08.js" data-settings-js="settings-f0c5c39777a9a2f6.js" data-settings-css="settings-0bcba95ff279c1db.css" ></div></body></html>
+<div id="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="sapphire" data-themes="" data-resource-suffix="" data-rustdoc-version="1.69.0-nightly (07c993eba 2023-02-23)" data-search-js="search-14421e1532aead08.js" data-settings-js="settings-f0c5c39777a9a2f6.js" data-settings-css="settings-0bcba95ff279c1db.css" ></div></body></html>

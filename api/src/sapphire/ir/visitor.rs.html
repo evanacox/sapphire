@@ -572,6 +572,14 @@
 <a href="#569" id="569">569</a>
 <a href="#570" id="570">570</a>
 <a href="#571" id="571">571</a>
+<a href="#572" id="572">572</a>
+<a href="#573" id="573">573</a>
+<a href="#574" id="574">574</a>
+<a href="#575" id="575">575</a>
+<a href="#576" id="576">576</a>
+<a href="#577" id="577">577</a>
+<a href="#578" id="578">578</a>
+<a href="#579" id="579">579</a>
 </pre><pre class="rust"><code><span class="comment">//======---------------------------------------------------------------======//
 //                                                                           //
 // Copyright 2022-2023 Evan Cox &lt;evanacox00@gmail.com&gt;. All rights reserved. //
@@ -693,6 +701,7 @@
             InstData::BConst(i) =&gt; <span class="self">self</span>.visit_bconst(inst, i, def),
             InstData::Undef(i) =&gt; <span class="self">self</span>.visit_undef(inst, i, def),
             InstData::Null(i) =&gt; <span class="self">self</span>.visit_null(inst, i, def),
+            InstData::StackSlot(i) =&gt; <span class="self">self</span>.visit_stackslot(inst, i, def),
             InstData::GlobalAddr(i) =&gt; <span class="self">self</span>.visit_globaladdr(inst, i, def),
         }
     }
@@ -861,6 +870,9 @@
     <span class="doccomment">/// Visits a `null` instruction.
     </span><span class="kw">fn </span>visit_null(<span class="kw-2">&amp;mut </span><span class="self">self</span>, inst: Inst, data: <span class="kw-2">&amp;</span>NullConstInst, def: <span class="kw-2">&amp;</span>FunctionDefinition);
 
+    <span class="doccomment">/// Visits a `stackslot` instruction.
+    </span><span class="kw">fn </span>visit_stackslot(<span class="kw-2">&amp;mut </span><span class="self">self</span>, inst: Inst, data: <span class="kw-2">&amp;</span>StackSlotInst, def: <span class="kw-2">&amp;</span>FunctionDefinition);
+
     <span class="doccomment">/// Visits a `globaladdr` instruction.
     </span><span class="kw">fn </span>visit_globaladdr(<span class="kw-2">&amp;mut </span><span class="self">self</span>, inst: Inst, data: <span class="kw-2">&amp;</span>GlobalAddrInst, def: <span class="kw-2">&amp;</span>FunctionDefinition);
 }
@@ -926,6 +938,7 @@
             InstData::BConst(i) =&gt; <span class="self">self</span>.visit_bconst(i),
             InstData::Undef(i) =&gt; <span class="self">self</span>.visit_undef(i),
             InstData::Null(i) =&gt; <span class="self">self</span>.visit_null(i),
+            InstData::StackSlot(i) =&gt; <span class="self">self</span>.visit_stackslot(i),
             InstData::GlobalAddr(i) =&gt; <span class="self">self</span>.visit_globaladdr(i),
         }
     }
@@ -1089,6 +1102,9 @@
     <span class="doccomment">/// Visits a `null` instruction.
     </span><span class="kw">fn </span>visit_null(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>NullConstInst) -&gt; T;
 
+    <span class="doccomment">/// Visits a `stackslot` instruction.
+    </span><span class="kw">fn </span>visit_stackslot(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>StackSlotInst) -&gt; T;
+
     <span class="doccomment">/// Visits a `globaladdr` instruction.
     </span><span class="kw">fn </span>visit_globaladdr(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>GlobalAddrInst) -&gt; T;
 }
@@ -1154,4 +1170,4 @@ renderMathInElement(document.body, {
     ]
 });
 </script>
-<div id="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="sapphire" data-themes="" data-resource-suffix="" data-rustdoc-version="1.69.0-nightly (246eae2fa 2023-02-21)" data-search-js="search-14421e1532aead08.js" data-settings-js="settings-f0c5c39777a9a2f6.js" data-settings-css="settings-0bcba95ff279c1db.css" ></div></body></html>
+<div id="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="sapphire" data-themes="" data-resource-suffix="" data-rustdoc-version="1.69.0-nightly (07c993eba 2023-02-23)" data-search-js="search-14421e1532aead08.js" data-settings-js="settings-f0c5c39777a9a2f6.js" data-settings-css="settings-0bcba95ff279c1db.css" ></div></body></html>

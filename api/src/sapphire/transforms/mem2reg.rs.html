@@ -582,6 +582,33 @@
 <a href="#579" id="579">579</a>
 <a href="#580" id="580">580</a>
 <a href="#581" id="581">581</a>
+<a href="#582" id="582">582</a>
+<a href="#583" id="583">583</a>
+<a href="#584" id="584">584</a>
+<a href="#585" id="585">585</a>
+<a href="#586" id="586">586</a>
+<a href="#587" id="587">587</a>
+<a href="#588" id="588">588</a>
+<a href="#589" id="589">589</a>
+<a href="#590" id="590">590</a>
+<a href="#591" id="591">591</a>
+<a href="#592" id="592">592</a>
+<a href="#593" id="593">593</a>
+<a href="#594" id="594">594</a>
+<a href="#595" id="595">595</a>
+<a href="#596" id="596">596</a>
+<a href="#597" id="597">597</a>
+<a href="#598" id="598">598</a>
+<a href="#599" id="599">599</a>
+<a href="#600" id="600">600</a>
+<a href="#601" id="601">601</a>
+<a href="#602" id="602">602</a>
+<a href="#603" id="603">603</a>
+<a href="#604" id="604">604</a>
+<a href="#605" id="605">605</a>
+<a href="#606" id="606">606</a>
+<a href="#607" id="607">607</a>
+<a href="#608" id="608">608</a>
 </pre><pre class="rust"><code><span class="comment">//======---------------------------------------------------------------======//
 //                                                                           //
 // Copyright 2022 Evan Cox &lt;evanacox00@gmail.com&gt;. All rights reserved.      //
@@ -599,7 +626,7 @@
 <span class="kw">use </span><span class="kw">crate</span>::utility::{IntoTree, SaHashMap, SaHashSet};
 <span class="kw">use </span>smallvec::{smallvec, SmallVec};
 
-<span class="doccomment">/// Promotes `alloca`s that only have `load`s and `store`s as uses into registers.
+<span class="doccomment">/// Promotes stack slots that only have `load`s and `store`s as uses into registers.
 /// This is effectively an SSA construction pass, it promotes memory operations into
 /// SSA values and φ nodes.  
 ///
@@ -610,13 +637,16 @@
 /// - This will not promote any local memory that has multiple types stored into it,
 ///   e.g. an i64 that has the value of an f64 stored into it will just be ignored.
 ///
-/// - Any `alloca` that is leaked in **any way** is not promoted. An `alloca`
-///   must only have `load`s and `store`s as uses, even passing the `alloca`
+/// - Any `stack` that is leaked in **any way** is not promoted. An `stack`
+///   must only have `load`s and `store`s as uses, even passing the `stack`
 ///   through φ nodes will cause it to be ignored.
 ///
 /// - Right now, this pass does not treat `elemptr` as a `load`/`store`, and will
-///   just ignore any `alloca`s that are used in an `elemptr`. If you want aggregates to
+///   just ignore any `stack`s that are used in an `elemptr`. If you want aggregates to
 ///   be promoted, they need to be created via `insert`s and then `store`d into the memory.
+///
+/// - Any `alloca`s are ignored, as they are assumed to be dynamic. They need to be
+///   transformed into stack values first to be promoted.
 </span><span class="kw">pub struct </span>Mem2RegPass;
 
 <span class="kw">impl </span>FunctionTransformPass <span class="kw">for </span>Mem2RegPass {
@@ -648,49 +678,59 @@
     df: <span class="kw-2">&amp;</span>DominanceFrontier,
 ) {
     <span class="kw">let </span><span class="kw-2">mut </span>cursor = FuncCursor::over(func);
-    <span class="kw">let </span>allocas = find_promotable_allocas(<span class="kw-2">&amp;mut </span>cursor, domtree);
-    <span class="kw">let </span>phis = insert_phis(<span class="kw-2">&amp;mut </span>cursor, <span class="kw-2">&amp;</span>allocas, df);
+    <span class="kw">let </span>slots = find_promotable_slots(<span class="kw-2">&amp;mut </span>cursor, domtree);
+    <span class="kw">let </span>phis = insert_phis(<span class="kw-2">&amp;mut </span>cursor, <span class="kw-2">&amp;</span>slots, df);
 
-    rename_variables(<span class="kw-2">&amp;mut </span>cursor, <span class="kw-2">&amp;</span>allocas, <span class="kw-2">&amp;</span>phis, cfg, domtree);
+    rename_variables(<span class="kw-2">&amp;mut </span>cursor, <span class="kw-2">&amp;</span>slots, <span class="kw-2">&amp;</span>phis, cfg, domtree);
 
-    <span class="kw">for </span><span class="kw-2">&amp;</span>alloca <span class="kw">in </span>allocas.keys() {
-        <span class="kw">let </span>inst = cursor.value_to_inst(alloca).unwrap();
+    <span class="comment">// remove the `stackslot` instructions. while this could be handled by DCE,
+    // we may as well do it here while we know exactly which ones we just made dead
+    </span><span class="kw">for </span><span class="kw-2">&amp;</span>stackslot <span class="kw">in </span>slots.keys() {
+        <span class="kw">let </span>inst = cursor.value_to_inst(stackslot).unwrap();
+        <span class="kw">let </span>slot = <span class="kw">match </span>cursor.inst_data(inst) {
+            InstData::StackSlot(inst) =&gt; inst.slot(),
+            <span class="kw">_ </span>=&gt; <span class="macro">unreachable!</span>(),
+        };
 
         cursor.goto_inst(inst);
         cursor.remove_inst();
+        cursor.remove_stack_slot(slot);
     }
 }
 
-<span class="comment">// finds all of the allocas that are actually promotable, along with their definition
-// and the type that the alloca was defined with.
-</span><span class="kw">fn </span>find_promotable_allocas(
+<span class="comment">// finds all of the slots that are actually promotable, along with their definition
+// and the type that the stack slot was defined with.
+</span><span class="kw">fn </span>find_promotable_slots(
     cursor: <span class="kw-2">&amp;mut </span>FuncCursor&lt;<span class="lifetime">&#39;_</span>&gt;,
     domtree: <span class="kw-2">&amp;</span>DominatorTree,
 ) -&gt; SaHashMap&lt;Value, (Type, SmallVec&lt;[Inst; <span class="number">4</span>]&gt;)&gt; {
-    <span class="comment">// allocas is our result, escaped is scratch storage for our &quot;find usages that
+    <span class="comment">// slots is our result, escaped is scratch storage for our &quot;find usages that
     // make it impossible to promote&quot; in our inner loop
-    </span><span class="kw">let </span><span class="kw-2">mut </span>allocas = SaHashMap::default();
+    </span><span class="kw">let </span><span class="kw-2">mut </span>slots = SaHashMap::default();
     <span class="kw">let </span><span class="kw-2">mut </span>not_promotable = SmallVec::&lt;[Value; <span class="number">16</span>]&gt;::default();
 
     <span class="comment">// basic idea: we scan through the function in reverse postorder to see
-    // defs before uses. We find any allocas and we record them in `allocas`,
-    // along with their type and any stores to that alloca (stores = &quot;defs&quot; of
+    // defs before uses. We find any **usage** of slots and we record them in `slots`,
+    // along with their type and any stores to that slot (stores = &quot;defs&quot; of
     // the &quot;variable&quot; that we are promoting, in SSA construction terms)
     </span><span class="kw">for </span>block <span class="kw">in </span>domtree.reverse_postorder() {
         cursor.goto_before(block);
 
         <span class="kw">while let </span><span class="prelude-val">Some</span>(inst) = cursor.next_inst() {
-            <span class="kw">if let </span>InstData::Alloca(alloca) = cursor.inst_data(inst) {
-                allocas.insert(
+            <span class="comment">// in order for us to even consider SSA promotion, we have to actually see
+            // a `stackslot` usage for the slot first. If there are none of these, it isn&#39;t
+            // actually used anywhere and we can just ignore it.
+            </span><span class="kw">if let </span>InstData::StackSlot(stackslot) = cursor.inst_data(inst) {
+                slots.insert(
                     cursor.inst_to_result(inst).unwrap(),
-                    (alloca.alloc_ty(), <span class="macro">smallvec!</span>[]),
+                    (cursor.stack_slot(stackslot.slot()).ty(), <span class="macro">smallvec!</span>[]),
                 );
 
                 <span class="kw">continue</span>;
             }
 
             <span class="comment">// if an instruction has a side effect and uses the value of
-            // one of our allocas, we consider it to have &quot;escaped.&quot;
+            // one of our slots, we consider it to have &quot;escaped.&quot;
             </span><span class="kw">let </span>data = cursor.inst_data(inst);
             <span class="kw">let </span>operands = cursor.inst_data(inst).operands();
 
@@ -699,65 +739,63 @@
                 <span class="kw">continue</span>;
             }
 
-            <span class="comment">// we go through all of our allocas and see if the instruction does something
+            <span class="comment">// we go through all of our slots and see if the instruction does something
             // that makes it non-promotable.
             //
             // the reason we can&#39;t break out of this after the first match is we may potentially
-            // be using multiple allocas in the same instruction
-            </span><span class="kw">for </span>(<span class="kw-2">&amp;</span>alloca, (ty, defs)) <span class="kw">in </span>allocas.iter_mut() {
-                <span class="kw">if </span>operands.contains(<span class="kw-2">&amp;</span>alloca) {
+            // be using multiple slots in the same instruction
+            </span><span class="kw">for </span>(<span class="kw-2">&amp;</span>stackslot, (ty, defs)) <span class="kw">in </span>slots.iter_mut() {
+                <span class="kw">if </span>operands.contains(<span class="kw-2">&amp;</span>stackslot) {
                     <span class="kw">match </span>data {
                         InstData::Store(store) =&gt; {
-                            <span class="kw">if </span>store.pointer() != alloca || <span class="kw-2">*</span>ty != cursor.ty(store.stored()) {
-                                not_promotable.push(alloca);
+                            <span class="kw">if </span>store.pointer() != stackslot || <span class="kw-2">*</span>ty != cursor.ty(store.stored()) {
+                                not_promotable.push(stackslot);
                             } <span class="kw">else </span>{
                                 defs.push(inst)
                             }
                         }
                         InstData::Load(load) =&gt; {
                             <span class="kw">if </span>load.result_ty().unwrap() != <span class="kw-2">*</span>ty {
-                                not_promotable.push(alloca);
+                                not_promotable.push(stackslot);
                             }
                         }
                         <span class="comment">// any other usage besides a load/store, we assume the pointer escaped
                         // so we just don&#39;t promote that at all
-                        </span><span class="kw">_ </span>=&gt; not_promotable.push(alloca),
+                        </span><span class="kw">_ </span>=&gt; not_promotable.push(stackslot),
                     }
                 }
             }
 
-            <span class="comment">// `not_promotable` is just scratch storage because we can&#39;t mutate `allocas` above
-            </span><span class="kw">for </span>alloca <span class="kw">in </span>not_promotable.drain(..) {
-                allocas.remove(<span class="kw-2">&amp;</span>alloca);
+            <span class="comment">// `not_promotable` is just scratch storage because we can&#39;t mutate `slots` above
+            </span><span class="kw">for </span>stackslot <span class="kw">in </span>not_promotable.drain(..) {
+                slots.remove(<span class="kw-2">&amp;</span>stackslot);
             }
         }
     }
 
-    allocas
+    slots
 }
 
 <span class="comment">// runs the φ-insertion algorithm, and returns the phi nodes that were inserted at
 // given join points.
 //
-// the return value maps φ node -&gt; alloca it is for
+// the return value maps φ node -&gt; stackslot it is for
 </span><span class="kw">fn </span>insert_phis(
     cursor: <span class="kw-2">&amp;mut </span>FuncCursor&lt;<span class="lifetime">&#39;_</span>&gt;,
-    allocas: <span class="kw-2">&amp;</span>SaHashMap&lt;Value, (Type, SmallVec&lt;[Inst; <span class="number">4</span>]&gt;)&gt;,
+    slots: <span class="kw-2">&amp;</span>SaHashMap&lt;Value, (Type, SmallVec&lt;[Inst; <span class="number">4</span>]&gt;)&gt;,
     df: <span class="kw-2">&amp;</span>DominanceFrontier,
 ) -&gt; SaHashMap&lt;Value, Value&gt; {
-    <span class="comment">// maps an alloca and a block to a phi node for that alloca.
-    // this is intended to map alloca -&gt; phi for blocks where the phi was added
-    </span><span class="kw">let </span><span class="kw-2">mut </span>phis = SaHashMap::default();
+    <span class="kw">let </span><span class="kw-2">mut </span>phis = SaHashMap::default();
 
     <span class="comment">// we need a consistent order for these to be inserted, so instead of directly iterating
     // over the hash table we instead copy keys into a vec and then sort it.
     //
     // the keys are integers anyway and this will be a very small vec, should be cheap
-    </span><span class="kw">let </span><span class="kw-2">mut </span>alloca_keys: SmallVec&lt;[Value; <span class="number">16</span>]&gt; = allocas.keys().copied().collect();
-    alloca_keys.sort();
+    </span><span class="kw">let </span><span class="kw-2">mut </span>stackslot_keys: SmallVec&lt;[Value; <span class="number">16</span>]&gt; = slots.keys().copied().collect();
+    stackslot_keys.sort();
 
-    <span class="kw">for </span>alloca <span class="kw">in </span>alloca_keys {
-        <span class="kw">let </span>(ty, defs) = <span class="kw-2">&amp;</span>allocas[<span class="kw-2">&amp;</span>alloca];
+    <span class="kw">for </span>slot <span class="kw">in </span>stackslot_keys {
+        <span class="kw">let </span>(ty, defs) = <span class="kw-2">&amp;</span>slots[<span class="kw-2">&amp;</span>slot];
         <span class="kw">let </span><span class="kw-2">mut </span>phis_added = SaHashSet::default();
         <span class="kw">let </span><span class="kw-2">mut </span>contains_defs = SaHashSet::default();
 
@@ -765,7 +803,7 @@
             contains_defs.insert(cursor.inst_block(def));
         }
 
-        <span class="comment">// go through all the blocks where we store to the alloca, and find
+        <span class="comment">// go through all the blocks where we store to the slot, and find
         // join points after those blocks from the dominance frontier
         </span><span class="kw">while let </span><span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>block) = contains_defs.iter().next() {
             contains_defs.remove(<span class="kw-2">&amp;</span>block);
@@ -774,13 +812,13 @@
                 <span class="comment">// if we haven&#39;t already added a phi for this variable yet for this
                 // particular join point, add the phi and record it.
                 </span><span class="kw">if </span>!phis_added.contains(<span class="kw-2">&amp;</span>bb) {
-                    <span class="kw">let </span>dbg = cursor.dfg().debug(alloca).strip_name();
+                    <span class="kw">let </span>dbg = cursor.dfg().debug(slot).strip_name();
                     <span class="kw">let </span>phi = cursor.def_mut().dfg.append_block_param(bb, <span class="kw-2">*</span>ty, dbg);
 
-                    phis.insert(phi, alloca);
+                    phis.insert(phi, slot);
                     phis_added.insert(bb);
 
-                    <span class="comment">// if `bb` is not a block that provides a def for `alloca`
+                    <span class="comment">// if `bb` is not a block that provides a def for `stack`
                     </span><span class="kw">if </span>!defs.iter().any(|<span class="kw-2">&amp;</span>def| cursor.inst_block(def) == bb) {
                         contains_defs.insert(bb);
                     }
@@ -797,16 +835,16 @@
     Use(LoadInst),
 }
 
-<span class="comment">// Gets the closest (dominating) definition for a given alloca. If there is none,
+<span class="comment">// Gets the closest (dominating) definition for a given slot. If there is none,
 // an `undef` is inserted as the definition and is then returned.
 </span><span class="kw">fn </span>nearest_reaching_def(
     cursor: <span class="kw-2">&amp;mut </span>FuncCursor&lt;<span class="lifetime">&#39;_</span>&gt;,
-    alloca: Value,
+    stackslot: Value,
     ty: Type,
     dbg: DebugInfo,
     defs: <span class="kw-2">&amp;mut </span>SaHashMap&lt;Value, SmallVec&lt;[Value; <span class="number">4</span>]&gt;&gt;,
 ) -&gt; Value {
-    <span class="kw">let </span>stack = defs.get_mut(<span class="kw-2">&amp;</span>alloca).unwrap();
+    <span class="kw">let </span>stack = defs.get_mut(<span class="kw-2">&amp;</span>stackslot).unwrap();
 
     <span class="kw">match </span>stack.last().copied() {
         <span class="prelude-val">Some</span>(v) =&gt; v,
@@ -833,9 +871,9 @@
     <span class="comment">// first task is to update reaching_def if any of our block&#39;s φ nodes are
     // actually definitions for a variable in this block
     </span><span class="kw">for </span><span class="kw-2">&amp;</span>phi <span class="kw">in </span>cursor.block_params(bb) {
-        <span class="kw">if let </span><span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>alloca) = phis.get(<span class="kw-2">&amp;</span>phi) {
-            defs.push(alloca);
-            reaching_def.get_mut(<span class="kw-2">&amp;</span>alloca).unwrap().push(phi);
+        <span class="kw">if let </span><span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>stackslot) = phis.get(<span class="kw-2">&amp;</span>phi) {
+            defs.push(stackslot);
+            reaching_def.get_mut(<span class="kw-2">&amp;</span>stackslot).unwrap().push(phi);
         }
     }
 
@@ -856,8 +894,8 @@
         };
 
         <span class="kw">match </span>op {
-            <span class="comment">// by this point, we can assume that any stores to that alloca
-            // that are in `reaching_def` are actually allocas we can promote.
+            <span class="comment">// by this point, we can assume that any stores to that slot
+            // that are in `reaching_def` are actually slots we can promote.
             // we checked earlier to make sure
             </span>Memory::Use(load) =&gt; {
                 <span class="comment">// if there is no closest definition, we insert an `undef` instruction
@@ -892,8 +930,10 @@
     <span class="kw">let </span>branch = cursor.current_inst().unwrap();
     <span class="kw">let </span><span class="kw-2">mut </span>params = SmallVec::&lt;[(usize, Value); <span class="number">16</span>]&gt;::default();
 
-    <span class="comment">// if one of our successors has a φ node that came from an alloca we defined, rewrite
-    // the branch to that successor to pass the most recent definition
+    <span class="comment">// if one of our successors has a φ node that came from a stackslot we defined *anywhere*,
+    // rewrite the branch to that successor to pass the most recent definition.
+    //
+    // even if we didn&#39;t define it in this block we still need to rewrite our branch
     </span><span class="kw">for </span>successor <span class="kw">in </span>cfg.successors(bb) {
         params.insert_many(
             <span class="number">0</span>,
@@ -901,10 +941,10 @@
         );
 
         <span class="kw">for </span>(i, phi) <span class="kw">in </span>params.drain(..) {
-            <span class="kw">if let </span><span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>alloca) = phis.get(<span class="kw-2">&amp;</span>phi) {
+            <span class="kw">if let </span><span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>stackslot) = phis.get(<span class="kw-2">&amp;</span>phi) {
                 <span class="kw">let </span>dbg = cursor.val_debug(phi);
                 <span class="kw">let </span>reaching =
-                    nearest_reaching_def(cursor, alloca, cursor.ty(phi), dbg, reaching_def);
+                    nearest_reaching_def(cursor, stackslot, cursor.ty(phi), dbg, reaching_def);
 
                 rewrite_pad_branch_argument(cursor, branch, successor, i, reaching);
             }
@@ -923,24 +963,24 @@
 
     <span class="comment">// once we&#39;ve finished recursing, remove our defs from the stack so they don&#39;t
     // interfere with blocks that we don&#39;t actually dominate.
-    </span><span class="kw">for </span>alloca <span class="kw">in </span>defs {
-        <span class="kw">let _ </span>= reaching_def.get_mut(<span class="kw-2">&amp;</span>alloca).unwrap().pop();
+    </span><span class="kw">for </span>stackslot <span class="kw">in </span>defs {
+        <span class="kw">let _ </span>= reaching_def.get_mut(<span class="kw-2">&amp;</span>stackslot).unwrap().pop();
     }
 }
 
 <span class="kw">fn </span>rename_variables(
     cursor: <span class="kw-2">&amp;mut </span>FuncCursor&lt;<span class="lifetime">&#39;_</span>&gt;,
-    allocas: <span class="kw-2">&amp;</span>SaHashMap&lt;Value, (Type, SmallVec&lt;[Inst; <span class="number">4</span>]&gt;)&gt;,
+    slots: <span class="kw-2">&amp;</span>SaHashMap&lt;Value, (Type, SmallVec&lt;[Inst; <span class="number">4</span>]&gt;)&gt;,
     phis: <span class="kw-2">&amp;</span>SaHashMap&lt;Value, Value&gt;,
     cfg: <span class="kw-2">&amp;</span>ControlFlowGraph,
     domtree: <span class="kw-2">&amp;</span>DominatorTree,
 ) {
     <span class="kw">let </span><span class="kw-2">mut </span>reaching_def = SaHashMap::&lt;Value, SmallVec&lt;[Value; <span class="number">4</span>]&gt;&gt;::default();
 
-    <span class="comment">// initialize reaching_def, for every alloca we have no definition
+    <span class="comment">// initialize reaching_def, for every stackslot we have no definition
     // at this point in the program yet.
-    </span><span class="kw">for </span><span class="kw-2">&amp;</span>alloca <span class="kw">in </span>allocas.keys() {
-        reaching_def.insert(alloca, <span class="macro">smallvec!</span>[]);
+    </span><span class="kw">for </span><span class="kw-2">&amp;</span>stackslot <span class="kw">in </span>slots.keys() {
+        reaching_def.insert(stackslot, <span class="macro">smallvec!</span>[]);
     }
 
     cursor.goto_before(domtree.root());
@@ -954,7 +994,7 @@
     <span class="kw">use </span><span class="kw">crate</span>::analysis::ControlFlowGraph;
 
     <span class="attr">#[test]
-    </span><span class="kw">fn </span>find_allocas_simple() {
+    </span><span class="kw">fn </span>find_slots_simple() {
         <span class="kw">let </span><span class="kw-2">mut </span>module = Module::new(<span class="string">&quot;fig3.1&quot;</span>);
         <span class="kw">let </span>sig = SigBuilder::new()
             .param(Type::i32())
@@ -976,10 +1016,14 @@
         <span class="comment">// fn i32 @f(i32, i32)
         //
         // fn i32 @test(bool) {
+        //   $x = stack i32
+        //   $y = stack i32
+        //   $tmp = stack i32
+        //
         // r(bool %0):
-        //   %x = alloca i32
-        //   %y = alloca i32
-        //   %tmp = alloca i32
+        //   %x = stackslot $x
+        //   %y = stackslot $y
+        //   %tmp = stackslot $tmp
         //   %1 = undef i32
         //   store i32 %1, ptr %x
         //   store i32 %1, ptr %y
@@ -1015,7 +1059,10 @@
         //   %9 = load i32, ptr %x
         //   ret i32 %9
         // }
-        </span><span class="kw">let </span>bbr = b.create_block(<span class="string">&quot;r&quot;</span>);
+        </span><span class="kw">let </span>x_slot = b.create_stack_slot(<span class="string">&quot;x&quot;</span>, Type::i32());
+        <span class="kw">let </span>y_slot = b.create_stack_slot(<span class="string">&quot;y&quot;</span>, Type::i32());
+        <span class="kw">let </span>tmp_slot = b.create_stack_slot(<span class="string">&quot;tmp&quot;</span>, Type::i32());
+        <span class="kw">let </span>bbr = b.create_block(<span class="string">&quot;r&quot;</span>);
         <span class="kw">let </span>bba = b.create_block(<span class="string">&quot;a&quot;</span>);
         <span class="kw">let </span>bbb = b.create_block(<span class="string">&quot;b&quot;</span>);
         <span class="kw">let </span>bbc = b.create_block(<span class="string">&quot;c&quot;</span>);
@@ -1025,9 +1072,9 @@
         <span class="kw">let </span>v0 = b.append_entry_params(bbr, DebugInfo::fake())[<span class="number">0</span>];
 
         b.switch_to(bbr);
-        <span class="kw">let </span>x = b.append().alloca(Type::i32(), DebugInfo::fake());
-        <span class="kw">let </span>y = b.append().alloca(Type::i32(), DebugInfo::fake());
-        <span class="kw">let </span>tmp = b.append().alloca(Type::i32(), DebugInfo::fake());
+        <span class="kw">let </span>x = b.append().stackslot(x_slot, DebugInfo::fake());
+        <span class="kw">let </span>y = b.append().stackslot(y_slot, DebugInfo::fake());
+        <span class="kw">let </span>tmp = b.append().stackslot(tmp_slot, DebugInfo::fake());
         <span class="kw">let </span>v1 = b.append().undef(Type::i32(), DebugInfo::fake());
         <span class="kw">let </span>x_def1 = b.append().store(v1, x, DebugInfo::fake());
         <span class="kw">let </span>y_def1 = b.append().store(v1, y, DebugInfo::fake());
@@ -1079,9 +1126,9 @@
 
         <span class="kw">let </span>cfg = ControlFlowGraph::compute(func);
         <span class="kw">let </span>domtree = DominatorTree::compute(func, <span class="kw-2">&amp;</span>cfg);
-        <span class="kw">let </span>allocas = find_promotable_allocas(<span class="kw-2">&amp;mut </span>FuncCursor::over(func), <span class="kw-2">&amp;</span>domtree);
+        <span class="kw">let </span>slots = find_promotable_slots(<span class="kw-2">&amp;mut </span>FuncCursor::over(func), <span class="kw-2">&amp;</span>domtree);
         {
-            <span class="kw">let </span>(ty, <span class="kw-2">mut </span>defs) = allocas[<span class="kw-2">&amp;</span>x].clone();
+            <span class="kw">let </span>(ty, <span class="kw-2">mut </span>defs) = slots[<span class="kw-2">&amp;</span>x].clone();
 
             defs.sort();
 
@@ -1090,7 +1137,7 @@
         }
 
         {
-            <span class="kw">let </span>(ty, <span class="kw-2">mut </span>defs) = allocas[<span class="kw-2">&amp;</span>y].clone();
+            <span class="kw">let </span>(ty, <span class="kw-2">mut </span>defs) = slots[<span class="kw-2">&amp;</span>y].clone();
 
             defs.sort();
 
@@ -1099,7 +1146,7 @@
         }
 
         {
-            <span class="kw">let </span>(ty, <span class="kw-2">mut </span>defs) = allocas[<span class="kw-2">&amp;</span>tmp].clone();
+            <span class="kw">let </span>(ty, <span class="kw-2">mut </span>defs) = slots[<span class="kw-2">&amp;</span>tmp].clone();
 
             defs.sort();
 
@@ -1109,7 +1156,7 @@
     }
 
     <span class="attr">#[test]
-    </span><span class="kw">fn </span>find_allocas_escaped() {
+    </span><span class="kw">fn </span>find_slots_escaped() {
         <span class="kw">let </span><span class="kw-2">mut </span>module = Module::new(<span class="string">&quot;fig3.1&quot;</span>);
         <span class="kw">let </span>sig = SigBuilder::new().param(Type::ptr()).build();
         <span class="kw">let </span>f = module.declare_function(<span class="string">&quot;f&quot;</span>, sig.clone());
@@ -1118,16 +1165,23 @@
 
         <span class="kw">let </span>sig = b.import_signature(<span class="kw-2">&amp;</span>sig);
 
+        <span class="kw">let </span>ty = Type::array(<span class="kw-2">&amp;mut </span>b.ctx().types_mut(), Type::bool(), <span class="number">512</span>);
+        <span class="kw">let </span>v1_slot = b.create_stack_slot(<span class="string">&quot;1&quot;</span>, Type::ptr());
+        <span class="kw">let </span>v2_slot = b.create_stack_slot(<span class="string">&quot;2&quot;</span>, Type::i8());
+        <span class="kw">let </span>v3_slot = b.create_stack_slot(<span class="string">&quot;3&quot;</span>, Type::f32());
+        <span class="kw">let </span>v4_slot = b.create_stack_slot(<span class="string">&quot;4&quot;</span>, Type::i64());
+        <span class="kw">let </span>v5_slot = b.create_stack_slot(<span class="string">&quot;5&quot;</span>, ty);
+        <span class="kw">let </span>v6_slot = b.create_stack_slot(<span class="string">&quot;6&quot;</span>, Type::f64());
+
         <span class="kw">let </span>bb0 = b.create_block(<span class="string">&quot;r&quot;</span>);
         <span class="kw">let </span>v0 = b.append_entry_params(bb0, DebugInfo::fake())[<span class="number">0</span>];
         b.switch_to(bb0);
-        <span class="kw">let </span>v1 = b.append().alloca(Type::ptr(), DebugInfo::fake());
-        <span class="kw">let </span>v2 = b.append().alloca(Type::i8(), DebugInfo::fake());
-        <span class="kw">let </span>v3 = b.append().alloca(Type::f32(), DebugInfo::fake());
-        <span class="kw">let </span>v4 = b.append().alloca(Type::i64(), DebugInfo::fake());
-        <span class="kw">let </span>ty = Type::array(<span class="kw-2">&amp;mut </span>b.ctx().types_mut(), Type::bool(), <span class="number">512</span>);
-        <span class="kw">let </span>v5 = b.append().alloca(ty, DebugInfo::fake());
-        <span class="kw">let </span>v6 = b.append().alloca(Type::f64(), DebugInfo::fake());
+        <span class="kw">let </span>v1 = b.append().stackslot(v1_slot, DebugInfo::fake());
+        <span class="kw">let </span>v2 = b.append().stackslot(v2_slot, DebugInfo::fake());
+        <span class="kw">let </span>v3 = b.append().stackslot(v3_slot, DebugInfo::fake());
+        <span class="kw">let </span>v4 = b.append().stackslot(v4_slot, DebugInfo::fake());
+        <span class="kw">let </span>v5 = b.append().stackslot(v5_slot, DebugInfo::fake());
+        <span class="kw">let </span>v6 = b.append().stackslot(v6_slot, DebugInfo::fake());
         b.append().call(f, sig, <span class="kw-2">&amp;</span>[v1], DebugInfo::fake());
         b.append().indirectcall(v0, sig, <span class="kw-2">&amp;</span>[v3], DebugInfo::fake());
         b.append().ptoi(Type::i64(), v6, DebugInfo::fake());
@@ -1139,26 +1193,26 @@
         <span class="kw">let </span>cfg = ControlFlowGraph::compute(func);
         <span class="kw">let </span>domtree = DominatorTree::compute(func, <span class="kw-2">&amp;</span>cfg);
 
-        <span class="kw">let </span>allocas = find_promotable_allocas(<span class="kw-2">&amp;mut </span>FuncCursor::over(func), <span class="kw-2">&amp;</span>domtree);
+        <span class="kw">let </span>slots = find_promotable_slots(<span class="kw-2">&amp;mut </span>FuncCursor::over(func), <span class="kw-2">&amp;</span>domtree);
 
-        <span class="macro">assert!</span>(allocas.contains_key(<span class="kw-2">&amp;</span>v2));
-        <span class="macro">assert!</span>(allocas.contains_key(<span class="kw-2">&amp;</span>v5));
+        <span class="macro">assert!</span>(slots.contains_key(<span class="kw-2">&amp;</span>v2));
+        <span class="macro">assert!</span>(slots.contains_key(<span class="kw-2">&amp;</span>v5));
 
         {
-            <span class="kw">let </span>(alloca_ty, <span class="kw-2">mut </span>defs) = allocas[<span class="kw-2">&amp;</span>v2].clone();
+            <span class="kw">let </span>(slot_ty, <span class="kw-2">mut </span>defs) = slots[<span class="kw-2">&amp;</span>v2].clone();
 
             defs.sort();
 
-            <span class="macro">assert_eq!</span>(alloca_ty, Type::i8());
+            <span class="macro">assert_eq!</span>(slot_ty, Type::i8());
             <span class="macro">assert_eq!</span>(defs.as_slice(), <span class="kw-2">&amp;</span>[]);
         }
 
         {
-            <span class="kw">let </span>(alloca_ty, <span class="kw-2">mut </span>defs) = allocas[<span class="kw-2">&amp;</span>v5].clone();
+            <span class="kw">let </span>(slot_ty, <span class="kw-2">mut </span>defs) = slots[<span class="kw-2">&amp;</span>v5].clone();
 
             defs.sort();
 
-            <span class="macro">assert_eq!</span>(alloca_ty, ty);
+            <span class="macro">assert_eq!</span>(slot_ty, ty);
             <span class="macro">assert_eq!</span>(defs.as_slice(), <span class="kw-2">&amp;</span>[]);
         }
     }
@@ -1174,4 +1228,4 @@ renderMathInElement(document.body, {
     ]
 });
 </script>
-<div id="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="sapphire" data-themes="" data-resource-suffix="" data-rustdoc-version="1.69.0-nightly (246eae2fa 2023-02-21)" data-search-js="search-14421e1532aead08.js" data-settings-js="settings-f0c5c39777a9a2f6.js" data-settings-css="settings-0bcba95ff279c1db.css" ></div></body></html>
+<div id="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="sapphire" data-themes="" data-resource-suffix="" data-rustdoc-version="1.69.0-nightly (07c993eba 2023-02-23)" data-search-js="search-14421e1532aead08.js" data-settings-js="settings-f0c5c39777a9a2f6.js" data-settings-css="settings-0bcba95ff279c1db.css" ></div></body></html>

@@ -621,6 +621,84 @@
 <a href="#618" id="618">618</a>
 <a href="#619" id="619">619</a>
 <a href="#620" id="620">620</a>
+<a href="#621" id="621">621</a>
+<a href="#622" id="622">622</a>
+<a href="#623" id="623">623</a>
+<a href="#624" id="624">624</a>
+<a href="#625" id="625">625</a>
+<a href="#626" id="626">626</a>
+<a href="#627" id="627">627</a>
+<a href="#628" id="628">628</a>
+<a href="#629" id="629">629</a>
+<a href="#630" id="630">630</a>
+<a href="#631" id="631">631</a>
+<a href="#632" id="632">632</a>
+<a href="#633" id="633">633</a>
+<a href="#634" id="634">634</a>
+<a href="#635" id="635">635</a>
+<a href="#636" id="636">636</a>
+<a href="#637" id="637">637</a>
+<a href="#638" id="638">638</a>
+<a href="#639" id="639">639</a>
+<a href="#640" id="640">640</a>
+<a href="#641" id="641">641</a>
+<a href="#642" id="642">642</a>
+<a href="#643" id="643">643</a>
+<a href="#644" id="644">644</a>
+<a href="#645" id="645">645</a>
+<a href="#646" id="646">646</a>
+<a href="#647" id="647">647</a>
+<a href="#648" id="648">648</a>
+<a href="#649" id="649">649</a>
+<a href="#650" id="650">650</a>
+<a href="#651" id="651">651</a>
+<a href="#652" id="652">652</a>
+<a href="#653" id="653">653</a>
+<a href="#654" id="654">654</a>
+<a href="#655" id="655">655</a>
+<a href="#656" id="656">656</a>
+<a href="#657" id="657">657</a>
+<a href="#658" id="658">658</a>
+<a href="#659" id="659">659</a>
+<a href="#660" id="660">660</a>
+<a href="#661" id="661">661</a>
+<a href="#662" id="662">662</a>
+<a href="#663" id="663">663</a>
+<a href="#664" id="664">664</a>
+<a href="#665" id="665">665</a>
+<a href="#666" id="666">666</a>
+<a href="#667" id="667">667</a>
+<a href="#668" id="668">668</a>
+<a href="#669" id="669">669</a>
+<a href="#670" id="670">670</a>
+<a href="#671" id="671">671</a>
+<a href="#672" id="672">672</a>
+<a href="#673" id="673">673</a>
+<a href="#674" id="674">674</a>
+<a href="#675" id="675">675</a>
+<a href="#676" id="676">676</a>
+<a href="#677" id="677">677</a>
+<a href="#678" id="678">678</a>
+<a href="#679" id="679">679</a>
+<a href="#680" id="680">680</a>
+<a href="#681" id="681">681</a>
+<a href="#682" id="682">682</a>
+<a href="#683" id="683">683</a>
+<a href="#684" id="684">684</a>
+<a href="#685" id="685">685</a>
+<a href="#686" id="686">686</a>
+<a href="#687" id="687">687</a>
+<a href="#688" id="688">688</a>
+<a href="#689" id="689">689</a>
+<a href="#690" id="690">690</a>
+<a href="#691" id="691">691</a>
+<a href="#692" id="692">692</a>
+<a href="#693" id="693">693</a>
+<a href="#694" id="694">694</a>
+<a href="#695" id="695">695</a>
+<a href="#696" id="696">696</a>
+<a href="#697" id="697">697</a>
+<a href="#698" id="698">698</a>
 </pre><pre class="rust"><code><span class="comment">//======---------------------------------------------------------------======//
 //                                                                           //
 // Copyright 2022-2023 Evan Cox &lt;evanacox00@gmail.com&gt;. All rights reserved. //
@@ -647,6 +725,12 @@
 <span class="macro">dense_arena_key! </span>{
     <span class="kw">struct </span>EntityRef;
 
+    <span class="doccomment">/// A reference to a single slot on a function&#39;s pre-allocated stack.
+    ///
+    /// These are defined by the `$name = stack &lt;ty&gt;` directives before the first
+    /// basic block in a function.
+    </span><span class="kw">pub struct </span>StackSlot;
+
     <span class="doccomment">/// A basic reference to some value, either the result of some computation
     /// or an argument into a basic block. Since everything is based around
     /// function-scoped values in SIR, this is effectively equivalent to a
@@ -672,11 +756,11 @@
 // useful for compact storage in homogenous containers
 </span><span class="kw">impl </span>Value {
     <span class="kw">pub</span>(<span class="kw">in </span><span class="kw">crate</span>::ir) <span class="kw">fn </span>raw_from(key: <span class="kw">impl </span>ArenaKey) -&gt; <span class="self">Self </span>{
-        <span class="self">Self</span>::new(key.index())
+        <span class="self">Self</span>::key_new(key.key_index())
     }
 
     <span class="kw">pub</span>(<span class="kw">in </span><span class="kw">crate</span>::ir) <span class="kw">fn </span>raw_into&lt;T: ArenaKey&gt;(<span class="self">self</span>) -&gt; T {
-        T::new(<span class="self">self</span>.index())
+        T::key_new(<span class="self">self</span>.key_index())
     }
 }
 
@@ -684,11 +768,11 @@
 // useful for compact storage in homogenous containers
 </span><span class="kw">impl </span>Inst {
     <span class="kw">pub</span>(<span class="kw">in </span><span class="kw">crate</span>::ir) <span class="kw">fn </span>raw_from(key: <span class="kw">impl </span>ArenaKey) -&gt; <span class="self">Self </span>{
-        <span class="self">Self</span>::new(key.index())
+        <span class="self">Self</span>::key_new(key.key_index())
     }
 
     <span class="kw">pub</span>(<span class="kw">in </span><span class="kw">crate</span>::ir) <span class="kw">fn </span>raw_into&lt;T: ArenaKey&gt;(<span class="self">self</span>) -&gt; T {
-        T::new(<span class="self">self</span>.index())
+        T::key_new(<span class="self">self</span>.key_index())
     }
 }
 
@@ -698,6 +782,29 @@
     ty: Type,
     bb: Block,
     index: u32,
+}
+
+<span class="doccomment">/// Contains information about a specific stack slot in a function.
+///
+/// This is just the name/type of it, since that&#39;s the only information
+/// actually associated with one.
+</span><span class="attr">#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
+#[cfg_attr(feature = <span class="string">&quot;enable-serde&quot;</span>, derive(Serialize, Deserialize))]
+</span><span class="kw">pub struct </span>StackSlotData {
+    name: Str,
+    ty: Type,
+}
+
+<span class="kw">impl </span>StackSlotData {
+    <span class="doccomment">/// Gets the name of the stack slot
+    </span><span class="kw">pub fn </span>name(<span class="self">self</span>) -&gt; Str {
+        <span class="self">self</span>.name
+    }
+
+    <span class="doccomment">/// Gets the type that the stack slot is allocating space for
+    </span><span class="kw">pub fn </span>ty(<span class="self">self</span>) -&gt; Type {
+        <span class="self">self</span>.ty
+    }
 }
 
 <span class="attr">#[derive(Debug, Clone, Hash, Eq, PartialEq)]
@@ -744,13 +851,14 @@
     // this means that (valid) Insts and Values can **always** be used as EntityRefs, but Insts and
     // Values themselves can only be safely converted when its known that the inst referred to has a result
     </span>sigs: UniqueArenaMap&lt;Sig, Signature&gt;,
-    blocks: ArenaMap&lt;Block, BasicBlock&gt;,
+    blocks: ArenaMap&lt;Block, <span class="prelude-ty">Option</span>&lt;BasicBlock&gt;&gt;,
     block_names: SaHashMap&lt;Str, Block&gt;,
     entities: ArenaMap&lt;EntityRef, EntityData&gt;,
     values: SecondaryMap&lt;Value, ValueDefinition&gt;,
     params: SecondaryMap&lt;Block, SmallVec&lt;[Value; <span class="number">4</span>]&gt;&gt;,
     debug: SecondaryMap&lt;EntityRef, DebugInfo&gt;,
     uses: SecondaryMap&lt;Value, SmallVec&lt;[Inst; <span class="number">4</span>]&gt;&gt;,
+    stack_slots: ArenaMap&lt;StackSlot, <span class="prelude-ty">Option</span>&lt;StackSlotData&gt;&gt;,
 }
 
 <span class="kw">impl </span>DataFlowGraph {
@@ -839,7 +947,7 @@
     <span class="doccomment">/// Inserts a basic block with a given name into the DFG. It will start with an empty
     /// list of block parameters, these can be appended later.
     </span><span class="kw">pub fn </span>create_block(<span class="kw-2">&amp;mut </span><span class="self">self</span>, name: Str) -&gt; Block {
-        <span class="kw">let </span>bb = <span class="self">self</span>.blocks.insert(BasicBlock::new(name));
+        <span class="kw">let </span>bb = <span class="self">self</span>.blocks.insert(<span class="prelude-val">Some</span>(BasicBlock::new(name)));
 
         <span class="self">self</span>.block_names.insert(name, bb);
 
@@ -855,14 +963,21 @@
     </span><span class="kw">pub fn </span>block(<span class="kw-2">&amp;</span><span class="self">self</span>, block: Block) -&gt; <span class="kw-2">&amp;</span>BasicBlock {
         <span class="macro">debug_assert!</span>(<span class="self">self</span>.is_block_inserted(block));
 
-        <span class="kw-2">&amp;</span><span class="self">self</span>.blocks[block]
+        <span class="self">self</span>.blocks[block].as_ref().unwrap()
+    }
+
+    <span class="doccomment">/// Removes a basic block that already exists.
+    </span><span class="kw">pub fn </span>remove_block(<span class="kw-2">&amp;mut </span><span class="self">self</span>, block: Block) {
+        <span class="macro">debug_assert!</span>(<span class="self">self</span>.is_block_inserted(block));
+
+        <span class="kw">let _ </span>= <span class="self">self</span>.blocks.get_mut(block).unwrap().take();
     }
 
     <span class="doccomment">/// Appends a block parameter to a given block.
     </span><span class="kw">pub fn </span>append_block_param(<span class="kw-2">&amp;mut </span><span class="self">self</span>, bb: Block, ty: Type, debug: DebugInfo) -&gt; Value {
         <span class="macro">debug_assert!</span>(<span class="self">self</span>.is_block_inserted(bb));
 
-        <span class="kw">let </span>block = <span class="kw-2">&amp;mut </span><span class="self">self</span>.blocks[bb];
+        <span class="kw">let </span>block = <span class="self">self</span>.blocks[bb].as_mut().unwrap();
         <span class="kw">let </span>index = block.params().len() <span class="kw">as </span>u32;
         <span class="kw">let </span>param = BlockParam { bb, ty, index };
         <span class="kw">let </span>param = <span class="self">self</span>.entities.insert(EntityData::Param(param));
@@ -1015,7 +1130,7 @@
     </span><span class="kw">pub fn </span>remove_block_param(<span class="kw-2">&amp;mut </span><span class="self">self</span>, block: Block, param: Value) {
         <span class="macro">debug_assert_eq!</span>(<span class="self">self</span>.uses_of(param), []);
 
-        <span class="kw">let </span>block = <span class="kw-2">&amp;mut </span><span class="self">self</span>.blocks[block];
+        <span class="kw">let </span>block = <span class="self">self</span>.blocks[block].as_mut().unwrap();
 
         block.remove_param(param);
 
@@ -1131,6 +1246,47 @@
         <span class="kw">if </span>!<span class="self">self</span>.uses[new].contains(<span class="kw-2">&amp;</span>inst) {
             <span class="self">self</span>.uses[new].push(inst);
         }
+    }
+
+    <span class="doccomment">/// Creates a new stack slot with a given name and type.
+    </span><span class="kw">pub fn </span>create_stack_slot(<span class="kw-2">&amp;mut </span><span class="self">self</span>, name: Str, ty: Type) -&gt; StackSlot {
+        <span class="macro">debug_assert!</span>(
+            !<span class="self">self
+                </span>.stack_slots
+                .values()
+                .any(|data| data.is_some() &amp;&amp; data.unwrap().name == name),
+            <span class="string">&quot;no stack slots should have the same name&quot;
+        </span>);
+
+        <span class="self">self</span>.stack_slots.insert(<span class="prelude-val">Some</span>(StackSlotData { name, ty }))
+    }
+
+    <span class="doccomment">/// Gets the information about a particular stack slot
+    </span><span class="kw">pub fn </span>stack_slot(<span class="kw-2">&amp;</span><span class="self">self</span>, slot: StackSlot) -&gt; StackSlotData {
+        <span class="self">self</span>.stack_slots
+            .get(slot)
+            .copied()
+            .flatten()
+            .expect(<span class="string">&quot;tried to access invalid stack slot&quot;</span>)
+    }
+
+    <span class="doccomment">/// Provides an iterator over every stack slot in the function
+    </span><span class="kw">pub fn </span>stack_slots(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw">impl </span>Iterator&lt;Item = StackSlot&gt; + <span class="lifetime">&#39;_ </span>{
+        <span class="self">self</span>.stack_slots
+            .keys()
+            .filter(|key| <span class="self">self</span>.stack_slots[<span class="kw-2">*</span>key].is_some())
+    }
+
+    <span class="doccomment">/// Checks if a given slot is actually a valid stack slot
+    </span><span class="kw">pub fn </span>is_stack_slot_inserted(<span class="kw-2">&amp;</span><span class="self">self</span>, slot: StackSlot) -&gt; bool {
+        <span class="self">self</span>.stack_slots.contains(slot)
+    }
+
+    <span class="doccomment">/// Removes a stack slot that already exists.
+    </span><span class="kw">pub fn </span>remove_stack_slot(<span class="kw-2">&amp;mut </span><span class="self">self</span>, slot: StackSlot) {
+        <span class="macro">debug_assert!</span>(<span class="self">self</span>.is_stack_slot_inserted(slot));
+
+        <span class="kw">let _ </span>= <span class="self">self</span>.stack_slots.get_mut(slot).unwrap().take();
     }
 
     <span class="kw">fn </span>maybe_result(<span class="kw-2">&amp;mut </span><span class="self">self</span>, key: EntityRef, result: <span class="prelude-ty">Option</span>&lt;Type&gt;) -&gt; (Inst, <span class="prelude-ty">Option</span>&lt;Value&gt;) {
@@ -1252,4 +1408,4 @@ renderMathInElement(document.body, {
     ]
 });
 </script>
-<div id="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="sapphire" data-themes="" data-resource-suffix="" data-rustdoc-version="1.69.0-nightly (246eae2fa 2023-02-21)" data-search-js="search-14421e1532aead08.js" data-settings-js="settings-f0c5c39777a9a2f6.js" data-settings-css="settings-0bcba95ff279c1db.css" ></div></body></html>
+<div id="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="sapphire" data-themes="" data-resource-suffix="" data-rustdoc-version="1.69.0-nightly (07c993eba 2023-02-23)" data-search-js="search-14421e1532aead08.js" data-settings-js="settings-f0c5c39777a9a2f6.js" data-settings-css="settings-0bcba95ff279c1db.css" ></div></body></html>

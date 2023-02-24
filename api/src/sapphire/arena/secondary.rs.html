@@ -1424,7 +1424,7 @@
         <span class="kw">let </span><span class="kw-2">mut </span>count = <span class="number">0</span>;
 
         <span class="kw">for </span>key <span class="kw">in </span>primary.keys() {
-            <span class="macro">debug_assert_eq!</span>(key.index(), slots.len());
+            <span class="macro">debug_assert_eq!</span>(key.key_index(), slots.len());
 
             <span class="kw">match </span>f(primary, key) {
                 <span class="prelude-val">Some</span>(val) =&gt; {
@@ -1453,11 +1453,11 @@
     </span><span class="kw">where
         </span>V: Clone,
     {
-        <span class="kw">let </span><span class="kw-2">mut </span>slots = Vec::with_capacity(upto.index());
-        <span class="kw">let </span><span class="kw-2">mut </span>initialized = SmallBitVec::with_capacity(upto.index());
+        <span class="kw">let </span><span class="kw-2">mut </span>slots = Vec::with_capacity(upto.key_index());
+        <span class="kw">let </span><span class="kw-2">mut </span>initialized = SmallBitVec::with_capacity(upto.key_index());
 
-        <span class="kw">for </span>key <span class="kw">in </span>Keys::&lt;K&gt;::with_len(upto.index()) {
-            <span class="macro">debug_assert_eq!</span>(key.index(), slots.len());
+        <span class="kw">for </span>key <span class="kw">in </span>Keys::&lt;K&gt;::with_len(upto.key_index()) {
+            <span class="macro">debug_assert_eq!</span>(key.key_index(), slots.len());
 
             slots.push(MaybeUninit::new(value.clone()));
             initialized.push(<span class="bool-val">true</span>);
@@ -1466,7 +1466,7 @@
         <span class="self">Self </span>{
             slots,
             initialized,
-            len: upto.index(),
+            len: upto.key_index(),
             _unused: PhantomData::default(),
         }
     }
@@ -1506,7 +1506,7 @@
     /// assert_eq!(secondary.insert(k1, 13), Some(16)); // got previous
     /// ```
     </span><span class="kw">pub fn </span>insert(<span class="kw-2">&amp;mut </span><span class="self">self</span>, key: K, value: V) -&gt; <span class="prelude-ty">Option</span>&lt;V&gt; {
-        <span class="kw">let </span>idx = key.index();
+        <span class="kw">let </span>idx = key.key_index();
 
         <span class="comment">// push-like case, going one past what we already have. we just use `push`
         // directly here for optimization purposes
@@ -1604,7 +1604,7 @@
                 </span><span class="kw">let </span>old = mem::replace(value, MaybeUninit::uninit());
 
                 <span class="comment">// mark it uninitialized so future reads dont get uninit
-                </span><span class="self">self</span>.initialized.set(key.index(), <span class="bool-val">false</span>);
+                </span><span class="self">self</span>.initialized.set(key.key_index(), <span class="bool-val">false</span>);
 
                 <span class="comment">// return the value
                 </span><span class="prelude-val">Some</span>(<span class="kw">unsafe </span>{ old.assume_init() })
@@ -1789,7 +1789,7 @@
             .iter()
             .enumerate()
             .filter_uninitialized_slots(<span class="self">self</span>.initialized.iter())
-            .map(|(i, val)| (K::new(i), <span class="kw">unsafe </span>{ val.assume_init_ref() }))
+            .map(|(i, val)| (K::key_new(i), <span class="kw">unsafe </span>{ val.assume_init_ref() }))
     }
 
     <span class="doccomment">/// Returns an iterator that iterates over the values in the arena,
@@ -1811,7 +1811,7 @@
             .iter_mut()
             .enumerate()
             .filter_uninitialized_slots(<span class="self">self</span>.initialized.iter())
-            .map(|(i, val)| (K::new(i), <span class="kw">unsafe </span>{ val.assume_init_mut() }))
+            .map(|(i, val)| (K::key_new(i), <span class="kw">unsafe </span>{ val.assume_init_mut() }))
     }
 
     <span class="attr">#[inline]
@@ -1820,7 +1820,7 @@
         // implementations between a `SmallBitVec` and a `Vec`
         </span><span class="macro">debug_assert_eq!</span>(<span class="self">self</span>.initialized.len(), <span class="self">self</span>.slots.len());
 
-        <span class="self">self</span>.initialized.get(key.index()) == <span class="prelude-val">Some</span>(<span class="bool-val">true</span>)
+        <span class="self">self</span>.initialized.get(key.key_index()) == <span class="prelude-val">Some</span>(<span class="bool-val">true</span>)
     }
 
     <span class="attr">#[inline]
@@ -1835,7 +1835,7 @@
     <span class="attr">#[inline]
     </span><span class="kw">fn </span>get_slot(<span class="kw-2">&amp;</span><span class="self">self</span>, key: K) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>MaybeUninit&lt;V&gt;&gt; {
         <span class="kw">if </span><span class="self">self</span>.is_initialized(key) {
-            <span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span><span class="self">self</span>.slots[key.index()])
+            <span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span><span class="self">self</span>.slots[key.key_index()])
         } <span class="kw">else </span>{
             <span class="prelude-val">None
         </span>}
@@ -1844,7 +1844,7 @@
     <span class="attr">#[inline]
     </span><span class="kw">fn </span>get_slot_mut(<span class="kw-2">&amp;mut </span><span class="self">self</span>, key: K) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;mut </span>MaybeUninit&lt;V&gt;&gt; {
         <span class="kw">if </span><span class="self">self</span>.is_initialized(key) {
-            <span class="prelude-val">Some</span>(<span class="kw-2">&amp;mut </span><span class="self">self</span>.slots[key.index()])
+            <span class="prelude-val">Some</span>(<span class="kw-2">&amp;mut </span><span class="self">self</span>.slots[key.key_index()])
         } <span class="kw">else </span>{
             <span class="prelude-val">None
         </span>}
@@ -1984,7 +1984,7 @@
                 .into_iter()
                 .filter_uninitialized_slots(bits.into_iter())
                 .enumerate()
-                .map(|(i, val)| (K::new(i), <span class="kw">unsafe </span>{ val.assume_init() })),
+                .map(|(i, val)| (K::key_new(i), <span class="kw">unsafe </span>{ val.assume_init() })),
         }
     }
 }
@@ -2318,7 +2318,7 @@
             <span class="kw">let </span>key = <span class="kw">loop </span>{
                 <span class="kw">let </span>k: E = map.insert(<span class="number">1</span>);
 
-                <span class="kw">if </span>k.index() == <span class="number">100 </span>{
+                <span class="kw">if </span>k.key_index() == <span class="number">100 </span>{
                     <span class="kw">break </span>k;
                 }
             };
@@ -2363,7 +2363,7 @@
             <span class="kw">let </span>key = <span class="kw">loop </span>{
                 <span class="kw">let </span>k: E = map.insert(<span class="number">1</span>);
 
-                <span class="kw">if </span>k.index() == <span class="number">100 </span>{
+                <span class="kw">if </span>k.key_index() == <span class="number">100 </span>{
                     <span class="kw">break </span>k;
                 }
             };
@@ -2440,4 +2440,4 @@ renderMathInElement(document.body, {
     ]
 });
 </script>
-<div id="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="sapphire" data-themes="" data-resource-suffix="" data-rustdoc-version="1.69.0-nightly (246eae2fa 2023-02-21)" data-search-js="search-14421e1532aead08.js" data-settings-js="settings-f0c5c39777a9a2f6.js" data-settings-css="settings-0bcba95ff279c1db.css" ></div></body></html>
+<div id="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="sapphire" data-themes="" data-resource-suffix="" data-rustdoc-version="1.69.0-nightly (07c993eba 2023-02-23)" data-search-js="search-14421e1532aead08.js" data-settings-js="settings-f0c5c39777a9a2f6.js" data-settings-css="settings-0bcba95ff279c1db.css" ></div></body></html>

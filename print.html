@@ -283,7 +283,92 @@ entry:
 { i32, i32 }, f64, [i8; 64] }
 </code></pre>
 <h1 id="functions"><a class="header" href="#functions">Functions</a></h1>
-<p>Functions are made up of a name, a call signature, and a list of basic blocks.</p>
+<p>Functions are made up of a name, a call signature, a list of stack slots, and a list of basic blocks.</p>
+<h1 id="stack-slots"><a class="header" href="#stack-slots">Stack Slots</a></h1>
+<p>Stack slots are how stack memory is allocated in SIR. They explicitly mark all the (static) stack memory that will
+be needed by a function, all this memory is allocated before the entry block of a function is entered.</p>
+<pre><code class="language-other">$name = stack T
+</code></pre>
+<p><code>T</code> is what defines the specific stack slot, as the slot is allocated to have exactly enough space for a <code>T</code>, and
+has the correct alignment for a <code>T</code>. </p>
+<blockquote>
+<blockquote>
+<p>Note: While data of types besides <code>T</code> can be stored into/read from the slot, the type of the data must
+fit within the layout bounds of <code>T</code>. Do keep in mind that doing so will prevent the data from being 
+promoted into virtual registers. </p>
+<p>If it does not, the behavior is undefined due to out-of-bounds accesses or unaligned accesses.</p>
+</blockquote>
+</blockquote>
+<p>Pointers into this memory are obtained through the <code>stackslot</code> instruction, which yields a <code>ptr</code> to a specified slot.</p>
+<p>Stack memory is not guaranteed to be maintained unless it escapes a function, it simply provides a way for languages
+like C to easily represent variables and whatnot. Stack memory can be legally promoted into SSA values provided
+the pointer value is not observed in any way (i.e. is not used in any way besides either <code>load</code>ing from that memory
+or <code>store</code>ing to that memory).</p>
+<p>Consider this implementation of <code>max</code> in C:</p>
+<pre><code class="language-c">int max(int x, int y) {
+    if (x &lt; y) {
+        return y;
+    } else {
+        return x;
+    }
+}
+</code></pre>
+<p>A C frontend could translate it naively into code that uses stack slots for every variable and 
+the return value, and simply generates loads/stores when those values are accessed/modified. This
+allows the front-end to be <strong>much</strong> simpler, and the middle-end can use the correct algorithms
+it already has to promote these values into registers where possible. </p>
+<p>One such translation looks like this:</p>
+<pre><code class="language-other">fn i32 @max(i32, i32) {
+  $x = stack i32
+  $y = stack i32
+  $ret = stack i32
+  
+entry(i32 %0, i32 %1):
+  %x = stackslot $x
+  %y = stackslot $y
+  %ret = stackslot $ret
+  store i32 %0, ptr %x
+  store i32 %1, ptr %y
+  %5 = load i32, ptr %x
+  %6 = load i32, ptr %y
+  %7 = icmp slt i32 %5, %6
+  condbr bool %7, if.then, if.else
+  
+if.then:
+  %8 = load i32, ptr %y
+  store i32 %8, ptr %ret
+  br exit
+  
+if.else:
+  %9 = load i32, ptr %x
+  store i32 %9, ptr %ret
+  br exit
+  
+exit:
+  %10 = load i32, ptr %ret
+  ret i32 %10
+}
+</code></pre>
+<p>While this is very ugly code, it's also very fast for a front-end to generate and is obviously correct. This
+can then be optimized by Sapphire with <code>mem2reg</code> (the stack -&gt; register promotion pass) into the code that the 
+front-end wanted:</p>
+<pre><code class="language-other">fn i32 @max(i32, i32) {
+entry(i32 %x, i32 %y):
+  %0 = icmp slt i32 %x, %y
+  condbr bool %7, if.then, if.else
+  
+if.then:
+  br exit(i32 %y)
+  
+if.else:
+  br exit(i32 %x)
+  
+exit(i32 %ret):
+  ret i32 %ret
+}
+</code></pre>
+<p>Other optimizations could turn this into <code>sel</code>, but the initial transform into SSA values (and therefore virtual registers)
+is the key one. </p>
 <h1 id="basic-blocks"><a class="header" href="#basic-blocks">Basic Blocks</a></h1>
 <p>A basic block is a container for a list of instructions, all of which are executed in the order they appear in a given block.</p>
 <p>This effectively makes basic blocks a small-scale linear IR, since a given basic block contains exclusively IR that is executed linearly without branching.</p>
@@ -310,10 +395,12 @@ block:
 jumping to a block with a parameter, different control flow paths can pass different values for the parameter, effectively
 implementing <code>phi</code>s while automatically enforcing the ideal <code>phi</code> properties just through the structure of the IR. </p>
 <blockquote>
+<blockquote>
 <p>Note: This avoids the usual special-casing of instructions in transform passes, LLVM has to treat <code>phi</code> as magic
 and move it around differently than anything else, but it's still an instruction.</p>
 <p>This also lends well to &quot;magic&quot; instructions, so things like <code>landingpad</code> and <code>invoke</code> would be representable
 in a normal way instead of adding magical rules like LLVM had to. </p>
+</blockquote>
 </blockquote>
 <p>Consider the following IR:</p>
 <pre><code class="language-other">entry:
@@ -370,8 +457,8 @@ instead of taking the name of a (declared) function.</p>
 <p>Syntax:</p>
 <pre><code class="language-other">(&lt;val&gt; =)? call &lt;fn-sig&gt;, &lt;ty&gt; &lt;val&gt;((&lt;ty&gt; &lt;val&gt;) (, &lt;ty&gt; &lt;val&gt;)*)
 </code></pre>
-<h3 id="icmp---integer-compare"><a class="header" href="#icmp---integer-compare">'<code>icmp</code>‘ - Integer Compare</a></h3>
-<p>Compares two given integer or boolean values using a given comparison operation, and returns a <code>bool</code> representing the result of the comparison.</p>
+<h3 id="icmp---integral-comparison"><a class="header" href="#icmp---integral-comparison">'<code>icmp</code>‘ - Integral Comparison</a></h3>
+<p>Compares two given integer, boolean or pointer values using a given comparison operation, and returns a <code>bool</code> representing the result of the comparison.</p>
 <pre><code class="language-other">%0 = icmp eq i32 %a, %b
 %1 = icmp sgt i32 %a, %b
 %2 = and bool %0, %1
@@ -627,7 +714,7 @@ condbr bool %1, if.true, if.false
 %2 = frem f64 %0, %1
 </code></pre>
 <h3 id="memory"><a class="header" href="#memory">Memory</a></h3>
-<h4 id="alloca---allocate-in-stack-frame"><a class="header" href="#alloca---allocate-in-stack-frame">'<code>alloca</code>‘ - Allocate in Stack Frame</a></h4>
+<h4 id="alloca---dynamically-allocate-in-stack-frame"><a class="header" href="#alloca---dynamically-allocate-in-stack-frame">'<code>alloca</code>‘ - Dynamically Allocate in Stack Frame</a></h4>
 <p>Allocates memory in the current function’s stack frame. The memory is always automatically returned when the function in which the memory was allocated returns to its caller.</p>
 <blockquote>
 <blockquote>
@@ -771,6 +858,25 @@ be stored in memory and the <code>offset</code> instruction should be used.</p>
 <pre><code class="language-other">%0 = ptoi i64, ptr %1
 </code></pre>
 <h3 id="constant-materialization"><a class="header" href="#constant-materialization">Constant Materialization</a></h3>
+<h4 id="stackslot---pointer-to-stack-memory"><a class="header" href="#stackslot---pointer-to-stack-memory">'<code>stackslot</code>' - Pointer to Stack Memory</a></h4>
+<p>Materializes a <code>ptr</code> that points to memory allocated by a <code>stack</code> slot. These will always
+produce the same <code>ptr</code> for the duration that a given function is executing (the value across
+multiple calls to the function containing this is unspecified).</p>
+<pre><code class="language-other">  ; given that $x = stack i32
+  %0 = stackslot $x
+</code></pre>
+<p>Syntax:</p>
+<pre><code class="language-other">&lt;val&gt; = stackslot &lt;stack slot name&gt;
+</code></pre>
+<h4 id="globaladdr---pointer-to-global"><a class="header" href="#globaladdr---pointer-to-global">'<code>globaladdr</code>' - Pointer to Global</a></h4>
+<p>Materializes a <code>ptr</code> that points to some global entity. This could be a function, a global 
+variable, etc. </p>
+<pre><code class="language-other">  ; given that fn i32 @printf(ptr, ...)
+  %0 = globaladdr @printf
+</code></pre>
+<p>Syntax:</p>
+<pre><code class="language-other">&lt;val&gt; = globaladdr &lt;global name&gt;
+</code></pre>
 <h4 id="bconst---boolean-constant"><a class="header" href="#bconst---boolean-constant">'<code>bconst</code>' - Boolean Constant</a></h4>
 <p>Materializes a <code>bool</code> with either <code>true</code> or <code>false</code>.</p>
 <pre><code class="language-other">%0 = bconst bool true

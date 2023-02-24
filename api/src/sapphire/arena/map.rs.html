@@ -824,6 +824,11 @@
 <a href="#821" id="821">821</a>
 <a href="#822" id="822">822</a>
 <a href="#823" id="823">823</a>
+<a href="#824" id="824">824</a>
+<a href="#825" id="825">825</a>
+<a href="#826" id="826">826</a>
+<a href="#827" id="827">827</a>
+<a href="#828" id="828">828</a>
 </pre><pre class="rust"><code><span class="comment">//======---------------------------------------------------------------======//
 //                                                                           //
 // Copyright 2022-2023 Evan Cox &lt;evanacox00@gmail.com&gt;. All rights reserved. //
@@ -934,7 +939,7 @@
     /// ```
     </span><span class="attr">#[inline]
     </span><span class="kw">pub fn </span>contains(<span class="kw-2">&amp;</span><span class="self">self</span>, key: K) -&gt; bool {
-        key.index() &lt; <span class="self">self</span>.slots.len()
+        key.key_index() &lt; <span class="self">self</span>.slots.len()
     }
 
     <span class="doccomment">/// Accesses the arena and gets the value associated with
@@ -951,7 +956,7 @@
     /// ```
     </span><span class="attr">#[inline]
     </span><span class="kw">pub fn </span>get(<span class="kw-2">&amp;</span><span class="self">self</span>, key: K) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>V&gt; {
-        <span class="self">self</span>.slots.get(key.index())
+        <span class="self">self</span>.slots.get(key.key_index())
     }
 
     <span class="doccomment">/// Accesses the arena and gets the value associated with
@@ -968,7 +973,7 @@
     /// ```
     </span><span class="attr">#[inline]
     </span><span class="kw">pub fn </span>get_mut(<span class="kw-2">&amp;mut </span><span class="self">self</span>, key: K) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;mut </span>V&gt; {
-        <span class="self">self</span>.slots.get_mut(key.index())
+        <span class="self">self</span>.slots.get_mut(key.key_index())
     }
 
     <span class="doccomment">/// Adds an item into the arena, and returns a key that can be used to
@@ -986,7 +991,7 @@
     </span><span class="kw">pub fn </span>insert(<span class="kw-2">&amp;mut </span><span class="self">self</span>, value: V) -&gt; K {
         <span class="self">self</span>.slots.push(value);
 
-        K::new(<span class="self">self</span>.slots.len() - <span class="number">1</span>)
+        K::key_new(<span class="self">self</span>.slots.len() - <span class="number">1</span>)
     }
 
     <span class="doccomment">/// Gets the key that *will be* returned by [`Self::insert`] when it&#39;s
@@ -1010,7 +1015,7 @@
     /// ```
     </span><span class="attr">#[inline]
     </span><span class="kw">pub fn </span>next_key(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; K {
-        K::new(<span class="self">self</span>.slots.len())
+        K::key_new(<span class="self">self</span>.slots.len())
     }
 
     <span class="doccomment">/// Gets the number of elements that have been pushed into the arena.
@@ -1063,7 +1068,7 @@
         <span class="kw">let </span>len = <span class="self">self</span>.slots.len();
         <span class="kw">let </span>last = <span class="self">self</span>.slots.last()<span class="question-mark">?</span>;
 
-        <span class="prelude-val">Some</span>((K::new(len - <span class="number">1</span>), last))
+        <span class="prelude-val">Some</span>((K::key_new(len - <span class="number">1</span>), last))
     }
 
     <span class="doccomment">/// Returns the last element that was inserted in the map.
@@ -1081,7 +1086,7 @@
         <span class="kw">let </span>len = <span class="self">self</span>.slots.len();
         <span class="kw">let </span>last = <span class="self">self</span>.slots.last_mut()<span class="question-mark">?</span>;
 
-        <span class="prelude-val">Some</span>((K::new(len - <span class="number">1</span>), last))
+        <span class="prelude-val">Some</span>((K::key_new(len - <span class="number">1</span>), last))
     }
 
     <span class="doccomment">/// Reserves capacity for at least `additional` more elements to be inserted. This
@@ -1124,7 +1129,7 @@
     /// let mut it = map.keys();
     /// assert_eq!(it.next(), Some(k1));
     /// ```
-    </span><span class="kw">pub fn </span>keys(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw">impl </span>Iterator&lt;Item = K&gt; + DoubleEndedIterator + ExactSizeIterator {
+    </span><span class="kw">pub fn </span>keys(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Keys&lt;K&gt; {
         Keys::with_len(<span class="self">self</span>.slots.len())
     }
 
@@ -1251,14 +1256,14 @@
 
     <span class="kw">fn </span>index(<span class="kw-2">&amp;</span><span class="self">self</span>, key: K) -&gt; <span class="kw-2">&amp;</span><span class="self">Self</span>::Output {
         <span class="self">self</span>.slots
-            .get(key.index())
+            .get(key.key_index())
             .expect(<span class="string">&quot;tried to access invalid key on `ArenaMap`&quot;</span>)
     }
 }
 
 <span class="kw">impl</span>&lt;K: ArenaKey, T&gt; IndexMut&lt;K&gt; <span class="kw">for </span>ArenaMap&lt;K, T&gt; {
     <span class="kw">fn </span>index_mut(<span class="kw-2">&amp;mut </span><span class="self">self</span>, key: K) -&gt; <span class="kw-2">&amp;mut </span><span class="self">Self</span>::Output {
-        <span class="kw-2">&amp;mut </span><span class="self">self</span>.slots[key.index()]
+        <span class="kw-2">&amp;mut </span><span class="self">self</span>.slots[key.key_index()]
     }
 }
 
@@ -1406,7 +1411,7 @@
         m.insert(<span class="number">33</span>);
 
         <span class="kw">for </span>(i, (key, value)) <span class="kw">in </span>m.into_iter().enumerate() {
-            <span class="macro">assert_eq!</span>(key.index(), i);
+            <span class="macro">assert_eq!</span>(key.key_index(), i);
 
             <span class="kw">match </span>i {
                 <span class="number">0 </span>=&gt; <span class="macro">assert_eq!</span>(value, <span class="number">12</span>),
@@ -1426,7 +1431,7 @@
         <span class="kw">let </span><span class="kw-2">mut </span>i = <span class="number">0</span>;
 
         <span class="kw">for </span>(key, value) <span class="kw">in </span>m.iter() {
-            <span class="macro">assert_eq!</span>(key.index(), i);
+            <span class="macro">assert_eq!</span>(key.key_index(), i);
             <span class="kw">match </span>i {
                 <span class="number">0 </span>=&gt; <span class="macro">assert_eq!</span>(<span class="kw-2">*</span>value, <span class="number">12</span>),
                 <span class="number">1 </span>=&gt; <span class="macro">assert_eq!</span>(<span class="kw-2">*</span>value, <span class="number">33</span>),
@@ -1438,7 +1443,7 @@
         i = <span class="number">0</span>;
 
         <span class="kw">for </span>(key_mut, value_mut) <span class="kw">in </span>m.iter_mut() {
-            <span class="macro">assert_eq!</span>(key_mut.index(), i);
+            <span class="macro">assert_eq!</span>(key_mut.key_index(), i);
             <span class="kw">match </span>i {
                 <span class="number">0 </span>=&gt; <span class="macro">assert_eq!</span>(<span class="kw-2">*</span>value_mut, <span class="number">12</span>),
                 <span class="number">1 </span>=&gt; <span class="macro">assert_eq!</span>(<span class="kw-2">*</span>value_mut, <span class="number">33</span>),
@@ -1458,7 +1463,7 @@
         <span class="kw">let </span><span class="kw-2">mut </span>i = <span class="number">2</span>;
         <span class="kw">for </span>(key, value) <span class="kw">in </span>m.iter().rev() {
             i -= <span class="number">1</span>;
-            <span class="macro">assert_eq!</span>(key.index(), i);
+            <span class="macro">assert_eq!</span>(key.key_index(), i);
             <span class="kw">match </span>i {
                 <span class="number">0 </span>=&gt; <span class="macro">assert_eq!</span>(<span class="kw-2">*</span>value, <span class="number">12</span>),
                 <span class="number">1 </span>=&gt; <span class="macro">assert_eq!</span>(<span class="kw-2">*</span>value, <span class="number">33</span>),
@@ -1470,7 +1475,7 @@
 
         <span class="kw">for </span>(key, value) <span class="kw">in </span>m.iter_mut().rev() {
             i -= <span class="number">1</span>;
-            <span class="macro">assert_eq!</span>(key.index(), i);
+            <span class="macro">assert_eq!</span>(key.key_index(), i);
             <span class="kw">match </span>i {
                 <span class="number">0 </span>=&gt; <span class="macro">assert_eq!</span>(<span class="kw-2">*</span>value, <span class="number">12</span>),
                 <span class="number">1 </span>=&gt; <span class="macro">assert_eq!</span>(<span class="kw-2">*</span>value, <span class="number">33</span>),
@@ -1487,7 +1492,7 @@
         m.insert(<span class="number">33</span>);
 
         <span class="kw">for </span>(i, key) <span class="kw">in </span>m.keys().enumerate() {
-            <span class="macro">assert_eq!</span>(key.index(), i);
+            <span class="macro">assert_eq!</span>(key.key_index(), i);
         }
     }
 
@@ -1500,7 +1505,7 @@
         <span class="kw">let </span><span class="kw-2">mut </span>i = <span class="number">2</span>;
         <span class="kw">for </span>key <span class="kw">in </span>m.keys().rev() {
             i -= <span class="number">1</span>;
-            <span class="macro">assert_eq!</span>(key.index(), i);
+            <span class="macro">assert_eq!</span>(key.key_index(), i);
         }
     }
 
@@ -1577,14 +1582,14 @@
     <span class="attr">#[test]
     </span><span class="kw">fn </span>contiguous_keys() {
         <span class="kw">let </span><span class="kw-2">mut </span>m: ArenaMap&lt;E, i32&gt; = ArenaMap::new();
-        <span class="kw">let </span><span class="kw-2">mut </span>prev: E = E::new(<span class="number">0</span>);
+        <span class="kw">let </span><span class="kw-2">mut </span>prev: E = E::key_new(<span class="number">0</span>);
 
         <span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..<span class="number">100 </span>{
             m.insert(i);
         }
 
         <span class="kw">for </span>key <span class="kw">in </span>m.keys().skip(<span class="number">1</span>) {
-            <span class="macro">assert_eq!</span>(prev.index(), key.index() - <span class="number">1</span>);
+            <span class="macro">assert_eq!</span>(prev.key_index(), key.key_index() - <span class="number">1</span>);
 
             prev = key;
         }
@@ -1625,9 +1630,14 @@
 
     <span class="attr">#[test]
     </span><span class="kw">fn </span>debug() {
-        <span class="kw">let </span><span class="kw-2">mut </span>m1: ArenaMap&lt;E, i32&gt; = ArenaMap::new();
-        <span class="kw">let _ </span>= m1.insert(<span class="number">15</span>);
-        <span class="kw">let _ </span>= m1.insert(<span class="number">20</span>);
+        <span class="kw">let </span>m1: ArenaMap&lt;E, i32&gt; = {
+            <span class="kw">let </span><span class="kw-2">mut </span>m = ArenaMap::new();
+
+            <span class="kw">let _ </span>= m.insert(<span class="number">15</span>);
+            <span class="kw">let _ </span>= m.insert(<span class="number">20</span>);
+
+            m
+        };
 
         {
             <span class="kw">let </span>debug_normal = <span class="macro">format!</span>(<span class="string">&quot;{m1:?}&quot;</span>);
@@ -1658,4 +1668,4 @@ renderMathInElement(document.body, {
     ]
 });
 </script>
-<div id="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="sapphire" data-themes="" data-resource-suffix="" data-rustdoc-version="1.69.0-nightly (246eae2fa 2023-02-21)" data-search-js="search-14421e1532aead08.js" data-settings-js="settings-f0c5c39777a9a2f6.js" data-settings-css="settings-0bcba95ff279c1db.css" ></div></body></html>
+<div id="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="sapphire" data-themes="" data-resource-suffix="" data-rustdoc-version="1.69.0-nightly (07c993eba 2023-02-23)" data-search-js="search-14421e1532aead08.js" data-settings-js="settings-f0c5c39777a9a2f6.js" data-settings-css="settings-0bcba95ff279c1db.css" ></div></body></html>

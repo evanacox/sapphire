@@ -2266,6 +2266,91 @@
 <a href="#2263" id="2263">2263</a>
 <a href="#2264" id="2264">2264</a>
 <a href="#2265" id="2265">2265</a>
+<a href="#2266" id="2266">2266</a>
+<a href="#2267" id="2267">2267</a>
+<a href="#2268" id="2268">2268</a>
+<a href="#2269" id="2269">2269</a>
+<a href="#2270" id="2270">2270</a>
+<a href="#2271" id="2271">2271</a>
+<a href="#2272" id="2272">2272</a>
+<a href="#2273" id="2273">2273</a>
+<a href="#2274" id="2274">2274</a>
+<a href="#2275" id="2275">2275</a>
+<a href="#2276" id="2276">2276</a>
+<a href="#2277" id="2277">2277</a>
+<a href="#2278" id="2278">2278</a>
+<a href="#2279" id="2279">2279</a>
+<a href="#2280" id="2280">2280</a>
+<a href="#2281" id="2281">2281</a>
+<a href="#2282" id="2282">2282</a>
+<a href="#2283" id="2283">2283</a>
+<a href="#2284" id="2284">2284</a>
+<a href="#2285" id="2285">2285</a>
+<a href="#2286" id="2286">2286</a>
+<a href="#2287" id="2287">2287</a>
+<a href="#2288" id="2288">2288</a>
+<a href="#2289" id="2289">2289</a>
+<a href="#2290" id="2290">2290</a>
+<a href="#2291" id="2291">2291</a>
+<a href="#2292" id="2292">2292</a>
+<a href="#2293" id="2293">2293</a>
+<a href="#2294" id="2294">2294</a>
+<a href="#2295" id="2295">2295</a>
+<a href="#2296" id="2296">2296</a>
+<a href="#2297" id="2297">2297</a>
+<a href="#2298" id="2298">2298</a>
+<a href="#2299" id="2299">2299</a>
+<a href="#2300" id="2300">2300</a>
+<a href="#2301" id="2301">2301</a>
+<a href="#2302" id="2302">2302</a>
+<a href="#2303" id="2303">2303</a>
+<a href="#2304" id="2304">2304</a>
+<a href="#2305" id="2305">2305</a>
+<a href="#2306" id="2306">2306</a>
+<a href="#2307" id="2307">2307</a>
+<a href="#2308" id="2308">2308</a>
+<a href="#2309" id="2309">2309</a>
+<a href="#2310" id="2310">2310</a>
+<a href="#2311" id="2311">2311</a>
+<a href="#2312" id="2312">2312</a>
+<a href="#2313" id="2313">2313</a>
+<a href="#2314" id="2314">2314</a>
+<a href="#2315" id="2315">2315</a>
+<a href="#2316" id="2316">2316</a>
+<a href="#2317" id="2317">2317</a>
+<a href="#2318" id="2318">2318</a>
+<a href="#2319" id="2319">2319</a>
+<a href="#2320" id="2320">2320</a>
+<a href="#2321" id="2321">2321</a>
+<a href="#2322" id="2322">2322</a>
+<a href="#2323" id="2323">2323</a>
+<a href="#2324" id="2324">2324</a>
+<a href="#2325" id="2325">2325</a>
+<a href="#2326" id="2326">2326</a>
+<a href="#2327" id="2327">2327</a>
+<a href="#2328" id="2328">2328</a>
+<a href="#2329" id="2329">2329</a>
+<a href="#2330" id="2330">2330</a>
+<a href="#2331" id="2331">2331</a>
+<a href="#2332" id="2332">2332</a>
+<a href="#2333" id="2333">2333</a>
+<a href="#2334" id="2334">2334</a>
+<a href="#2335" id="2335">2335</a>
+<a href="#2336" id="2336">2336</a>
+<a href="#2337" id="2337">2337</a>
+<a href="#2338" id="2338">2338</a>
+<a href="#2339" id="2339">2339</a>
+<a href="#2340" id="2340">2340</a>
+<a href="#2341" id="2341">2341</a>
+<a href="#2342" id="2342">2342</a>
+<a href="#2343" id="2343">2343</a>
+<a href="#2344" id="2344">2344</a>
+<a href="#2345" id="2345">2345</a>
+<a href="#2346" id="2346">2346</a>
+<a href="#2347" id="2347">2347</a>
+<a href="#2348" id="2348">2348</a>
+<a href="#2349" id="2349">2349</a>
+<a href="#2350" id="2350">2350</a>
 </pre><pre class="rust"><code><span class="comment">//======---------------------------------------------------------------======//
 //                                                                           //
 // Copyright 2022-2023 Evan Cox &lt;evanacox00@gmail.com&gt;. All rights reserved. //
@@ -2388,6 +2473,7 @@
     next: u32,
     filename: Str,
     resolver: SaHashMap&lt;LocalIdent, Value&gt;,
+    stack_slots: SaHashMap&lt;String, StackSlot&gt;,
 }
 
 <span class="kw">impl </span>SIRParser {
@@ -2398,6 +2484,7 @@
             filename: Str::reserved(),
             next: <span class="number">0</span>,
             resolver: SaHashMap::default(),
+            stack_slots: SaHashMap::default(),
         };
 
         obj.filename = module.insert_string(filename);
@@ -2542,15 +2629,16 @@
     ) -&gt; ParseResult&lt;()&gt; {
         <span class="macro">debug_assert!</span>(<span class="macro">matches!</span>(pair.as_rule(), Rule::function_body));
 
-        <span class="self">self</span>.next = <span class="number">0</span>;
-        <span class="self">self</span>.resolver.clear();
-
         <span class="comment">// similar deal to how functions are pre-processed by the parser,
         // we need to go ahead and parse the blocks and form block nodes
         // inside of the function before we parse code that may potentially
         // jump between them.
         </span><span class="kw">let </span><span class="kw-2">mut </span>delayed = Vec::default();
-        <span class="kw">let </span>rest = pair.into_inner();
+        <span class="kw">let </span><span class="kw-2">mut </span>rest = pair.into_inner();
+
+        <span class="self">self</span>.next = <span class="number">0</span>;
+        <span class="self">self</span>.resolver.clear();
+        <span class="self">self</span>.stack_slots = <span class="self">self</span>.parse_stack_slots(<span class="kw-2">&amp;mut </span>rest, <span class="kw-2">&amp;mut </span>builder)<span class="question-mark">?</span>;
 
         <span class="kw">for </span>block <span class="kw">in </span>rest {
             delayed.push(<span class="self">self</span>.preprocess_block(block, <span class="kw-2">&amp;mut </span>builder)<span class="question-mark">?</span>);
@@ -2569,6 +2657,30 @@
         builder.define();
 
         <span class="prelude-val">Ok</span>(())
+    }
+
+    <span class="kw">fn </span>parse_stack_slots(
+        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+        pairs: <span class="kw-2">&amp;mut </span>Pairs&lt;<span class="lifetime">&#39;_</span>, Rule&gt;,
+        builder: <span class="kw-2">&amp;mut </span>FuncBuilder&lt;<span class="lifetime">&#39;_</span>&gt;,
+    ) -&gt; ParseResult&lt;SaHashMap&lt;String, StackSlot&gt;&gt; {
+        <span class="kw">let </span><span class="kw-2">mut </span>result = SaHashMap::default();
+
+        <span class="kw">while </span>pairs
+            .peek()
+            .filter(|pair| <span class="macro">matches!</span>(pair.as_rule(), Rule::stack_slot))
+            .is_some()
+        {
+            <span class="kw">let </span><span class="kw-2">mut </span>pairs = pairs.next_or(<span class="string">&quot;expected stack slot&quot;</span>).into_inner();
+            <span class="kw">let </span>name_pair = pairs.next_or(<span class="string">&quot;expected stack slot name&quot;</span>);
+            <span class="kw">let </span>ty_pair = pairs.next_or(<span class="string">&quot;expected stack slot ty&quot;</span>);
+            <span class="kw">let </span>name = name_pair.as_str().trim_start_matches(<span class="string">&#39;$&#39;</span>);
+            <span class="kw">let </span>ty = <span class="self">self</span>.parse_ty(ty_pair, <span class="kw-2">&amp;mut </span>builder.ctx().types_mut())<span class="question-mark">?</span>;
+
+            result.insert(name.to_string(), builder.create_stack_slot(name, ty));
+        }
+
+        <span class="prelude-val">Ok</span>(result)
     }
 
     <span class="kw">fn </span>preprocess_block&lt;<span class="lifetime">&#39;a</span>&gt;(
@@ -2733,6 +2845,7 @@
             Rule::bconst =&gt; <span class="self">self</span>.parse_bconst(inner, builder),
             Rule::undef =&gt; <span class="self">self</span>.parse_undef(inner, builder),
             Rule::null =&gt; <span class="self">self</span>.parse_null(inner, builder),
+            Rule::stackslot =&gt; <span class="self">self</span>.parse_stackslot(inner, builder),
             Rule::globaladdr =&gt; <span class="self">self</span>.parse_globaladdr(inner, builder),
             <span class="kw">_ </span>=&gt; <span class="macro">unreachable!</span>(),
         }
@@ -2856,12 +2969,12 @@
         <span class="macro">debug_assert!</span>(<span class="macro">matches!</span>(pair.as_rule(), Rule::args_with_types));
 
         <span class="kw">let </span>expected = param_tys.len();
-        <span class="kw">let </span>clone = pair.clone();
         <span class="kw">let </span>inner = pair.into_inner();
         <span class="kw">let </span><span class="kw-2">mut </span>vec = Vec::default();
         <span class="kw">let </span><span class="kw-2">mut </span>count = <span class="number">0</span>;
 
         <span class="kw">for </span>operand <span class="kw">in </span>inner {
+            <span class="kw">let </span>clone = operand.clone();
             <span class="kw">let </span>val = <span class="self">self</span>.parse_operand(operand, builder)<span class="question-mark">?</span>;
 
             <span class="kw">match </span>(param_tys.next(), builder.ty(val)) {
@@ -3115,7 +3228,7 @@ expected {expected} arguments but got {count}&quot;
             <span class="kw">_ </span>=&gt; <span class="macro">unreachable!</span>(),
         };
 
-        <span class="kw">let </span>(lhs, rhs) = <span class="self">self</span>.parse_existing_bitwise_binary_ops(<span class="kw-2">&amp;mut </span>inner, builder)<span class="question-mark">?</span>;
+        <span class="kw">let </span>(lhs, rhs) = <span class="self">self</span>.parse_existing_icmp_ops(<span class="kw-2">&amp;mut </span>inner, builder)<span class="question-mark">?</span>;
 
         <span class="self">self</span>.append_val(builder, ident).icmp(opc, lhs, rhs, info);
 
@@ -3982,6 +4095,37 @@ expected {expected} arguments but got {count}&quot;
         <span class="prelude-val">Ok</span>(())
     }
 
+    <span class="kw">fn </span>parse_stackslot(
+        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+        pair: Pair&lt;<span class="lifetime">&#39;_</span>, Rule&gt;,
+        builder: <span class="kw-2">&amp;mut </span>FuncBuilder&lt;<span class="lifetime">&#39;_</span>&gt;,
+    ) -&gt; ParseResult&lt;()&gt; {
+        <span class="macro">debug_assert!</span>(<span class="macro">matches!</span>(pair.as_rule(), Rule::stackslot));
+
+        <span class="kw">let </span><span class="kw-2">mut </span>inner = pair.into_inner();
+        <span class="kw">let </span>result_pair = inner.next_or(<span class="string">&quot;expected result&quot;</span>);
+        <span class="kw">let </span>name_pair = inner.next_or(<span class="string">&quot;expected name&quot;</span>);
+
+        <span class="kw">let </span>(name, info) = <span class="self">self</span>.parse_result(result_pair, builder)<span class="question-mark">?</span>;
+        <span class="kw">let </span>slot = <span class="kw">match </span><span class="self">self
+            </span>.stack_slots
+            .get(name_pair.as_str().trim_start_matches(<span class="string">&#39;$&#39;</span>))
+            .copied()
+        {
+            <span class="prelude-val">Some</span>(val) =&gt; val,
+            <span class="prelude-val">None </span>=&gt; {
+                <span class="kw">return </span><span class="prelude-val">Err</span>(string_into_err(
+                    name_pair.as_span(),
+                    <span class="macro">format!</span>(<span class="string">&quot;unknown stack slot &#39;{}&#39;&quot;</span>, name_pair.as_str()),
+                ))
+            }
+        };
+
+        <span class="self">self</span>.append_val(builder, name).stackslot(slot, info);
+
+        <span class="prelude-val">Ok</span>(())
+    }
+
     <span class="kw">fn </span>parse_globaladdr(
         <span class="kw-2">&amp;mut </span><span class="self">self</span>,
         pair: Pair&lt;<span class="lifetime">&#39;_</span>, Rule&gt;,
@@ -4025,7 +4169,10 @@ expected {expected} arguments but got {count}&quot;
         <span class="kw">let </span>bb = <span class="kw">match </span>builder.find_block(name) {
             <span class="prelude-val">Some</span>(bb) =&gt; bb,
             <span class="prelude-val">None </span>=&gt; {
-                <span class="kw">return </span><span class="prelude-val">Err</span>(message_into_err(name_pair.as_span(), <span class="string">&quot;unknown basic block&quot;</span>));
+                <span class="kw">return </span><span class="prelude-val">Err</span>(string_into_err(
+                    name_pair.as_span(),
+                    <span class="macro">format!</span>(<span class="string">&quot;unknown basic block &#39;{name}&#39;&quot;</span>),
+                ));
             }
         };
 
@@ -4056,6 +4203,29 @@ expected {expected} arguments but got {count}&quot;
             <span class="kw">if </span>!ty.is_bool_or_int() {
                 <span class="kw">let </span>msg = <span class="macro">format!</span>(
                     <span class="string">&quot;unexpected type for value, expected &#39;bool&#39; or integer but got &#39;{}&#39;&quot;</span>,
+                    stringify_ty(<span class="kw-2">&amp;</span>builder.ctx().types(), ty)
+                );
+
+                <span class="kw">return </span><span class="prelude-val">Err</span>(string_into_err(span, msg));
+            }
+        }
+
+        <span class="prelude-val">Ok</span>((lhs.<span class="number">0</span>, rhs.<span class="number">0</span>))
+    }
+
+    <span class="kw">fn </span>parse_existing_icmp_ops(
+        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+        pairs: <span class="kw-2">&amp;mut </span>Pairs&lt;<span class="lifetime">&#39;_</span>, Rule&gt;,
+        builder: <span class="kw-2">&amp;mut </span>FuncBuilder&lt;<span class="lifetime">&#39;_</span>&gt;,
+    ) -&gt; ParseResult&lt;(Value, Value)&gt; {
+        <span class="kw">let </span>(lhs, rhs) = <span class="self">self</span>.parse_existing_ty_binary_ops(pairs, builder)<span class="question-mark">?</span>;
+
+        <span class="kw">for </span>(val, span) <span class="kw">in </span>[lhs, rhs] {
+            <span class="kw">let </span>ty = builder.ty(val);
+
+            <span class="kw">if </span>!ty.is_bool_or_int() &amp;&amp; !ty.is_ptr() {
+                <span class="kw">let </span>msg = <span class="macro">format!</span>(
+                    <span class="string">&quot;unexpected type for value, expected &#39;bool&#39;, &#39;ptr&#39; or integer but got &#39;{}&#39;&quot;</span>,
                     stringify_ty(<span class="kw-2">&amp;</span>builder.ctx().types(), ty)
                 );
 
@@ -4151,7 +4321,7 @@ expected {expected} arguments but got {count}&quot;
             <span class="kw">let </span>expected = stringify_ty(<span class="kw-2">&amp;</span>builder.ctx().types(), ty);
             <span class="kw">let </span>got = stringify_ty(<span class="kw-2">&amp;</span>builder.ctx().types(), builder.ty(val));
             <span class="kw">let </span>err = <span class="macro">format!</span>(
-                <span class="string">&quot;mismatched types for value &#39;{}&#39;, expected &#39;{}&#39; but got &#39;{}&#39;&quot;</span>,
+                <span class="string">&quot;mismatched types for value &#39;{}&#39;, expected &#39;{}&#39; but value actually is of type &#39;{}&#39;&quot;</span>,
                 name_span.as_str(),
                 expected,
                 got
@@ -4542,4 +4712,4 @@ renderMathInElement(document.body, {
     ]
 });
 </script>
-<div id="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="sapphire" data-themes="" data-resource-suffix="" data-rustdoc-version="1.69.0-nightly (246eae2fa 2023-02-21)" data-search-js="search-14421e1532aead08.js" data-settings-js="settings-f0c5c39777a9a2f6.js" data-settings-css="settings-0bcba95ff279c1db.css" ></div></body></html>
+<div id="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="sapphire" data-themes="" data-resource-suffix="" data-rustdoc-version="1.69.0-nightly (07c993eba 2023-02-23)" data-search-js="search-14421e1532aead08.js" data-settings-js="settings-f0c5c39777a9a2f6.js" data-settings-css="settings-0bcba95ff279c1db.css" ></div></body></html>

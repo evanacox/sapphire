@@ -524,6 +524,10 @@
 <a href="#521" id="521">521</a>
 <a href="#522" id="522">522</a>
 <a href="#523" id="523">523</a>
+<a href="#524" id="524">524</a>
+<a href="#525" id="525">525</a>
+<a href="#526" id="526">526</a>
+<a href="#527" id="527">527</a>
 </pre><pre class="rust"><code><span class="comment">//======---------------------------------------------------------------======//
 //                                                                           //
 // Copyright 2022 Evan Cox &lt;evanacox00@gmail.com&gt;. All rights reserved.      //
@@ -611,10 +615,10 @@
                     (<span class="bool-val">true</span>, <span class="bool-val">true</span>) =&gt; i_lhs.constant_raw() &gt; i_rhs.constant_raw(),
                     (<span class="bool-val">true</span>, <span class="bool-val">false</span>) =&gt; <span class="bool-val">true</span>,
                     (<span class="bool-val">false</span>, <span class="bool-val">true</span>) =&gt; <span class="bool-val">false</span>,
-                    (<span class="bool-val">false</span>, <span class="bool-val">false</span>) =&gt; lhs.index() &gt; rhs.index(),
+                    (<span class="bool-val">false</span>, <span class="bool-val">false</span>) =&gt; lhs.key_index() &gt; rhs.key_index(),
                 }
             }
-            <span class="kw">_ </span>=&gt; lhs.index() &gt; rhs.index(),
+            <span class="kw">_ </span>=&gt; lhs.key_index() &gt; rhs.key_index(),
         }
     }
 
@@ -1043,6 +1047,10 @@
         <span class="prelude-val">None
     </span>}
 
+    <span class="kw">fn </span>visit_stackslot(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;</span>StackSlotInst) -&gt; <span class="prelude-ty">Option</span>&lt;Simplification&lt;<span class="lifetime">&#39;f</span>&gt;&gt; {
+        <span class="prelude-val">None
+    </span>}
+
     <span class="kw">fn </span>visit_globaladdr(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;</span>GlobalAddrInst) -&gt; <span class="prelude-ty">Option</span>&lt;Simplification&lt;<span class="lifetime">&#39;f</span>&gt;&gt; {
         <span class="prelude-val">None
     </span>}
@@ -1058,4 +1066,4 @@ renderMathInElement(document.body, {
     ]
 });
 </script>
-<div id="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="sapphire" data-themes="" data-resource-suffix="" data-rustdoc-version="1.69.0-nightly (246eae2fa 2023-02-21)" data-search-js="search-14421e1532aead08.js" data-settings-js="settings-f0c5c39777a9a2f6.js" data-settings-css="settings-0bcba95ff279c1db.css" ></div></body></html>
+<div id="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="sapphire" data-themes="" data-resource-suffix="" data-rustdoc-version="1.69.0-nightly (07c993eba 2023-02-23)" data-search-js="search-14421e1532aead08.js" data-settings-js="settings-f0c5c39777a9a2f6.js" data-settings-css="settings-0bcba95ff279c1db.css" ></div></body></html>
