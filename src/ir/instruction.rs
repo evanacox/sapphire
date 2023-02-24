@@ -150,8 +150,8 @@ impl InstData {
         mem::discriminant(self)
     }
 
-    /// Checks if `self` is a constant materialization instruction. Note that `undef` is not
-    /// included here, as the value is not known at compile time.
+    /// Checks if `self` is a constant materialization instruction. Note that `undef`, `stackslot`
+    /// and `globaladdr` are not included here, none of them produce values known at compile time.
     pub fn is_constant(&self) -> bool {
         matches!(
             self,

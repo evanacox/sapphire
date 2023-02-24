@@ -1,16 +1,20 @@
 ; MATCH-SECTION
 ;
 ; fn i32 @type_pun(f32) {
+;   $1 = stack i32
+;
 ; entry(f32 %0):
-;   %1 = alloca i32
+;   %1 = stackslot $1
 ;   store f32 %0, ptr %1
 ;   %2 = load i32, ptr %1
 ;   ret i32 %2
 ; }
 ;;
 fn i32 @type_pun(f32) {
+  $1 = stack i32
+
 entry(f32 %0):
-  %1 = alloca i32
+  %1 = stackslot $1
   store f32 %0, ptr %1
   %2 = load i32, ptr %1
   ret i32 %2

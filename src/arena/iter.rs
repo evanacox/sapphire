@@ -130,8 +130,8 @@ pair_iter_impl!(IterMut, &'a mut V, 'a);
 /// assert_eq!(keys.next(), Some(k1));
 /// assert_eq!(keys.next(), Some(k2));
 /// ```
-#[derive(Debug)]
-pub(crate) struct Keys<K: ArenaKey> {
+#[derive(Copy, Clone, Debug)]
+pub struct Keys<K: ArenaKey> {
     pos: usize,
     reverse_pos: usize,
     _unused: PhantomData<fn() -> K>,

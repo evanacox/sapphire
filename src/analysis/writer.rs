@@ -417,9 +417,9 @@ impl<'m> SIRVisitor<'m> for WriterImpl<'m> {
 
                 // stack slots
                 for slot in def.dfg.stack_slots() {
-                    let (slot_name, ty) = def.dfg.stack_slot_info(slot);
-                    let name = self.stack_name(slot_name);
-                    let ty = self.ty(ty);
+                    let data = def.dfg.stack_slot(slot);
+                    let name = self.stack_name(data.name());
+                    let ty = self.ty(data.ty());
 
                     self.state.whole += &format!("  {name} = stack {ty}\n");
                 }
@@ -904,8 +904,8 @@ impl<'m> SIRVisitor<'m> for WriterImpl<'m> {
     fn visit_stackslot(&mut self, inst: Inst, data: &StackSlotInst, def: &FunctionDefinition) {
         self.result(inst, def);
 
-        let (slot_name, _) = def.dfg.stack_slot_info(data.slot());
-        let name = self.stack_name(slot_name);
+        let data = def.dfg.stack_slot(data.slot());
+        let name = self.stack_name(data.name());
 
         self.state.whole += &format!("stackslot {name}");
     }

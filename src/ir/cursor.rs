@@ -314,6 +314,11 @@ pub trait Cursor: Sized {
     fn val_debug(&self, val: Value) -> DebugInfo {
         self.dfg().debug(val)
     }
+
+    /// Returns the information about a given stack slot
+    fn stack_slot(&self, slot: StackSlot) -> StackSlotData {
+        self.dfg().stack_slot(slot)
+    }
 }
 
 /// A builder that replaces an instruction with a new one
@@ -448,6 +453,22 @@ pub trait CursorMut: Cursor {
         self.def_mut()
             .dfg
             .replace_branch_arg(branch, target, index, new)
+    }
+
+    /// Removes the current block, and moves to the next one.
+    fn remove_block(&mut self) {
+        let curr = self
+            .current_block()
+            .expect("cannot remove block when pointing at CursorPos::Nothing");
+
+        let _ = self.next_block();
+
+        self.def_mut().dfg.remove_block(curr);
+    }
+
+    /// Removes a single stack slot.
+    fn remove_stack_slot(&mut self, slot: StackSlot) {
+        self.def_mut().dfg.remove_stack_slot(slot);
     }
 }
 

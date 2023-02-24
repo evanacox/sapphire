@@ -298,7 +298,7 @@ impl<K: ArenaKey, V> ArenaMap<K, V> {
     /// let mut it = map.keys();
     /// assert_eq!(it.next(), Some(k1));
     /// ```
-    pub fn keys(&self) -> impl Iterator<Item = K> + DoubleEndedIterator + ExactSizeIterator {
+    pub fn keys(&self) -> Keys<K> {
         Keys::with_len(self.slots.len())
     }
 
