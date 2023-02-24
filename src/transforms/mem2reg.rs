@@ -15,7 +15,7 @@ use crate::transforms::common::rewrite_pad_branch_argument;
 use crate::utility::{IntoTree, SaHashMap, SaHashSet};
 use smallvec::{smallvec, SmallVec};
 
-/// Promotes `alloca`s that only have `load`s and `store`s as uses into registers.
+/// Promotes stack slots that only have `load`s and `store`s as uses into registers.
 /// This is effectively an SSA construction pass, it promotes memory operations into
 /// SSA values and φ nodes.  
 ///
@@ -26,13 +26,16 @@ use smallvec::{smallvec, SmallVec};
 /// - This will not promote any local memory that has multiple types stored into it,
 ///   e.g. an i64 that has the value of an f64 stored into it will just be ignored.
 ///
-/// - Any `alloca` that is leaked in **any way** is not promoted. An `alloca`
-///   must only have `load`s and `store`s as uses, even passing the `alloca`
+/// - Any `stack` that is leaked in **any way** is not promoted. An `stack`
+///   must only have `load`s and `store`s as uses, even passing the `stack`
 ///   through φ nodes will cause it to be ignored.
 ///
 /// - Right now, this pass does not treat `elemptr` as a `load`/`store`, and will
-///   just ignore any `alloca`s that are used in an `elemptr`. If you want aggregates to
+///   just ignore any `stack`s that are used in an `elemptr`. If you want aggregates to
 ///   be promoted, they need to be created via `insert`s and then `store`d into the memory.
+///
+/// - Any `alloca`s are ignored, as they are assumed to be dynamic. They need to be
+///   transformed into stack values first to be promoted.
 pub struct Mem2RegPass;
 
 impl FunctionTransformPass for Mem2RegPass {
@@ -64,49 +67,59 @@ pub fn mem2reg(
     df: &DominanceFrontier,
 ) {
     let mut cursor = FuncCursor::over(func);
-    let allocas = find_promotable_allocas(&mut cursor, domtree);
-    let phis = insert_phis(&mut cursor, &allocas, df);
+    let slots = find_promotable_slots(&mut cursor, domtree);
+    let phis = insert_phis(&mut cursor, &slots, df);
 
-    rename_variables(&mut cursor, &allocas, &phis, cfg, domtree);
+    rename_variables(&mut cursor, &slots, &phis, cfg, domtree);
 
-    for &alloca in allocas.keys() {
-        let inst = cursor.value_to_inst(alloca).unwrap();
+    // remove the `stackslot` instructions. while this could be handled by DCE,
+    // we may as well do it here while we know exactly which ones we just made dead
+    for &stackslot in slots.keys() {
+        let inst = cursor.value_to_inst(stackslot).unwrap();
+        let slot = match cursor.inst_data(inst) {
+            InstData::StackSlot(inst) => inst.slot(),
+            _ => unreachable!(),
+        };
 
         cursor.goto_inst(inst);
         cursor.remove_inst();
+        cursor.remove_stack_slot(slot);
     }
 }
 
-// finds all of the allocas that are actually promotable, along with their definition
-// and the type that the alloca was defined with.
-fn find_promotable_allocas(
+// finds all of the slots that are actually promotable, along with their definition
+// and the type that the stack slot was defined with.
+fn find_promotable_slots(
     cursor: &mut FuncCursor<'_>,
     domtree: &DominatorTree,
 ) -> SaHashMap<Value, (Type, SmallVec<[Inst; 4]>)> {
-    // allocas is our result, escaped is scratch storage for our "find usages that
+    // slots is our result, escaped is scratch storage for our "find usages that
     // make it impossible to promote" in our inner loop
-    let mut allocas = SaHashMap::default();
+    let mut slots = SaHashMap::default();
     let mut not_promotable = SmallVec::<[Value; 16]>::default();
 
     // basic idea: we scan through the function in reverse postorder to see
-    // defs before uses. We find any allocas and we record them in `allocas`,
-    // along with their type and any stores to that alloca (stores = "defs" of
+    // defs before uses. We find any **usage** of slots and we record them in `slots`,
+    // along with their type and any stores to that slot (stores = "defs" of
     // the "variable" that we are promoting, in SSA construction terms)
     for block in domtree.reverse_postorder() {
         cursor.goto_before(block);
 
         while let Some(inst) = cursor.next_inst() {
-            if let InstData::Alloca(alloca) = cursor.inst_data(inst) {
-                allocas.insert(
+            // in order for us to even consider SSA promotion, we have to actually see
+            // a `stackslot` usage for the slot first. If there are none of these, it isn't
+            // actually used anywhere and we can just ignore it.
+            if let InstData::StackSlot(stackslot) = cursor.inst_data(inst) {
+                slots.insert(
                     cursor.inst_to_result(inst).unwrap(),
-                    (alloca.alloc_ty(), smallvec![]),
+                    (cursor.stack_slot(stackslot.slot()).ty(), smallvec![]),
                 );
 
                 continue;
             }
 
             // if an instruction has a side effect and uses the value of
-            // one of our allocas, we consider it to have "escaped."
+            // one of our slots, we consider it to have "escaped."
             let data = cursor.inst_data(inst);
             let operands = cursor.inst_data(inst).operands();
 
@@ -115,65 +128,63 @@ fn find_promotable_allocas(
                 continue;
             }
 
-            // we go through all of our allocas and see if the instruction does something
+            // we go through all of our slots and see if the instruction does something
             // that makes it non-promotable.
             //
             // the reason we can't break out of this after the first match is we may potentially
-            // be using multiple allocas in the same instruction
-            for (&alloca, (ty, defs)) in allocas.iter_mut() {
-                if operands.contains(&alloca) {
+            // be using multiple slots in the same instruction
+            for (&stackslot, (ty, defs)) in slots.iter_mut() {
+                if operands.contains(&stackslot) {
                     match data {
                         InstData::Store(store) => {
-                            if store.pointer() != alloca || *ty != cursor.ty(store.stored()) {
-                                not_promotable.push(alloca);
+                            if store.pointer() != stackslot || *ty != cursor.ty(store.stored()) {
+                                not_promotable.push(stackslot);
                             } else {
                                 defs.push(inst)
                             }
                         }
                         InstData::Load(load) => {
                             if load.result_ty().unwrap() != *ty {
-                                not_promotable.push(alloca);
+                                not_promotable.push(stackslot);
                             }
                         }
                         // any other usage besides a load/store, we assume the pointer escaped
                         // so we just don't promote that at all
-                        _ => not_promotable.push(alloca),
+                        _ => not_promotable.push(stackslot),
                     }
                 }
             }
 
-            // `not_promotable` is just scratch storage because we can't mutate `allocas` above
-            for alloca in not_promotable.drain(..) {
-                allocas.remove(&alloca);
+            // `not_promotable` is just scratch storage because we can't mutate `slots` above
+            for stackslot in not_promotable.drain(..) {
+                slots.remove(&stackslot);
             }
         }
     }
 
-    allocas
+    slots
 }
 
 // runs the φ-insertion algorithm, and returns the phi nodes that were inserted at
 // given join points.
 //
-// the return value maps φ node -> alloca it is for
+// the return value maps φ node -> stackslot it is for
 fn insert_phis(
     cursor: &mut FuncCursor<'_>,
-    allocas: &SaHashMap<Value, (Type, SmallVec<[Inst; 4]>)>,
+    slots: &SaHashMap<Value, (Type, SmallVec<[Inst; 4]>)>,
     df: &DominanceFrontier,
 ) -> SaHashMap<Value, Value> {
-    // maps an alloca and a block to a phi node for that alloca.
-    // this is intended to map alloca -> phi for blocks where the phi was added
     let mut phis = SaHashMap::default();
 
     // we need a consistent order for these to be inserted, so instead of directly iterating
     // over the hash table we instead copy keys into a vec and then sort it.
     //
     // the keys are integers anyway and this will be a very small vec, should be cheap
-    let mut alloca_keys: SmallVec<[Value; 16]> = allocas.keys().copied().collect();
-    alloca_keys.sort();
+    let mut stackslot_keys: SmallVec<[Value; 16]> = slots.keys().copied().collect();
+    stackslot_keys.sort();
 
-    for alloca in alloca_keys {
-        let (ty, defs) = &allocas[&alloca];
+    for slot in stackslot_keys {
+        let (ty, defs) = &slots[&slot];
         let mut phis_added = SaHashSet::default();
         let mut contains_defs = SaHashSet::default();
 
@@ -181,7 +192,7 @@ fn insert_phis(
             contains_defs.insert(cursor.inst_block(def));
         }
 
-        // go through all the blocks where we store to the alloca, and find
+        // go through all the blocks where we store to the slot, and find
         // join points after those blocks from the dominance frontier
         while let Some(&block) = contains_defs.iter().next() {
             contains_defs.remove(&block);
@@ -190,13 +201,13 @@ fn insert_phis(
                 // if we haven't already added a phi for this variable yet for this
                 // particular join point, add the phi and record it.
                 if !phis_added.contains(&bb) {
-                    let dbg = cursor.dfg().debug(alloca).strip_name();
+                    let dbg = cursor.dfg().debug(slot).strip_name();
                     let phi = cursor.def_mut().dfg.append_block_param(bb, *ty, dbg);
 
-                    phis.insert(phi, alloca);
+                    phis.insert(phi, slot);
                     phis_added.insert(bb);
 
-                    // if `bb` is not a block that provides a def for `alloca`
+                    // if `bb` is not a block that provides a def for `stack`
                     if !defs.iter().any(|&def| cursor.inst_block(def) == bb) {
                         contains_defs.insert(bb);
                     }
@@ -213,16 +224,16 @@ enum Memory {
     Use(LoadInst),
 }
 
-// Gets the closest (dominating) definition for a given alloca. If there is none,
+// Gets the closest (dominating) definition for a given slot. If there is none,
 // an `undef` is inserted as the definition and is then returned.
 fn nearest_reaching_def(
     cursor: &mut FuncCursor<'_>,
-    alloca: Value,
+    stackslot: Value,
     ty: Type,
     dbg: DebugInfo,
     defs: &mut SaHashMap<Value, SmallVec<[Value; 4]>>,
 ) -> Value {
-    let stack = defs.get_mut(&alloca).unwrap();
+    let stack = defs.get_mut(&stackslot).unwrap();
 
     match stack.last().copied() {
         Some(v) => v,
@@ -249,9 +260,9 @@ fn rename_variables_recursive(
     // first task is to update reaching_def if any of our block's φ nodes are
     // actually definitions for a variable in this block
     for &phi in cursor.block_params(bb) {
-        if let Some(&alloca) = phis.get(&phi) {
-            defs.push(alloca);
-            reaching_def.get_mut(&alloca).unwrap().push(phi);
+        if let Some(&stackslot) = phis.get(&phi) {
+            defs.push(stackslot);
+            reaching_def.get_mut(&stackslot).unwrap().push(phi);
         }
     }
 
@@ -272,8 +283,8 @@ fn rename_variables_recursive(
         };
 
         match op {
-            // by this point, we can assume that any stores to that alloca
-            // that are in `reaching_def` are actually allocas we can promote.
+            // by this point, we can assume that any stores to that slot
+            // that are in `reaching_def` are actually slots we can promote.
             // we checked earlier to make sure
             Memory::Use(load) => {
                 // if there is no closest definition, we insert an `undef` instruction
@@ -308,8 +319,10 @@ fn rename_variables_recursive(
     let branch = cursor.current_inst().unwrap();
     let mut params = SmallVec::<[(usize, Value); 16]>::default();
 
-    // if one of our successors has a φ node that came from an alloca we defined, rewrite
-    // the branch to that successor to pass the most recent definition
+    // if one of our successors has a φ node that came from a stackslot we defined *anywhere*,
+    // rewrite the branch to that successor to pass the most recent definition.
+    //
+    // even if we didn't define it in this block we still need to rewrite our branch
     for successor in cfg.successors(bb) {
         params.insert_many(
             0,
@@ -317,10 +330,10 @@ fn rename_variables_recursive(
         );
 
         for (i, phi) in params.drain(..) {
-            if let Some(&alloca) = phis.get(&phi) {
+            if let Some(&stackslot) = phis.get(&phi) {
                 let dbg = cursor.val_debug(phi);
                 let reaching =
-                    nearest_reaching_def(cursor, alloca, cursor.ty(phi), dbg, reaching_def);
+                    nearest_reaching_def(cursor, stackslot, cursor.ty(phi), dbg, reaching_def);
 
                 rewrite_pad_branch_argument(cursor, branch, successor, i, reaching);
             }
@@ -339,24 +352,24 @@ fn rename_variables_recursive(
 
     // once we've finished recursing, remove our defs from the stack so they don't
     // interfere with blocks that we don't actually dominate.
-    for alloca in defs {
-        let _ = reaching_def.get_mut(&alloca).unwrap().pop();
+    for stackslot in defs {
+        let _ = reaching_def.get_mut(&stackslot).unwrap().pop();
     }
 }
 
 fn rename_variables(
     cursor: &mut FuncCursor<'_>,
-    allocas: &SaHashMap<Value, (Type, SmallVec<[Inst; 4]>)>,
+    slots: &SaHashMap<Value, (Type, SmallVec<[Inst; 4]>)>,
     phis: &SaHashMap<Value, Value>,
     cfg: &ControlFlowGraph,
     domtree: &DominatorTree,
 ) {
     let mut reaching_def = SaHashMap::<Value, SmallVec<[Value; 4]>>::default();
 
-    // initialize reaching_def, for every alloca we have no definition
+    // initialize reaching_def, for every stackslot we have no definition
     // at this point in the program yet.
-    for &alloca in allocas.keys() {
-        reaching_def.insert(alloca, smallvec![]);
+    for &stackslot in slots.keys() {
+        reaching_def.insert(stackslot, smallvec![]);
     }
 
     cursor.goto_before(domtree.root());
@@ -370,7 +383,7 @@ mod tests {
     use crate::analysis::ControlFlowGraph;
 
     #[test]
-    fn find_allocas_simple() {
+    fn find_slots_simple() {
         let mut module = Module::new("fig3.1");
         let sig = SigBuilder::new()
             .param(Type::i32())
@@ -392,10 +405,14 @@ mod tests {
         // fn i32 @f(i32, i32)
         //
         // fn i32 @test(bool) {
+        //   $x = stack i32
+        //   $y = stack i32
+        //   $tmp = stack i32
+        //
         // r(bool %0):
-        //   %x = alloca i32
-        //   %y = alloca i32
-        //   %tmp = alloca i32
+        //   %x = stackslot $x
+        //   %y = stackslot $y
+        //   %tmp = stackslot $tmp
         //   %1 = undef i32
         //   store i32 %1, ptr %x
         //   store i32 %1, ptr %y
@@ -431,6 +448,9 @@ mod tests {
         //   %9 = load i32, ptr %x
         //   ret i32 %9
         // }
+        let x_slot = b.create_stack_slot("x", Type::i32());
+        let y_slot = b.create_stack_slot("y", Type::i32());
+        let tmp_slot = b.create_stack_slot("tmp", Type::i32());
         let bbr = b.create_block("r");
         let bba = b.create_block("a");
         let bbb = b.create_block("b");
@@ -441,9 +461,9 @@ mod tests {
         let v0 = b.append_entry_params(bbr, DebugInfo::fake())[0];
 
         b.switch_to(bbr);
-        let x = b.append().alloca(Type::i32(), DebugInfo::fake());
-        let y = b.append().alloca(Type::i32(), DebugInfo::fake());
-        let tmp = b.append().alloca(Type::i32(), DebugInfo::fake());
+        let x = b.append().stackslot(x_slot, DebugInfo::fake());
+        let y = b.append().stackslot(y_slot, DebugInfo::fake());
+        let tmp = b.append().stackslot(tmp_slot, DebugInfo::fake());
         let v1 = b.append().undef(Type::i32(), DebugInfo::fake());
         let x_def1 = b.append().store(v1, x, DebugInfo::fake());
         let y_def1 = b.append().store(v1, y, DebugInfo::fake());
@@ -495,9 +515,9 @@ mod tests {
 
         let cfg = ControlFlowGraph::compute(func);
         let domtree = DominatorTree::compute(func, &cfg);
-        let allocas = find_promotable_allocas(&mut FuncCursor::over(func), &domtree);
+        let slots = find_promotable_slots(&mut FuncCursor::over(func), &domtree);
         {
-            let (ty, mut defs) = allocas[&x].clone();
+            let (ty, mut defs) = slots[&x].clone();
 
             defs.sort();
 
@@ -506,7 +526,7 @@ mod tests {
         }
 
         {
-            let (ty, mut defs) = allocas[&y].clone();
+            let (ty, mut defs) = slots[&y].clone();
 
             defs.sort();
 
@@ -515,7 +535,7 @@ mod tests {
         }
 
         {
-            let (ty, mut defs) = allocas[&tmp].clone();
+            let (ty, mut defs) = slots[&tmp].clone();
 
             defs.sort();
 
@@ -525,7 +545,7 @@ mod tests {
     }
 
     #[test]
-    fn find_allocas_escaped() {
+    fn find_slots_escaped() {
         let mut module = Module::new("fig3.1");
         let sig = SigBuilder::new().param(Type::ptr()).build();
         let f = module.declare_function("f", sig.clone());
@@ -534,16 +554,23 @@ mod tests {
 
         let sig = b.import_signature(&sig);
 
+        let ty = Type::array(&mut b.ctx().types_mut(), Type::bool(), 512);
+        let v1_slot = b.create_stack_slot("1", Type::ptr());
+        let v2_slot = b.create_stack_slot("2", Type::i8());
+        let v3_slot = b.create_stack_slot("3", Type::f32());
+        let v4_slot = b.create_stack_slot("4", Type::i64());
+        let v5_slot = b.create_stack_slot("5", ty);
+        let v6_slot = b.create_stack_slot("6", Type::f64());
+
         let bb0 = b.create_block("r");
         let v0 = b.append_entry_params(bb0, DebugInfo::fake())[0];
         b.switch_to(bb0);
-        let v1 = b.append().alloca(Type::ptr(), DebugInfo::fake());
-        let v2 = b.append().alloca(Type::i8(), DebugInfo::fake());
-        let v3 = b.append().alloca(Type::f32(), DebugInfo::fake());
-        let v4 = b.append().alloca(Type::i64(), DebugInfo::fake());
-        let ty = Type::array(&mut b.ctx().types_mut(), Type::bool(), 512);
-        let v5 = b.append().alloca(ty, DebugInfo::fake());
-        let v6 = b.append().alloca(Type::f64(), DebugInfo::fake());
+        let v1 = b.append().stackslot(v1_slot, DebugInfo::fake());
+        let v2 = b.append().stackslot(v2_slot, DebugInfo::fake());
+        let v3 = b.append().stackslot(v3_slot, DebugInfo::fake());
+        let v4 = b.append().stackslot(v4_slot, DebugInfo::fake());
+        let v5 = b.append().stackslot(v5_slot, DebugInfo::fake());
+        let v6 = b.append().stackslot(v6_slot, DebugInfo::fake());
         b.append().call(f, sig, &[v1], DebugInfo::fake());
         b.append().indirectcall(v0, sig, &[v3], DebugInfo::fake());
         b.append().ptoi(Type::i64(), v6, DebugInfo::fake());
@@ -555,26 +582,26 @@ mod tests {
         let cfg = ControlFlowGraph::compute(func);
         let domtree = DominatorTree::compute(func, &cfg);
 
-        let allocas = find_promotable_allocas(&mut FuncCursor::over(func), &domtree);
+        let slots = find_promotable_slots(&mut FuncCursor::over(func), &domtree);
 
-        assert!(allocas.contains_key(&v2));
-        assert!(allocas.contains_key(&v5));
+        assert!(slots.contains_key(&v2));
+        assert!(slots.contains_key(&v5));
 
         {
-            let (alloca_ty, mut defs) = allocas[&v2].clone();
+            let (slot_ty, mut defs) = slots[&v2].clone();
 
             defs.sort();
 
-            assert_eq!(alloca_ty, Type::i8());
+            assert_eq!(slot_ty, Type::i8());
             assert_eq!(defs.as_slice(), &[]);
         }
 
         {
-            let (alloca_ty, mut defs) = allocas[&v5].clone();
+            let (slot_ty, mut defs) = slots[&v5].clone();
 
             defs.sort();
 
-            assert_eq!(alloca_ty, ty);
+            assert_eq!(slot_ty, ty);
             assert_eq!(defs.as_slice(), &[]);
         }
     }

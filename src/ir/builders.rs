@@ -184,6 +184,17 @@ impl<'m> FuncBuilder<'m> {
     ///
     /// Note that this does not switch the builder to operate on that block,
     /// you still need to call [`Self::switch_to`].
+    pub fn create_stack_slot(&mut self, name: &str, ty: Type) -> StackSlot {
+        let name = self.module.insert_string(name);
+
+        self.def.dfg.create_stack_slot(name, ty)
+    }
+
+    /// Creates a single basic block and returns it. This block is appended to
+    /// the end of the block list.
+    ///
+    /// Note that this does not switch the builder to operate on that block,
+    /// you still need to call [`Self::switch_to`].
     pub fn create_block(&mut self, name: &str) -> Block {
         let block = self.create_block_with_name(name);
 

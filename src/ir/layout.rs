@@ -459,7 +459,7 @@ impl Debug for Layout {
             .collect();
 
         for (bb, vec) in blocks.into_iter().zip(insts) {
-            s.field(&format!("bb{}", bb.index()), &vec);
+            s.field(&format!("bb{}", bb.key_index()), &vec);
         }
 
         s.finish()

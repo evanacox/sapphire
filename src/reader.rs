@@ -120,6 +120,7 @@ struct SIRParser {
     next: u32,
     filename: Str,
     resolver: SaHashMap<LocalIdent, Value>,
+    stack_slots: SaHashMap<String, StackSlot>,
 }
 
 impl SIRParser {
@@ -130,6 +131,7 @@ impl SIRParser {
             filename: Str::reserved(),
             next: 0,
             resolver: SaHashMap::default(),
+            stack_slots: SaHashMap::default(),
         };
 
         obj.filename = module.insert_string(filename);
@@ -274,15 +276,16 @@ impl SIRParser {
     ) -> ParseResult<()> {
         debug_assert!(matches!(pair.as_rule(), Rule::function_body));
 
-        self.next = 0;
-        self.resolver.clear();
-
         // similar deal to how functions are pre-processed by the parser,
         // we need to go ahead and parse the blocks and form block nodes
         // inside of the function before we parse code that may potentially
         // jump between them.
         let mut delayed = Vec::default();
-        let rest = pair.into_inner();
+        let mut rest = pair.into_inner();
+
+        self.next = 0;
+        self.resolver.clear();
+        self.stack_slots = self.parse_stack_slots(&mut rest, &mut builder)?;
 
         for block in rest {
             delayed.push(self.preprocess_block(block, &mut builder)?);
@@ -301,6 +304,30 @@ impl SIRParser {
         builder.define();
 
         Ok(())
+    }
+
+    fn parse_stack_slots(
+        &mut self,
+        pairs: &mut Pairs<'_, Rule>,
+        builder: &mut FuncBuilder<'_>,
+    ) -> ParseResult<SaHashMap<String, StackSlot>> {
+        let mut result = SaHashMap::default();
+
+        while pairs
+            .peek()
+            .filter(|pair| matches!(pair.as_rule(), Rule::stack_slot))
+            .is_some()
+        {
+            let mut pairs = pairs.next_or("expected stack slot").into_inner();
+            let name_pair = pairs.next_or("expected stack slot name");
+            let ty_pair = pairs.next_or("expected stack slot ty");
+            let name = name_pair.as_str().trim_start_matches('$');
+            let ty = self.parse_ty(ty_pair, &mut builder.ctx().types_mut())?;
+
+            result.insert(name.to_string(), builder.create_stack_slot(name, ty));
+        }
+
+        Ok(result)
     }
 
     fn preprocess_block<'a>(
@@ -465,6 +492,7 @@ impl SIRParser {
             Rule::bconst => self.parse_bconst(inner, builder),
             Rule::undef => self.parse_undef(inner, builder),
             Rule::null => self.parse_null(inner, builder),
+            Rule::stackslot => self.parse_stackslot(inner, builder),
             Rule::globaladdr => self.parse_globaladdr(inner, builder),
             _ => unreachable!(),
         }
@@ -588,12 +616,12 @@ impl SIRParser {
         debug_assert!(matches!(pair.as_rule(), Rule::args_with_types));
 
         let expected = param_tys.len();
-        let clone = pair.clone();
         let inner = pair.into_inner();
         let mut vec = Vec::default();
         let mut count = 0;
 
         for operand in inner {
+            let clone = operand.clone();
             let val = self.parse_operand(operand, builder)?;
 
             match (param_tys.next(), builder.ty(val)) {
@@ -847,7 +875,7 @@ expected {expected} arguments but got {count}"
             _ => unreachable!(),
         };
 
-        let (lhs, rhs) = self.parse_existing_bitwise_binary_ops(&mut inner, builder)?;
+        let (lhs, rhs) = self.parse_existing_icmp_ops(&mut inner, builder)?;
 
         self.append_val(builder, ident).icmp(opc, lhs, rhs, info);
 
@@ -1714,6 +1742,37 @@ expected {expected} arguments but got {count}"
         Ok(())
     }
 
+    fn parse_stackslot(
+        &mut self,
+        pair: Pair<'_, Rule>,
+        builder: &mut FuncBuilder<'_>,
+    ) -> ParseResult<()> {
+        debug_assert!(matches!(pair.as_rule(), Rule::stackslot));
+
+        let mut inner = pair.into_inner();
+        let result_pair = inner.next_or("expected result");
+        let name_pair = inner.next_or("expected name");
+
+        let (name, info) = self.parse_result(result_pair, builder)?;
+        let slot = match self
+            .stack_slots
+            .get(name_pair.as_str().trim_start_matches('$'))
+            .copied()
+        {
+            Some(val) => val,
+            None => {
+                return Err(string_into_err(
+                    name_pair.as_span(),
+                    format!("unknown stack slot '{}'", name_pair.as_str()),
+                ))
+            }
+        };
+
+        self.append_val(builder, name).stackslot(slot, info);
+
+        Ok(())
+    }
+
     fn parse_globaladdr(
         &mut self,
         pair: Pair<'_, Rule>,
@@ -1757,7 +1816,10 @@ expected {expected} arguments but got {count}"
         let bb = match builder.find_block(name) {
             Some(bb) => bb,
             None => {
-                return Err(message_into_err(name_pair.as_span(), "unknown basic block"));
+                return Err(string_into_err(
+                    name_pair.as_span(),
+                    format!("unknown basic block '{name}'"),
+                ));
             }
         };
 
@@ -1788,6 +1850,29 @@ expected {expected} arguments but got {count}"
             if !ty.is_bool_or_int() {
                 let msg = format!(
                     "unexpected type for value, expected 'bool' or integer but got '{}'",
+                    stringify_ty(&builder.ctx().types(), ty)
+                );
+
+                return Err(string_into_err(span, msg));
+            }
+        }
+
+        Ok((lhs.0, rhs.0))
+    }
+
+    fn parse_existing_icmp_ops(
+        &mut self,
+        pairs: &mut Pairs<'_, Rule>,
+        builder: &mut FuncBuilder<'_>,
+    ) -> ParseResult<(Value, Value)> {
+        let (lhs, rhs) = self.parse_existing_ty_binary_ops(pairs, builder)?;
+
+        for (val, span) in [lhs, rhs] {
+            let ty = builder.ty(val);
+
+            if !ty.is_bool_or_int() && !ty.is_ptr() {
+                let msg = format!(
+                    "unexpected type for value, expected 'bool', 'ptr' or integer but got '{}'",
                     stringify_ty(&builder.ctx().types(), ty)
                 );
 
@@ -1883,7 +1968,7 @@ expected {expected} arguments but got {count}"
             let expected = stringify_ty(&builder.ctx().types(), ty);
             let got = stringify_ty(&builder.ctx().types(), builder.ty(val));
             let err = format!(
-                "mismatched types for value '{}', expected '{}' but got '{}'",
+                "mismatched types for value '{}', expected '{}' but value actually is of type '{}'",
                 name_span.as_str(),
                 expected,
                 got

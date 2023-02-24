@@ -2,6 +2,7 @@
 ;
 ; fn i32 @main(i32, ptr) {
 ; entry(i32 %argc, ptr %argv):
+;   %x = alloca i32
 ;   %0 = iconst i32 42
 ;   %1 = icmp eq i32 %argc, %0
 ;   condbr bool %1, a, b
@@ -22,6 +23,7 @@ fn i32 @main(i32, ptr) {
     $0 = stack i32
 
 entry(i32 %argc, ptr %argv):
+    %x = alloca i32
     %0 = stackslot $0
     %1 = iconst i32 42
     %2 = icmp eq i32 %argc, %1

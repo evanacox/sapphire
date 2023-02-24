@@ -135,7 +135,11 @@ pub trait InstBuilder<'dfg>: Sized {
     /// Builds an `icmp` instruction
     fn icmp(self, cmp: ICmpOp, lhs: Value, rhs: Value, debug: DebugInfo) -> Value {
         debug_assert_eq!(self.dfg().ty(lhs), self.dfg().ty(rhs));
-        debug_assert!(self.dfg().ty(lhs).is_bool_or_int());
+        debug_assert!({
+            let ty = self.dfg().ty(lhs);
+
+            ty.is_bool_or_int() || ty.is_ptr()
+        });
 
         let icmp = ICmpInst::new(cmp, lhs, rhs);
 
@@ -538,5 +542,15 @@ pub trait InstBuilder<'dfg>: Sized {
     /// Builds a `null` instruction
     fn null(self, into: Type, debug: DebugInfo) -> Value {
         self.build_result(InstData::Null(NullConstInst::new(into)), debug)
+    }
+
+    /// Builds a `stackslot` instruction
+    fn stackslot(self, slot: StackSlot, debug: DebugInfo) -> Value {
+        self.build_result(InstData::StackSlot(StackSlotInst::new(slot)), debug)
+    }
+
+    /// Builds a `globaladdr` instruction
+    fn globaladdr(self, global: String, debug: DebugInfo) -> Value {
+        self.build_result(InstData::GlobalAddr(GlobalAddrInst::new(global)), debug)
     }
 }

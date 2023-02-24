@@ -1,0 +1,8 @@
+; MATCH-ENTIRE
+fn void @test() {
+  $0 = stack i32
+
+entry:
+  %0 = stackslot $0
+  ret void
+}

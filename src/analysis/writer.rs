@@ -249,6 +249,10 @@ impl<'m> WriterImpl<'m> {
         stringify_signature_params(&self.pool_guard, sig)
     }
 
+    fn stack_name(&self, name: Str) -> String {
+        format!("${}", self.module().context().strings().get(name).unwrap())
+    }
+
     fn func_name(&self, func: Func) -> String {
         format!("@{}", self.module().function(func).name())
     }
@@ -401,7 +405,7 @@ impl<'m> SIRVisitor<'m> for WriterImpl<'m> {
             // 'fn T @name(tys) '
             self.state.whole += &format!("fn {ty} {name}{params}");
 
-            // '{fastcc|sysv|win64|ccc} '
+            // '{fastcc|ccc} '
             match sig.calling_conv() {
                 CallConv::C => {}
                 abi => self.state.whole += &format!("{} ", stringify_abi(abi)),
@@ -410,6 +414,20 @@ impl<'m> SIRVisitor<'m> for WriterImpl<'m> {
             // body
             if let Some(def) = f.definition() {
                 self.state.whole += " {\n";
+
+                // stack slots
+                for slot in def.dfg.stack_slots() {
+                    let data = def.dfg.stack_slot(slot);
+                    let name = self.stack_name(data.name());
+                    let ty = self.ty(data.ty());
+
+                    self.state.whole += &format!("  {name} = stack {ty}\n");
+                }
+
+                // if we had any stack slots, add an extra \n gap
+                if !self.state.whole.ends_with(" {\n") {
+                    self.state.whole += "\n";
+                }
 
                 for block in def.layout.blocks() {
                     self.visit_block(block, def);
@@ -881,6 +899,15 @@ impl<'m> SIRVisitor<'m> for WriterImpl<'m> {
         let ty = self.ty(data.result_ty().unwrap());
 
         self.state.whole += &format!("null {ty}");
+    }
+
+    fn visit_stackslot(&mut self, inst: Inst, data: &StackSlotInst, def: &FunctionDefinition) {
+        self.result(inst, def);
+
+        let data = def.dfg.stack_slot(data.slot());
+        let name = self.stack_name(data.name());
+
+        self.state.whole += &format!("stackslot {name}");
     }
 
     fn visit_globaladdr(&mut self, inst: Inst, data: &GlobalAddrInst, def: &FunctionDefinition) {

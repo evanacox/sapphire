@@ -9,7 +9,7 @@
 //======---------------------------------------------------------------======//
 
 use crate::arena::ArenaKey;
-use crate::ir::{Block, FloatFormat, Func, Sig, Type, Value};
+use crate::ir::{Block, FloatFormat, Func, Sig, StackSlot, Type, Value};
 use crate::utility::{PackedOption, TinyArray};
 use smallvec::SmallVec;
 use static_assertions::assert_eq_size;
@@ -133,6 +133,8 @@ pub enum InstData {
     Undef(UndefConstInst),
     /// `null T N`, materializes a null value
     Null(NullConstInst),
+    /// `stackslot $name`, materializes a pointer to stack memory
+    StackSlot(StackSlotInst),
     /// `globaladdr @name`, materializes a pointer to a global value
     GlobalAddr(GlobalAddrInst),
 }
@@ -148,8 +150,8 @@ impl InstData {
         mem::discriminant(self)
     }
 
-    /// Checks if `self` is a constant materialization instruction. Note that `undef` is not
-    /// included here, as the value is not known at compile time.
+    /// Checks if `self` is a constant materialization instruction. Note that `undef`, `stackslot`
+    /// and `globaladdr` are not included here, none of them produce values known at compile time.
     pub fn is_constant(&self) -> bool {
         matches!(
             self,
@@ -171,182 +173,79 @@ impl InstData {
     }
 }
 
+macro_rules! for_each_inst {
+    ($self:expr, $method:ident) => {
+        match $self {
+            InstData::Call(e) => e.$method(),
+            InstData::IndirectCall(e) => e.$method(),
+            InstData::ICmp(e) => e.$method(),
+            InstData::FCmp(e) => e.$method(),
+            InstData::Sel(e) => e.$method(),
+            InstData::Br(e) => e.$method(),
+            InstData::CondBr(e) => e.$method(),
+            InstData::Unreachable(e) => e.$method(),
+            InstData::Ret(e) => e.$method(),
+            InstData::And(e) => e.$method(),
+            InstData::Or(e) => e.$method(),
+            InstData::Xor(e) => e.$method(),
+            InstData::Shl(e) => e.$method(),
+            InstData::AShr(e) => e.$method(),
+            InstData::LShr(e) => e.$method(),
+            InstData::IAdd(e) => e.$method(),
+            InstData::ISub(e) => e.$method(),
+            InstData::IMul(e) => e.$method(),
+            InstData::SDiv(e) => e.$method(),
+            InstData::UDiv(e) => e.$method(),
+            InstData::SRem(e) => e.$method(),
+            InstData::URem(e) => e.$method(),
+            InstData::FNeg(e) => e.$method(),
+            InstData::FAdd(e) => e.$method(),
+            InstData::FSub(e) => e.$method(),
+            InstData::FMul(e) => e.$method(),
+            InstData::FDiv(e) => e.$method(),
+            InstData::FRem(e) => e.$method(),
+            InstData::Alloca(e) => e.$method(),
+            InstData::Load(e) => e.$method(),
+            InstData::Store(e) => e.$method(),
+            InstData::Offset(e) => e.$method(),
+            InstData::Extract(e) => e.$method(),
+            InstData::Insert(e) => e.$method(),
+            InstData::ElemPtr(e) => e.$method(),
+            InstData::Sext(e) => e.$method(),
+            InstData::Zext(e) => e.$method(),
+            InstData::Trunc(e) => e.$method(),
+            InstData::IToB(e) => e.$method(),
+            InstData::BToI(e) => e.$method(),
+            InstData::SIToF(e) => e.$method(),
+            InstData::UIToF(e) => e.$method(),
+            InstData::FToSI(e) => e.$method(),
+            InstData::FToUI(e) => e.$method(),
+            InstData::FExt(e) => e.$method(),
+            InstData::FTrunc(e) => e.$method(),
+            InstData::IToP(e) => e.$method(),
+            InstData::PToI(e) => e.$method(),
+            InstData::IConst(e) => e.$method(),
+            InstData::FConst(e) => e.$method(),
+            InstData::BConst(e) => e.$method(),
+            InstData::Undef(e) => e.$method(),
+            InstData::Null(e) => e.$method(),
+            InstData::StackSlot(e) => e.$method(),
+            InstData::GlobalAddr(e) => e.$method(),
+        }
+    };
+}
+
 impl Instruction for InstData {
     fn operands(&self) -> &[Value] {
-        match self {
-            InstData::Call(e) => e.operands(),
-            InstData::IndirectCall(e) => e.operands(),
-            InstData::ICmp(e) => e.operands(),
-            InstData::FCmp(e) => e.operands(),
-            InstData::Sel(e) => e.operands(),
-            InstData::Br(e) => e.operands(),
-            InstData::CondBr(e) => e.operands(),
-            InstData::Unreachable(e) => e.operands(),
-            InstData::Ret(e) => e.operands(),
-            InstData::And(e) => e.operands(),
-            InstData::Or(e) => e.operands(),
-            InstData::Xor(e) => e.operands(),
-            InstData::Shl(e) => e.operands(),
-            InstData::AShr(e) => e.operands(),
-            InstData::LShr(e) => e.operands(),
-            InstData::IAdd(e) => e.operands(),
-            InstData::ISub(e) => e.operands(),
-            InstData::IMul(e) => e.operands(),
-            InstData::SDiv(e) => e.operands(),
-            InstData::UDiv(e) => e.operands(),
-            InstData::SRem(e) => e.operands(),
-            InstData::URem(e) => e.operands(),
-            InstData::FNeg(e) => e.operands(),
-            InstData::FAdd(e) => e.operands(),
-            InstData::FSub(e) => e.operands(),
-            InstData::FMul(e) => e.operands(),
-            InstData::FDiv(e) => e.operands(),
-            InstData::FRem(e) => e.operands(),
-            InstData::Alloca(e) => e.operands(),
-            InstData::Load(e) => e.operands(),
-            InstData::Store(e) => e.operands(),
-            InstData::Offset(e) => e.operands(),
-            InstData::Extract(e) => e.operands(),
-            InstData::Insert(e) => e.operands(),
-            InstData::ElemPtr(e) => e.operands(),
-            InstData::Sext(e) => e.operands(),
-            InstData::Zext(e) => e.operands(),
-            InstData::Trunc(e) => e.operands(),
-            InstData::IToB(e) => e.operands(),
-            InstData::BToI(e) => e.operands(),
-            InstData::SIToF(e) => e.operands(),
-            InstData::UIToF(e) => e.operands(),
-            InstData::FToSI(e) => e.operands(),
-            InstData::FToUI(e) => e.operands(),
-            InstData::FExt(e) => e.operands(),
-            InstData::FTrunc(e) => e.operands(),
-            InstData::IToP(e) => e.operands(),
-            InstData::PToI(e) => e.operands(),
-            InstData::IConst(e) => e.operands(),
-            InstData::FConst(e) => e.operands(),
-            InstData::BConst(e) => e.operands(),
-            InstData::Undef(e) => e.operands(),
-            InstData::Null(e) => e.operands(),
-            InstData::GlobalAddr(e) => e.operands(),
-        }
+        for_each_inst!(self, operands)
     }
 
     fn __operands_dfg_mut(&mut self) -> &mut [Value] {
-        match self {
-            InstData::Call(e) => e.__operands_dfg_mut(),
-            InstData::IndirectCall(e) => e.__operands_dfg_mut(),
-            InstData::ICmp(e) => e.__operands_dfg_mut(),
-            InstData::FCmp(e) => e.__operands_dfg_mut(),
-            InstData::Sel(e) => e.__operands_dfg_mut(),
-            InstData::Br(e) => e.__operands_dfg_mut(),
-            InstData::CondBr(e) => e.__operands_dfg_mut(),
-            InstData::Unreachable(e) => e.__operands_dfg_mut(),
-            InstData::Ret(e) => e.__operands_dfg_mut(),
-            InstData::And(e) => e.__operands_dfg_mut(),
-            InstData::Or(e) => e.__operands_dfg_mut(),
-            InstData::Xor(e) => e.__operands_dfg_mut(),
-            InstData::Shl(e) => e.__operands_dfg_mut(),
-            InstData::AShr(e) => e.__operands_dfg_mut(),
-            InstData::LShr(e) => e.__operands_dfg_mut(),
-            InstData::IAdd(e) => e.__operands_dfg_mut(),
-            InstData::ISub(e) => e.__operands_dfg_mut(),
-            InstData::IMul(e) => e.__operands_dfg_mut(),
-            InstData::SDiv(e) => e.__operands_dfg_mut(),
-            InstData::UDiv(e) => e.__operands_dfg_mut(),
-            InstData::SRem(e) => e.__operands_dfg_mut(),
-            InstData::URem(e) => e.__operands_dfg_mut(),
-            InstData::FNeg(e) => e.__operands_dfg_mut(),
-            InstData::FAdd(e) => e.__operands_dfg_mut(),
-            InstData::FSub(e) => e.__operands_dfg_mut(),
-            InstData::FMul(e) => e.__operands_dfg_mut(),
-            InstData::FDiv(e) => e.__operands_dfg_mut(),
-            InstData::FRem(e) => e.__operands_dfg_mut(),
-            InstData::Alloca(e) => e.__operands_dfg_mut(),
-            InstData::Load(e) => e.__operands_dfg_mut(),
-            InstData::Store(e) => e.__operands_dfg_mut(),
-            InstData::Offset(e) => e.__operands_dfg_mut(),
-            InstData::Extract(e) => e.__operands_dfg_mut(),
-            InstData::Insert(e) => e.__operands_dfg_mut(),
-            InstData::ElemPtr(e) => e.__operands_dfg_mut(),
-            InstData::Sext(e) => e.__operands_dfg_mut(),
-            InstData::Zext(e) => e.__operands_dfg_mut(),
-            InstData::Trunc(e) => e.__operands_dfg_mut(),
-            InstData::IToB(e) => e.__operands_dfg_mut(),
-            InstData::BToI(e) => e.__operands_dfg_mut(),
-            InstData::SIToF(e) => e.__operands_dfg_mut(),
-            InstData::UIToF(e) => e.__operands_dfg_mut(),
-            InstData::FToSI(e) => e.__operands_dfg_mut(),
-            InstData::FToUI(e) => e.__operands_dfg_mut(),
-            InstData::FExt(e) => e.__operands_dfg_mut(),
-            InstData::FTrunc(e) => e.__operands_dfg_mut(),
-            InstData::IToP(e) => e.__operands_dfg_mut(),
-            InstData::PToI(e) => e.__operands_dfg_mut(),
-            InstData::IConst(e) => e.__operands_dfg_mut(),
-            InstData::FConst(e) => e.__operands_dfg_mut(),
-            InstData::BConst(e) => e.__operands_dfg_mut(),
-            InstData::Undef(e) => e.__operands_dfg_mut(),
-            InstData::Null(e) => e.__operands_dfg_mut(),
-            InstData::GlobalAddr(e) => e.__operands_dfg_mut(),
-        }
+        for_each_inst!(self, __operands_dfg_mut)
     }
 
     fn result_ty(&self) -> Option<Type> {
-        match self {
-            InstData::Call(e) => e.result_ty(),
-            InstData::IndirectCall(e) => e.result_ty(),
-            InstData::ICmp(e) => e.result_ty(),
-            InstData::FCmp(e) => e.result_ty(),
-            InstData::Sel(e) => e.result_ty(),
-            InstData::Br(e) => e.result_ty(),
-            InstData::CondBr(e) => e.result_ty(),
-            InstData::Unreachable(e) => e.result_ty(),
-            InstData::Ret(e) => e.result_ty(),
-            InstData::And(e) => e.result_ty(),
-            InstData::Or(e) => e.result_ty(),
-            InstData::Xor(e) => e.result_ty(),
-            InstData::Shl(e) => e.result_ty(),
-            InstData::AShr(e) => e.result_ty(),
-            InstData::LShr(e) => e.result_ty(),
-            InstData::IAdd(e) => e.result_ty(),
-            InstData::ISub(e) => e.result_ty(),
-            InstData::IMul(e) => e.result_ty(),
-            InstData::SDiv(e) => e.result_ty(),
-            InstData::UDiv(e) => e.result_ty(),
-            InstData::SRem(e) => e.result_ty(),
-            InstData::URem(e) => e.result_ty(),
-            InstData::FNeg(e) => e.result_ty(),
-            InstData::FAdd(e) => e.result_ty(),
-            InstData::FSub(e) => e.result_ty(),
-            InstData::FMul(e) => e.result_ty(),
-            InstData::FDiv(e) => e.result_ty(),
-            InstData::FRem(e) => e.result_ty(),
-            InstData::Alloca(e) => e.result_ty(),
-            InstData::Load(e) => e.result_ty(),
-            InstData::Store(e) => e.result_ty(),
-            InstData::Offset(e) => e.result_ty(),
-            InstData::Extract(e) => e.result_ty(),
-            InstData::Insert(e) => e.result_ty(),
-            InstData::ElemPtr(e) => e.result_ty(),
-            InstData::Sext(e) => e.result_ty(),
-            InstData::Zext(e) => e.result_ty(),
-            InstData::Trunc(e) => e.result_ty(),
-            InstData::IToB(e) => e.result_ty(),
-            InstData::BToI(e) => e.result_ty(),
-            InstData::SIToF(e) => e.result_ty(),
-            InstData::UIToF(e) => e.result_ty(),
-            InstData::FToSI(e) => e.result_ty(),
-            InstData::FToUI(e) => e.result_ty(),
-            InstData::FExt(e) => e.result_ty(),
-            InstData::FTrunc(e) => e.result_ty(),
-            InstData::IToP(e) => e.result_ty(),
-            InstData::PToI(e) => e.result_ty(),
-            InstData::IConst(e) => e.result_ty(),
-            InstData::FConst(e) => e.result_ty(),
-            InstData::BConst(e) => e.result_ty(),
-            InstData::Undef(e) => e.result_ty(),
-            InstData::Null(e) => e.result_ty(),
-            InstData::GlobalAddr(e) => e.result_ty(),
-        }
+        for_each_inst!(self, result_ty)
     }
 }
 
@@ -467,7 +366,7 @@ impl BlockWithParams {
     /// Gets the block target by itself.
     #[inline]
     pub fn block(&self) -> Block {
-        Block::new(self.data[0].index())
+        Block::key_new(self.data[0].key_index())
     }
 
     /// Gets the block arguments being passed, if any
@@ -1692,7 +1591,43 @@ impl Instruction for NullConstInst {
     }
 }
 
-/// Models aa `globaladdr` instruction.
+/// Models a `stackslot` instruction.
+///
+/// ```raw
+/// %0 = stackslot $x
+/// ```
+#[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
+#[cfg_attr(feature = "enable-serde", derive(Serialize, Deserialize))]
+pub struct StackSlotInst {
+    slot: StackSlot,
+}
+
+impl StackSlotInst {
+    pub(in crate::ir) fn new(slot: StackSlot) -> Self {
+        Self { slot }
+    }
+
+    /// Gets the name of the symbol being referenced
+    pub fn slot(&self) -> StackSlot {
+        self.slot
+    }
+}
+
+impl Instruction for StackSlotInst {
+    fn operands(&self) -> &[Value] {
+        &[]
+    }
+
+    fn __operands_dfg_mut(&mut self) -> &mut [Value] {
+        &mut []
+    }
+
+    fn result_ty(&self) -> Option<Type> {
+        Some(Type::ptr())
+    }
+}
+
+/// Models a `globaladdr` instruction.
 ///
 /// ```raw
 /// %0 = globaladdr @printf

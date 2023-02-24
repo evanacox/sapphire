@@ -34,9 +34,12 @@
 ; }
 ;;
 fn i32 @test(i32) {
+    $0 = stack i32
+    $1 = stack i32
+
 entry(i32 %b):
-    %0 = alloca i32
-    %1 = alloca i32
+    %0 = stackslot $0
+    %1 = stackslot $1
     %2 = iconst i32 4
     %3 = iconst i32 5
     store i32 %2, ptr %0

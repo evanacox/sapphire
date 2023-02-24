@@ -24,6 +24,12 @@ use serde::{Deserialize, Serialize};
 dense_arena_key! {
     struct EntityRef;
 
+    /// A reference to a single slot on a function's pre-allocated stack.
+    ///
+    /// These are defined by the `$name = stack <ty>` directives before the first
+    /// basic block in a function.
+    pub struct StackSlot;
+
     /// A basic reference to some value, either the result of some computation
     /// or an argument into a basic block. Since everything is based around
     /// function-scoped values in SIR, this is effectively equivalent to a
@@ -49,11 +55,11 @@ dense_arena_key! {
 // useful for compact storage in homogenous containers
 impl Value {
     pub(in crate::ir) fn raw_from(key: impl ArenaKey) -> Self {
-        Self::new(key.index())
+        Self::key_new(key.key_index())
     }
 
     pub(in crate::ir) fn raw_into<T: ArenaKey>(self) -> T {
-        T::new(self.index())
+        T::key_new(self.key_index())
     }
 }
 
@@ -61,11 +67,11 @@ impl Value {
 // useful for compact storage in homogenous containers
 impl Inst {
     pub(in crate::ir) fn raw_from(key: impl ArenaKey) -> Self {
-        Self::new(key.index())
+        Self::key_new(key.key_index())
     }
 
     pub(in crate::ir) fn raw_into<T: ArenaKey>(self) -> T {
-        T::new(self.index())
+        T::key_new(self.key_index())
     }
 }
 
@@ -75,6 +81,29 @@ struct BlockParam {
     ty: Type,
     bb: Block,
     index: u32,
+}
+
+/// Contains information about a specific stack slot in a function.
+///
+/// This is just the name/type of it, since that's the only information
+/// actually associated with one.
+#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
+#[cfg_attr(feature = "enable-serde", derive(Serialize, Deserialize))]
+pub struct StackSlotData {
+    name: Str,
+    ty: Type,
+}
+
+impl StackSlotData {
+    /// Gets the name of the stack slot
+    pub fn name(self) -> Str {
+        self.name
+    }
+
+    /// Gets the type that the stack slot is allocating space for
+    pub fn ty(self) -> Type {
+        self.ty
+    }
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
@@ -121,13 +150,14 @@ pub struct DataFlowGraph {
     // this means that (valid) Insts and Values can **always** be used as EntityRefs, but Insts and
     // Values themselves can only be safely converted when its known that the inst referred to has a result
     sigs: UniqueArenaMap<Sig, Signature>,
-    blocks: ArenaMap<Block, BasicBlock>,
+    blocks: ArenaMap<Block, Option<BasicBlock>>,
     block_names: SaHashMap<Str, Block>,
     entities: ArenaMap<EntityRef, EntityData>,
     values: SecondaryMap<Value, ValueDefinition>,
     params: SecondaryMap<Block, SmallVec<[Value; 4]>>,
     debug: SecondaryMap<EntityRef, DebugInfo>,
     uses: SecondaryMap<Value, SmallVec<[Inst; 4]>>,
+    stack_slots: ArenaMap<StackSlot, Option<StackSlotData>>,
 }
 
 impl DataFlowGraph {
@@ -216,7 +246,7 @@ impl DataFlowGraph {
     /// Inserts a basic block with a given name into the DFG. It will start with an empty
     /// list of block parameters, these can be appended later.
     pub fn create_block(&mut self, name: Str) -> Block {
-        let bb = self.blocks.insert(BasicBlock::new(name));
+        let bb = self.blocks.insert(Some(BasicBlock::new(name)));
 
         self.block_names.insert(name, bb);
 
@@ -232,14 +262,21 @@ impl DataFlowGraph {
     pub fn block(&self, block: Block) -> &BasicBlock {
         debug_assert!(self.is_block_inserted(block));
 
-        &self.blocks[block]
+        self.blocks[block].as_ref().unwrap()
+    }
+
+    /// Removes a basic block that already exists.
+    pub fn remove_block(&mut self, block: Block) {
+        debug_assert!(self.is_block_inserted(block));
+
+        let _ = self.blocks.get_mut(block).unwrap().take();
     }
 
     /// Appends a block parameter to a given block.
     pub fn append_block_param(&mut self, bb: Block, ty: Type, debug: DebugInfo) -> Value {
         debug_assert!(self.is_block_inserted(bb));
 
-        let block = &mut self.blocks[bb];
+        let block = self.blocks[bb].as_mut().unwrap();
         let index = block.params().len() as u32;
         let param = BlockParam { bb, ty, index };
         let param = self.entities.insert(EntityData::Param(param));
@@ -392,7 +429,7 @@ impl DataFlowGraph {
     pub fn remove_block_param(&mut self, block: Block, param: Value) {
         debug_assert_eq!(self.uses_of(param), []);
 
-        let block = &mut self.blocks[block];
+        let block = self.blocks[block].as_mut().unwrap();
 
         block.remove_param(param);
 
@@ -508,6 +545,47 @@ impl DataFlowGraph {
         if !self.uses[new].contains(&inst) {
             self.uses[new].push(inst);
         }
+    }
+
+    /// Creates a new stack slot with a given name and type.
+    pub fn create_stack_slot(&mut self, name: Str, ty: Type) -> StackSlot {
+        debug_assert!(
+            !self
+                .stack_slots
+                .values()
+                .any(|data| data.is_some() && data.unwrap().name == name),
+            "no stack slots should have the same name"
+        );
+
+        self.stack_slots.insert(Some(StackSlotData { name, ty }))
+    }
+
+    /// Gets the information about a particular stack slot
+    pub fn stack_slot(&self, slot: StackSlot) -> StackSlotData {
+        self.stack_slots
+            .get(slot)
+            .copied()
+            .flatten()
+            .expect("tried to access invalid stack slot")
+    }
+
+    /// Provides an iterator over every stack slot in the function
+    pub fn stack_slots(&self) -> impl Iterator<Item = StackSlot> + '_ {
+        self.stack_slots
+            .keys()
+            .filter(|key| self.stack_slots[*key].is_some())
+    }
+
+    /// Checks if a given slot is actually a valid stack slot
+    pub fn is_stack_slot_inserted(&self, slot: StackSlot) -> bool {
+        self.stack_slots.contains(slot)
+    }
+
+    /// Removes a stack slot that already exists.
+    pub fn remove_stack_slot(&mut self, slot: StackSlot) {
+        debug_assert!(self.is_stack_slot_inserted(slot));
+
+        let _ = self.stack_slots.get_mut(slot).unwrap().take();
     }
 
     fn maybe_result(&mut self, key: EntityRef, result: Option<Type>) -> (Inst, Option<Value>) {

@@ -85,10 +85,10 @@ impl<'f> SimplifyVisitor<'f> {
                     (true, true) => i_lhs.constant_raw() > i_rhs.constant_raw(),
                     (true, false) => true,
                     (false, true) => false,
-                    (false, false) => lhs.index() > rhs.index(),
+                    (false, false) => lhs.key_index() > rhs.key_index(),
                 }
             }
-            _ => lhs.index() > rhs.index(),
+            _ => lhs.key_index() > rhs.key_index(),
         }
     }
 
@@ -514,6 +514,10 @@ impl<'f> GenericInstVisitor<Option<Simplification<'f>>> for SimplifyVisitor<'f> 
     }
 
     fn visit_null(&mut self, _: &NullConstInst) -> Option<Simplification<'f>> {
+        None
+    }
+
+    fn visit_stackslot(&mut self, _: &StackSlotInst) -> Option<Simplification<'f>> {
         None
     }
 

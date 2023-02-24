@@ -12,7 +12,7 @@ use crate::analysis::{
     ControlFlowGraph, ControlFlowGraphAnalysis, DominatorTree, DominatorTreeAnalysis,
 };
 use crate::arena::SecondaryMap;
-use crate::ir::{Cursor, CursorMut, FuncCursor, Function, Instruction, Value};
+use crate::ir::{Cursor, CursorMut, FuncCursor, Function, InstData, Instruction, StackSlot, Value};
 use crate::pass::{FunctionAnalysisManager, FunctionTransformPass, PreservedAnalyses};
 use crate::transforms::common::{has_side_effect, rewrite_and_remove_block_param};
 use smallvec::SmallVec;
@@ -36,9 +36,16 @@ pub fn aggressive_instruction_dce(
     cfg: &ControlFlowGraph,
     domtree: &DominatorTree,
 ) {
-    let mut cursor = FuncCursor::over(func);
-    let mut live = SecondaryMap::fill(cursor.dfg().next_value(), 0u32);
+    let slots: SmallVec<[StackSlot; 16]> = func.definition().unwrap().dfg.stack_slots().collect();
+    let mut live_stack_slots = SecondaryMap::new();
     let mut params = SmallVec::<[Value; 16]>::new();
+    let mut cursor = FuncCursor::over(func);
+    let mut live = SecondaryMap::fill(cursor.dfg().next_value(), false);
+
+    // need to do this before making the cursor, since cursor borrows mutably
+    for slot in slots.iter().copied() {
+        live_stack_slots.insert(slot, false);
+    }
 
     // iterate in postorder, we see uses before defs
     for &block in domtree.postorder() {
@@ -46,18 +53,22 @@ pub fn aggressive_instruction_dce(
 
         // iterate blocks backwards for same reason, we need to see uses before defs
         while let Some(inst) = cursor.prev_inst() {
-            let is_result_live = cursor
-                .inst_to_result(inst)
-                .map_or(false, |val| live[val] != 0);
+            let is_result_live = cursor.inst_to_result(inst).map_or(false, |val| live[val]);
 
             // this DCE pass considers being used in a branch to be a side effect,
             // but those will be removed later if the block argument itself
             // is unused.
             //
             // other side effects are being used in memory, calls, etc.
-            if has_side_effect(cursor.dfg(), inst) || is_result_live {
-                for operand in cursor.inst_data(inst).operands() {
-                    live[*operand] += 1;
+            if is_result_live || has_side_effect(cursor.dfg(), inst) {
+                let data = cursor.inst_data(inst);
+
+                for operand in data.operands() {
+                    live[*operand] = true;
+                }
+
+                if let InstData::StackSlot(stackslot) = data {
+                    live_stack_slots.insert(stackslot.slot(), true);
                 }
 
                 continue;
@@ -76,15 +87,22 @@ pub fn aggressive_instruction_dce(
             params.extend(cursor.block_params(block).iter().copied());
 
             for param in params.drain(..) {
-                if live[param] != 0 {
-                    continue;
+                if !live[param] {
+                    // we don't need to update liveness information of these, when we get
+                    // to the rewritten branches it will check that info with the
+                    // current state of the branches.
+                    rewrite_and_remove_block_param(&mut cursor, cfg, block, param);
                 }
-
-                // we don't need to update liveness information of these, when we get
-                // to the rewritten branches it will check that info with the
-                // current state of the branches.
-                rewrite_and_remove_block_param(&mut cursor, cfg, block, param);
             }
+        }
+    }
+
+    // we also want to remove any stack slots we didn't end up using.
+    // if we ever found a `stackslot` instruction that was live, we marked the
+    // slot being used as live. if not, we remove it.
+    for slot in slots.iter().copied() {
+        if !live_stack_slots[slot] {
+            cursor.remove_stack_slot(slot);
         }
     }
 }

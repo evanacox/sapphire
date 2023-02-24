@@ -61,6 +61,7 @@ mod map;
 mod secondary;
 mod unique;
 
+pub use iter::*;
 pub use key::ArenaKey;
 pub use map::ArenaMap;
 pub use secondary::SecondaryMap;

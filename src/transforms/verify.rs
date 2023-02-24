@@ -454,21 +454,21 @@ impl<'m> SIRVisitor<'m> for Verifier<'m> {
         verify_assert!(
             self,
             def.dfg.inst_debug(inst),
-            lhs.is_int(),
-            "can only `icmp` on integral types"
+            lhs.is_bool_or_int() || lhs.is_ptr(),
+            "can only `icmp` on integral types and pointers"
         );
         verify_assert!(
             self,
             def.dfg.inst_debug(inst),
-            rhs.is_int(),
-            "can only `icmp` on integral types"
+            rhs.is_bool_or_int() || rhs.is_ptr(),
+            "can only `icmp` on integral types and pointers"
         );
         verify_assert_eq!(
             self,
             def.dfg.inst_debug(inst),
             lhs,
             rhs,
-            "operands to `icmp` must be the same type"
+            "can only `icmp` on integral types and pointers"
         );
     }
 
@@ -1052,6 +1052,15 @@ impl<'m> SIRVisitor<'m> for Verifier<'m> {
     fn visit_undef(&mut self, _: Inst, _: &UndefConstInst, _: &FunctionDefinition) {}
 
     fn visit_null(&mut self, _: Inst, _: &NullConstInst, _: &FunctionDefinition) {}
+
+    fn visit_stackslot(&mut self, inst: Inst, stackslot: &StackSlotInst, def: &FunctionDefinition) {
+        verify_assert!(
+            self,
+            def.dfg.inst_debug(inst),
+            def.dfg.is_stack_slot_inserted(stackslot.slot()),
+            "stack slot must be valid"
+        );
+    }
 
     fn visit_globaladdr(&mut self, _: Inst, _: &GlobalAddrInst, _: &FunctionDefinition) {
         todo!()

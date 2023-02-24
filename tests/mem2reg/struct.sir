@@ -24,8 +24,10 @@
 ; }
 ;;
 fn i64 @main(i32, ptr) {
+  $0 = stack { ptr, i64 }
+
 entry(i32 %argc, ptr %argv):
-  %0 = alloca { ptr, i64 }
+  %0 = stackslot $0
   %1 = iconst i32 42
   %2 = icmp eq i32 %argc, %1
   condbr bool %2, a, b

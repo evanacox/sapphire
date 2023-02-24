@@ -77,12 +77,14 @@ impl FunctionTransformPass for FunctionPassManager {
         let mut preserved = PreservedAnalyses::all();
         am.initialize_for_ir(func);
 
-        for pass in self.passes.iter_mut() {
-            let other = pass.run(func, am);
+        if !func.is_decl() {
+            for pass in self.passes.iter_mut() {
+                let other = pass.run(func, am);
 
-            am.invalidate(func, &other);
+                am.invalidate(func, &other);
 
-            preserved = preserved.intersect(other)
+                preserved = preserved.intersect(other)
+            }
         }
 
         preserved
@@ -118,9 +120,11 @@ impl ModuleTransformPass for FunctionToModulePassAdapter {
 
             fam.initialize_for_ir(func);
 
-            let other = self.pass.run(func, &mut fam);
+            if !func.is_decl() {
+                let other = self.pass.run(func, &mut fam);
 
-            preserved = preserved.intersect(other);
+                preserved = preserved.intersect(other);
+            }
         }
 
         preserved

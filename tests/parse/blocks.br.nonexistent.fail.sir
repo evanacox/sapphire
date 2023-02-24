@@ -1,0 +1,8 @@
+; COMPILE-ERROR: unknown basic block 'bb1'
+fn void @test() {
+bb0:
+  br bb1
+
+bb2:
+  ret void
+}
