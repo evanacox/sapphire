@@ -467,7 +467,7 @@ impl BlockWithParams {
     /// Gets the block target by itself.
     #[inline]
     pub fn block(&self) -> Block {
-        Block::new(self.data[0].index())
+        Block::key_new(self.data[0].key_index())
     }
 
     /// Gets the block arguments being passed, if any

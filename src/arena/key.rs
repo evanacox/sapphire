@@ -30,12 +30,12 @@ pub trait ArenaKey: Copy + Eq + Debug {
     /// type, but this is not *required* for safety. It will just be harder to
     /// track down bugs when indexes overflow and end up referring to the wrong
     /// key instead of panicking.
-    fn new(index: usize) -> Self;
+    fn key_new(index: usize) -> Self;
 
     /// Converts the internal storage type into a `usize` index.
     ///
     /// This conversion should be lossless.
-    fn index(self) -> usize;
+    fn key_index(self) -> usize;
 }
 
 /// Creates a type-safe key for a [`ArenaMap`](crate::arena::ArenaMap) and associated data structures.
@@ -70,14 +70,22 @@ macro_rules! arena_key {
             type Item = $ty;
 
             #[inline]
-            fn new(index: usize) -> Self {
-                use std::convert::TryInto;
+            fn key_new(index: usize) -> Self {
+                #[cfg(debug_assertions)]
+                {
+                    use std::convert::TryInto;
 
-                Self(index.try_into().expect("index is not representable with key type"))
+                    Self(index.try_into().expect("index is not representable with key type"))
+                }
+
+                #[cfg(not(debug_assertions))]
+                {
+                    Self(index as $ty);
+                }
             }
 
             #[inline]
-            fn index(self) -> usize {
+            fn key_index(self) -> usize {
                 self.0 as usize
             }
         }

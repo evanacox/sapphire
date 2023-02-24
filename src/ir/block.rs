@@ -49,13 +49,13 @@ pub struct BasicBlock {
 impl BasicBlock {
     pub(in crate::ir) fn new(name: Str) -> Self {
         Self {
-            data: smallvec![Value::new(name.0 as usize)],
+            data: smallvec![Value::key_new(name.0 as usize)],
         }
     }
 
     /// Gets the name of the block.
     pub fn name(&self) -> Str {
-        Str(self.data[0].index() as u32)
+        Str(self.data[0].key_index() as u32)
     }
 
     /// Gets the parameters of the block.

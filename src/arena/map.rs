@@ -108,7 +108,7 @@ impl<K: ArenaKey, V> ArenaMap<K, V> {
     /// ```
     #[inline]
     pub fn contains(&self, key: K) -> bool {
-        key.index() < self.slots.len()
+        key.key_index() < self.slots.len()
     }
 
     /// Accesses the arena and gets the value associated with
@@ -125,7 +125,7 @@ impl<K: ArenaKey, V> ArenaMap<K, V> {
     /// ```
     #[inline]
     pub fn get(&self, key: K) -> Option<&V> {
-        self.slots.get(key.index())
+        self.slots.get(key.key_index())
     }
 
     /// Accesses the arena and gets the value associated with
@@ -142,7 +142,7 @@ impl<K: ArenaKey, V> ArenaMap<K, V> {
     /// ```
     #[inline]
     pub fn get_mut(&mut self, key: K) -> Option<&mut V> {
-        self.slots.get_mut(key.index())
+        self.slots.get_mut(key.key_index())
     }
 
     /// Adds an item into the arena, and returns a key that can be used to
@@ -160,7 +160,7 @@ impl<K: ArenaKey, V> ArenaMap<K, V> {
     pub fn insert(&mut self, value: V) -> K {
         self.slots.push(value);
 
-        K::new(self.slots.len() - 1)
+        K::key_new(self.slots.len() - 1)
     }
 
     /// Gets the key that *will be* returned by [`Self::insert`] when it's
@@ -184,7 +184,7 @@ impl<K: ArenaKey, V> ArenaMap<K, V> {
     /// ```
     #[inline]
     pub fn next_key(&self) -> K {
-        K::new(self.slots.len())
+        K::key_new(self.slots.len())
     }
 
     /// Gets the number of elements that have been pushed into the arena.
@@ -237,7 +237,7 @@ impl<K: ArenaKey, V> ArenaMap<K, V> {
         let len = self.slots.len();
         let last = self.slots.last()?;
 
-        Some((K::new(len - 1), last))
+        Some((K::key_new(len - 1), last))
     }
 
     /// Returns the last element that was inserted in the map.
@@ -255,7 +255,7 @@ impl<K: ArenaKey, V> ArenaMap<K, V> {
         let len = self.slots.len();
         let last = self.slots.last_mut()?;
 
-        Some((K::new(len - 1), last))
+        Some((K::key_new(len - 1), last))
     }
 
     /// Reserves capacity for at least `additional` more elements to be inserted. This
@@ -425,14 +425,14 @@ impl<K: ArenaKey, T> Index<K> for ArenaMap<K, T> {
 
     fn index(&self, key: K) -> &Self::Output {
         self.slots
-            .get(key.index())
+            .get(key.key_index())
             .expect("tried to access invalid key on `ArenaMap`")
     }
 }
 
 impl<K: ArenaKey, T> IndexMut<K> for ArenaMap<K, T> {
     fn index_mut(&mut self, key: K) -> &mut Self::Output {
-        &mut self.slots[key.index()]
+        &mut self.slots[key.key_index()]
     }
 }
 
@@ -580,7 +580,7 @@ mod tests {
         m.insert(33);
 
         for (i, (key, value)) in m.into_iter().enumerate() {
-            assert_eq!(key.index(), i);
+            assert_eq!(key.key_index(), i);
 
             match i {
                 0 => assert_eq!(value, 12),
@@ -600,7 +600,7 @@ mod tests {
         let mut i = 0;
 
         for (key, value) in m.iter() {
-            assert_eq!(key.index(), i);
+            assert_eq!(key.key_index(), i);
             match i {
                 0 => assert_eq!(*value, 12),
                 1 => assert_eq!(*value, 33),
@@ -612,7 +612,7 @@ mod tests {
         i = 0;
 
         for (key_mut, value_mut) in m.iter_mut() {
-            assert_eq!(key_mut.index(), i);
+            assert_eq!(key_mut.key_index(), i);
             match i {
                 0 => assert_eq!(*value_mut, 12),
                 1 => assert_eq!(*value_mut, 33),
@@ -632,7 +632,7 @@ mod tests {
         let mut i = 2;
         for (key, value) in m.iter().rev() {
             i -= 1;
-            assert_eq!(key.index(), i);
+            assert_eq!(key.key_index(), i);
             match i {
                 0 => assert_eq!(*value, 12),
                 1 => assert_eq!(*value, 33),
@@ -644,7 +644,7 @@ mod tests {
 
         for (key, value) in m.iter_mut().rev() {
             i -= 1;
-            assert_eq!(key.index(), i);
+            assert_eq!(key.key_index(), i);
             match i {
                 0 => assert_eq!(*value, 12),
                 1 => assert_eq!(*value, 33),
@@ -661,7 +661,7 @@ mod tests {
         m.insert(33);
 
         for (i, key) in m.keys().enumerate() {
-            assert_eq!(key.index(), i);
+            assert_eq!(key.key_index(), i);
         }
     }
 
@@ -674,7 +674,7 @@ mod tests {
         let mut i = 2;
         for key in m.keys().rev() {
             i -= 1;
-            assert_eq!(key.index(), i);
+            assert_eq!(key.key_index(), i);
         }
     }
 
@@ -751,14 +751,14 @@ mod tests {
     #[test]
     fn contiguous_keys() {
         let mut m: ArenaMap<E, i32> = ArenaMap::new();
-        let mut prev: E = E::new(0);
+        let mut prev: E = E::key_new(0);
 
         for i in 0..100 {
             m.insert(i);
         }
 
         for key in m.keys().skip(1) {
-            assert_eq!(prev.index(), key.index() - 1);
+            assert_eq!(prev.key_index(), key.key_index() - 1);
 
             prev = key;
         }

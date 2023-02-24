@@ -85,10 +85,10 @@ impl<'f> SimplifyVisitor<'f> {
                     (true, true) => i_lhs.constant_raw() > i_rhs.constant_raw(),
                     (true, false) => true,
                     (false, true) => false,
-                    (false, false) => lhs.index() > rhs.index(),
+                    (false, false) => lhs.key_index() > rhs.key_index(),
                 }
             }
-            _ => lhs.index() > rhs.index(),
+            _ => lhs.key_index() > rhs.key_index(),
         }
     }
 

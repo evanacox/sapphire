@@ -49,11 +49,11 @@ dense_arena_key! {
 // useful for compact storage in homogenous containers
 impl Value {
     pub(in crate::ir) fn raw_from(key: impl ArenaKey) -> Self {
-        Self::new(key.index())
+        Self::key_new(key.key_index())
     }
 
     pub(in crate::ir) fn raw_into<T: ArenaKey>(self) -> T {
-        T::new(self.index())
+        T::key_new(self.key_index())
     }
 }
 
@@ -61,11 +61,11 @@ impl Value {
 // useful for compact storage in homogenous containers
 impl Inst {
     pub(in crate::ir) fn raw_from(key: impl ArenaKey) -> Self {
-        Self::new(key.index())
+        Self::key_new(key.key_index())
     }
 
     pub(in crate::ir) fn raw_into<T: ArenaKey>(self) -> T {
-        T::new(self.index())
+        T::key_new(self.key_index())
     }
 }
 

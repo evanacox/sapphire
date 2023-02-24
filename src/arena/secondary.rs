@@ -207,7 +207,7 @@ impl<K: ArenaKey, V> SecondaryMap<K, V> {
         let mut count = 0;
 
         for key in primary.keys() {
-            debug_assert_eq!(key.index(), slots.len());
+            debug_assert_eq!(key.key_index(), slots.len());
 
             match f(primary, key) {
                 Some(val) => {
@@ -236,11 +236,11 @@ impl<K: ArenaKey, V> SecondaryMap<K, V> {
     where
         V: Clone,
     {
-        let mut slots = Vec::with_capacity(upto.index());
-        let mut initialized = SmallBitVec::with_capacity(upto.index());
+        let mut slots = Vec::with_capacity(upto.key_index());
+        let mut initialized = SmallBitVec::with_capacity(upto.key_index());
 
-        for key in Keys::<K>::with_len(upto.index()) {
-            debug_assert_eq!(key.index(), slots.len());
+        for key in Keys::<K>::with_len(upto.key_index()) {
+            debug_assert_eq!(key.key_index(), slots.len());
 
             slots.push(MaybeUninit::new(value.clone()));
             initialized.push(true);
@@ -249,7 +249,7 @@ impl<K: ArenaKey, V> SecondaryMap<K, V> {
         Self {
             slots,
             initialized,
-            len: upto.index(),
+            len: upto.key_index(),
             _unused: PhantomData::default(),
         }
     }
@@ -289,7 +289,7 @@ impl<K: ArenaKey, V> SecondaryMap<K, V> {
     /// assert_eq!(secondary.insert(k1, 13), Some(16)); // got previous
     /// ```
     pub fn insert(&mut self, key: K, value: V) -> Option<V> {
-        let idx = key.index();
+        let idx = key.key_index();
 
         // push-like case, going one past what we already have. we just use `push`
         // directly here for optimization purposes
@@ -387,7 +387,7 @@ impl<K: ArenaKey, V> SecondaryMap<K, V> {
                 let old = mem::replace(value, MaybeUninit::uninit());
 
                 // mark it uninitialized so future reads dont get uninit
-                self.initialized.set(key.index(), false);
+                self.initialized.set(key.key_index(), false);
 
                 // return the value
                 Some(unsafe { old.assume_init() })
@@ -572,7 +572,7 @@ impl<K: ArenaKey, V> SecondaryMap<K, V> {
             .iter()
             .enumerate()
             .filter_uninitialized_slots(self.initialized.iter())
-            .map(|(i, val)| (K::new(i), unsafe { val.assume_init_ref() }))
+            .map(|(i, val)| (K::key_new(i), unsafe { val.assume_init_ref() }))
     }
 
     /// Returns an iterator that iterates over the values in the arena,
@@ -594,7 +594,7 @@ impl<K: ArenaKey, V> SecondaryMap<K, V> {
             .iter_mut()
             .enumerate()
             .filter_uninitialized_slots(self.initialized.iter())
-            .map(|(i, val)| (K::new(i), unsafe { val.assume_init_mut() }))
+            .map(|(i, val)| (K::key_new(i), unsafe { val.assume_init_mut() }))
     }
 
     #[inline]
@@ -603,7 +603,7 @@ impl<K: ArenaKey, V> SecondaryMap<K, V> {
         // implementations between a `SmallBitVec` and a `Vec`
         debug_assert_eq!(self.initialized.len(), self.slots.len());
 
-        self.initialized.get(key.index()) == Some(true)
+        self.initialized.get(key.key_index()) == Some(true)
     }
 
     #[inline]
@@ -618,7 +618,7 @@ impl<K: ArenaKey, V> SecondaryMap<K, V> {
     #[inline]
     fn get_slot(&self, key: K) -> Option<&MaybeUninit<V>> {
         if self.is_initialized(key) {
-            Some(&self.slots[key.index()])
+            Some(&self.slots[key.key_index()])
         } else {
             None
         }
@@ -627,7 +627,7 @@ impl<K: ArenaKey, V> SecondaryMap<K, V> {
     #[inline]
     fn get_slot_mut(&mut self, key: K) -> Option<&mut MaybeUninit<V>> {
         if self.is_initialized(key) {
-            Some(&mut self.slots[key.index()])
+            Some(&mut self.slots[key.key_index()])
         } else {
             None
         }
@@ -767,7 +767,7 @@ impl<K: ArenaKey, V> IntoIterator for SecondaryMap<K, V> {
                 .into_iter()
                 .filter_uninitialized_slots(bits.into_iter())
                 .enumerate()
-                .map(|(i, val)| (K::new(i), unsafe { val.assume_init() })),
+                .map(|(i, val)| (K::key_new(i), unsafe { val.assume_init() })),
         }
     }
 }
@@ -1101,7 +1101,7 @@ mod tests {
             let key = loop {
                 let k: E = map.insert(1);
 
-                if k.index() == 100 {
+                if k.key_index() == 100 {
                     break k;
                 }
             };
@@ -1146,7 +1146,7 @@ mod tests {
             let key = loop {
                 let k: E = map.insert(1);
 
-                if k.index() == 100 {
+                if k.key_index() == 100 {
                     break k;
                 }
             };

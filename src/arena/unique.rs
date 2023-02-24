@@ -182,7 +182,7 @@ where
     /// ```
     #[inline]
     pub fn next_key(&self) -> K {
-        K::new(self.slots.len())
+        K::key_new(self.slots.len())
     }
 
     /// Gets the number of elements that have been pushed into the arena.

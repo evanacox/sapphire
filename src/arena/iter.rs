@@ -37,7 +37,7 @@ macro_rules! pair_iter_impl {
             type Item = (K, $t);
 
             fn next(&mut self) -> Option<Self::Item> {
-                self.inner.next().map(|(i, val)| (K::new(i), val))
+                self.inner.next().map(|(i, val)| (K::key_new(i), val))
             }
 
             fn size_hint(&self) -> (usize, Option<usize>) {
@@ -52,7 +52,7 @@ macro_rules! pair_iter_impl {
             $(V: $lt)*
         {
             fn next_back(&mut self) -> Option<Self::Item> {
-                self.inner.next_back().map(|(i, val)| (K::new(i), val))
+                self.inner.next_back().map(|(i, val)| (K::key_new(i), val))
             }
         }
 
@@ -154,7 +154,7 @@ impl<K: ArenaKey> Iterator for Keys<K> {
         if self.pos < self.reverse_pos {
             self.pos += 1;
 
-            Some(K::new(self.pos - 1))
+            Some(K::key_new(self.pos - 1))
         } else {
             None
         }
@@ -172,7 +172,7 @@ impl<K: ArenaKey> DoubleEndedIterator for Keys<K> {
         if self.pos < self.reverse_pos {
             self.reverse_pos -= 1;
 
-            Some(K::new(self.reverse_pos))
+            Some(K::key_new(self.reverse_pos))
         } else {
             None
         }
