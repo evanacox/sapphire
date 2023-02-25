@@ -1,0 +1,45 @@
+; MATCH-SECTION
+;
+; fn i32 @main(i32, ptr) {
+; entry(i32 %argc, ptr %argv):
+;   %0 = iconst i32 42
+;   %1 = icmp eq i32 %argc, %0
+;   condbr bool %1, a, b
+;
+; a:
+;   %2 = iconst i32 6
+;   br merge(i32 %2)
+;
+; b:
+;   %3 = iconst i32 5
+;   br merge(i32 %3)
+;
+; merge(i32 %4):
+;   ret i32 %4
+; }
+;;
+fn i32 @main(i32, ptr) {
+    $0 = stack i32
+
+entry(i32 %argc, ptr %argv):
+    %0 = iconst i32 42
+    %1 = icmp eq i32 %argc, %0
+    condbr bool %1, a, b
+
+a:
+    %2 = iconst i32 6
+    %3 = stackslot $0
+    store i32 %2, ptr %3
+    br merge
+
+b:
+    %4 = iconst i32 5
+    %5 = stackslot $0
+    store i32 %4, ptr %5
+    br merge
+
+merge:
+    %6 = stackslot $0
+    %7 = load i32, ptr %6
+    ret i32 %7
+}
