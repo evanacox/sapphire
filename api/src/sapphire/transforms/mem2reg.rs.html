@@ -609,6 +609,71 @@
 <a href="#606" id="606">606</a>
 <a href="#607" id="607">607</a>
 <a href="#608" id="608">608</a>
+<a href="#609" id="609">609</a>
+<a href="#610" id="610">610</a>
+<a href="#611" id="611">611</a>
+<a href="#612" id="612">612</a>
+<a href="#613" id="613">613</a>
+<a href="#614" id="614">614</a>
+<a href="#615" id="615">615</a>
+<a href="#616" id="616">616</a>
+<a href="#617" id="617">617</a>
+<a href="#618" id="618">618</a>
+<a href="#619" id="619">619</a>
+<a href="#620" id="620">620</a>
+<a href="#621" id="621">621</a>
+<a href="#622" id="622">622</a>
+<a href="#623" id="623">623</a>
+<a href="#624" id="624">624</a>
+<a href="#625" id="625">625</a>
+<a href="#626" id="626">626</a>
+<a href="#627" id="627">627</a>
+<a href="#628" id="628">628</a>
+<a href="#629" id="629">629</a>
+<a href="#630" id="630">630</a>
+<a href="#631" id="631">631</a>
+<a href="#632" id="632">632</a>
+<a href="#633" id="633">633</a>
+<a href="#634" id="634">634</a>
+<a href="#635" id="635">635</a>
+<a href="#636" id="636">636</a>
+<a href="#637" id="637">637</a>
+<a href="#638" id="638">638</a>
+<a href="#639" id="639">639</a>
+<a href="#640" id="640">640</a>
+<a href="#641" id="641">641</a>
+<a href="#642" id="642">642</a>
+<a href="#643" id="643">643</a>
+<a href="#644" id="644">644</a>
+<a href="#645" id="645">645</a>
+<a href="#646" id="646">646</a>
+<a href="#647" id="647">647</a>
+<a href="#648" id="648">648</a>
+<a href="#649" id="649">649</a>
+<a href="#650" id="650">650</a>
+<a href="#651" id="651">651</a>
+<a href="#652" id="652">652</a>
+<a href="#653" id="653">653</a>
+<a href="#654" id="654">654</a>
+<a href="#655" id="655">655</a>
+<a href="#656" id="656">656</a>
+<a href="#657" id="657">657</a>
+<a href="#658" id="658">658</a>
+<a href="#659" id="659">659</a>
+<a href="#660" id="660">660</a>
+<a href="#661" id="661">661</a>
+<a href="#662" id="662">662</a>
+<a href="#663" id="663">663</a>
+<a href="#664" id="664">664</a>
+<a href="#665" id="665">665</a>
+<a href="#666" id="666">666</a>
+<a href="#667" id="667">667</a>
+<a href="#668" id="668">668</a>
+<a href="#669" id="669">669</a>
+<a href="#670" id="670">670</a>
+<a href="#671" id="671">671</a>
+<a href="#672" id="672">672</a>
+<a href="#673" id="673">673</a>
 </pre><pre class="rust"><code><span class="comment">//======---------------------------------------------------------------======//
 //                                                                           //
 // Copyright 2022 Evan Cox &lt;evanacox00@gmail.com&gt;. All rights reserved.      //
@@ -620,6 +685,7 @@
 //======---------------------------------------------------------------======//
 
 </span><span class="kw">use </span><span class="kw">crate</span>::analysis::<span class="kw-2">*</span>;
+<span class="kw">use </span><span class="kw">crate</span>::arena::SecondaryMap;
 <span class="kw">use </span><span class="kw">crate</span>::ir::<span class="kw-2">*</span>;
 <span class="kw">use </span><span class="kw">crate</span>::pass::{FunctionAnalysisManager, FunctionTransformPass, PreservedAnalyses};
 <span class="kw">use </span><span class="kw">crate</span>::transforms::common::rewrite_pad_branch_argument;
@@ -678,10 +744,16 @@
     df: <span class="kw-2">&amp;</span>DominanceFrontier,
 ) {
     <span class="kw">let </span><span class="kw-2">mut </span>cursor = FuncCursor::over(func);
-    <span class="kw">let </span>slots = find_promotable_slots(<span class="kw-2">&amp;mut </span>cursor, domtree);
+
+    <span class="comment">// remove redundant stackslots, move all to entry block
+    </span>stackslot_merge(<span class="kw-2">&amp;mut </span>cursor, domtree);
+
+    <span class="comment">// find promotable stack slots and insert block params for them
+    </span><span class="kw">let </span>slots = find_promotable_slots(<span class="kw-2">&amp;mut </span>cursor, domtree);
     <span class="kw">let </span>phis = insert_phis(<span class="kw-2">&amp;mut </span>cursor, <span class="kw-2">&amp;</span>slots, df);
 
-    rename_variables(<span class="kw-2">&amp;mut </span>cursor, <span class="kw-2">&amp;</span>slots, <span class="kw-2">&amp;</span>phis, cfg, domtree);
+    <span class="comment">// replace loads/stores with usage of phis, reaching defs and block arguments
+    </span>rename_variables(<span class="kw-2">&amp;mut </span>cursor, <span class="kw-2">&amp;</span>slots, <span class="kw-2">&amp;</span>phis, cfg, domtree);
 
     <span class="comment">// remove the `stackslot` instructions. while this could be handled by DCE,
     // we may as well do it here while we know exactly which ones we just made dead
@@ -695,6 +767,64 @@
         cursor.goto_inst(inst);
         cursor.remove_inst();
         cursor.remove_stack_slot(slot);
+    }
+}
+
+<span class="comment">// this is a mini GVN pass specifically for moving all stack-slot references into
+// the entry block and removing duplicates.
+//
+// this algorithm treats a stackslot inst as the identity of a &#39;variable&#39; for efficiency
+// reasons, so having multiple insts that refer to the same one makes the algorithm fall apart.
+</span><span class="kw">fn </span>stackslot_merge(cursor: <span class="kw-2">&amp;mut </span>FuncCursor&lt;<span class="lifetime">&#39;_</span>&gt;, domtree: <span class="kw-2">&amp;</span>DominatorTree) {
+    <span class="kw">let </span>entry = cursor.entry_block().unwrap();
+    <span class="kw">let </span><span class="kw-2">mut </span>seen = SecondaryMap::new();
+    <span class="kw">let </span><span class="kw-2">mut </span>previous_insertion_point = <span class="prelude-val">None</span>;
+
+    <span class="kw">for </span>block <span class="kw">in </span>domtree.reverse_postorder() {
+        cursor.goto_before(block);
+
+        <span class="kw">while let </span><span class="prelude-val">Some</span>(inst) = cursor.next_inst() {
+            <span class="kw">let </span>slot = <span class="kw">match </span>cursor.inst_data(inst) {
+                InstData::StackSlot(slot) =&gt; slot.clone(),
+                <span class="kw">_ </span>=&gt; <span class="kw">continue</span>,
+            };
+
+            <span class="kw">let </span>result = cursor.inst_to_result(inst).unwrap();
+            <span class="kw">let </span>equivalent = <span class="kw">if let </span><span class="prelude-val">Some</span>(slot) = seen.get(slot.slot()) {
+                <span class="kw-2">*</span>slot
+            } <span class="kw">else </span>{
+                <span class="kw">match </span>previous_insertion_point {
+                    <span class="prelude-val">Some</span>(inst) =&gt; {
+                        <span class="comment">// if we have inserted a stackslot, we insert after it
+                        </span>cursor.goto_inst(inst);
+                    }
+                    <span class="prelude-val">None </span>=&gt; {
+                        <span class="comment">// if we haven&#39;t inserted any stackslots yet, insert at the beginning of the entry block
+                        </span>cursor.goto_before(entry);
+                    }
+                }
+
+                <span class="comment">// in both cases, need to go to next inst before inserting
+                </span>cursor.next_inst();
+
+                <span class="comment">// insert our new stackslot ref
+                </span><span class="kw">let </span>dbg = cursor.inst_debug(inst);
+                <span class="kw">let </span>new = cursor.insert().stackslot(slot.slot(), dbg);
+
+                seen.insert(slot.slot(), new);
+
+                <span class="comment">// always will be `Some(inst)`
+                </span>previous_insertion_point = cursor.value_to_inst(new);
+
+                cursor.goto_inst(inst);
+
+                new
+            };
+
+            <span class="comment">// replace the one we just found with the one we made, and then remove the one we just found.
+            </span>cursor.replace_uses_with(result, equivalent);
+            cursor.remove_inst_and_move_back();
+        }
     }
 }
 
@@ -1228,4 +1358,4 @@ renderMathInElement(document.body, {
     ]
 });
 </script>
-<div id="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="sapphire" data-themes="" data-resource-suffix="" data-rustdoc-version="1.69.0-nightly (07c993eba 2023-02-23)" data-search-js="search-14421e1532aead08.js" data-settings-js="settings-f0c5c39777a9a2f6.js" data-settings-css="settings-0bcba95ff279c1db.css" ></div></body></html>
+<div id="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="sapphire" data-themes="" data-resource-suffix="" data-rustdoc-version="1.69.0-nightly (c5c7d2b37 2023-02-24)" data-search-js="search-14421e1532aead08.js" data-settings-js="settings-f0c5c39777a9a2f6.js" data-settings-css="settings-0bcba95ff279c1db.css" ></div></body></html>
