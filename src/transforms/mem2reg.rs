@@ -9,6 +9,7 @@
 //======---------------------------------------------------------------======//
 
 use crate::analysis::*;
+use crate::arena::SecondaryMap;
 use crate::ir::*;
 use crate::pass::{FunctionAnalysisManager, FunctionTransformPass, PreservedAnalyses};
 use crate::transforms::common::rewrite_pad_branch_argument;
@@ -67,9 +68,15 @@ pub fn mem2reg(
     df: &DominanceFrontier,
 ) {
     let mut cursor = FuncCursor::over(func);
+
+    // remove redundant stackslots, move all to entry block
+    stackslot_merge(&mut cursor, domtree);
+
+    // find promotable stack slots and insert block params for them
     let slots = find_promotable_slots(&mut cursor, domtree);
     let phis = insert_phis(&mut cursor, &slots, df);
 
+    // replace loads/stores with usage of phis, reaching defs and block arguments
     rename_variables(&mut cursor, &slots, &phis, cfg, domtree);
 
     // remove the `stackslot` instructions. while this could be handled by DCE,
@@ -84,6 +91,64 @@ pub fn mem2reg(
         cursor.goto_inst(inst);
         cursor.remove_inst();
         cursor.remove_stack_slot(slot);
+    }
+}
+
+// this is a mini GVN pass specifically for moving all stack-slot references into
+// the entry block and removing duplicates.
+//
+// this algorithm treats a stackslot inst as the identity of a 'variable' for efficiency
+// reasons, so having multiple insts that refer to the same one makes the algorithm fall apart.
+fn stackslot_merge(cursor: &mut FuncCursor<'_>, domtree: &DominatorTree) {
+    let entry = cursor.entry_block().unwrap();
+    let mut seen = SecondaryMap::new();
+    let mut previous_insertion_point = None;
+
+    for block in domtree.reverse_postorder() {
+        cursor.goto_before(block);
+
+        while let Some(inst) = cursor.next_inst() {
+            let slot = match cursor.inst_data(inst) {
+                InstData::StackSlot(slot) => slot.clone(),
+                _ => continue,
+            };
+
+            let result = cursor.inst_to_result(inst).unwrap();
+            let equivalent = if let Some(slot) = seen.get(slot.slot()) {
+                *slot
+            } else {
+                match previous_insertion_point {
+                    Some(inst) => {
+                        // if we have inserted a stackslot, we insert after it
+                        cursor.goto_inst(inst);
+                    }
+                    None => {
+                        // if we haven't inserted any stackslots yet, insert at the beginning of the entry block
+                        cursor.goto_before(entry);
+                    }
+                }
+
+                // in both cases, need to go to next inst before inserting
+                cursor.next_inst();
+
+                // insert our new stackslot ref
+                let dbg = cursor.inst_debug(inst);
+                let new = cursor.insert().stackslot(slot.slot(), dbg);
+
+                seen.insert(slot.slot(), new);
+
+                // always will be `Some(inst)`
+                previous_insertion_point = cursor.value_to_inst(new);
+
+                cursor.goto_inst(inst);
+
+                new
+            };
+
+            // replace the one we just found with the one we made, and then remove the one we just found.
+            cursor.replace_uses_with(result, equivalent);
+            cursor.remove_inst_and_move_back();
+        }
     }
 }
 

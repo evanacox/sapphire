@@ -1,0 +1,22 @@
+; MATCH-SECTION
+;
+; fn i32 @main(i32, ptr) {
+;   $x = stack i32
+;
+; entry(i32 %argc, ptr %argv):
+;   %0 = stackslot $x
+;   store i32 %argc, ptr %0
+;   %1 = load i32, ptr %0
+;   ret i32 %1
+; }
+;;
+fn i32 @main(i32, ptr) {
+  $x = stack i32
+
+entry(i32 %argc, ptr %argv):
+  %0 = stackslot $x
+  store i32 %argc, ptr %0
+  %1 = stackslot $x
+  %2 = load i32, ptr %1
+  ret i32 %2
+}

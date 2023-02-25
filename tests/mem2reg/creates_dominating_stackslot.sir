@@ -1,0 +1,51 @@
+; MATCH-SECTION
+;
+; fn void @leak(ptr)
+;
+; fn i32 @test(i32) {
+;   $0 = stack i32
+;
+; entry(i32 %x):
+;   %0 = stackslot $0
+;   %1 = iconst i32 42
+;   %2 = icmp eq i32 %x, %1
+;   condbr bool %2, a, b
+;
+; a:
+;   call void @leak(ptr %0)
+;   br merge
+;
+; b:
+;   call void @leak(ptr %0)
+;   br merge
+;
+; merge:
+;   call void @leak(ptr %0)
+;   ret i32 %1
+; }
+;;
+fn void @leak(ptr)
+
+fn i32 @test(i32) {
+    $0 = stack i32
+
+entry(i32 %x):
+    %0 = iconst i32 42
+    %1 = icmp eq i32 %x, %0
+    condbr bool %1, a, b
+
+a:
+    %2 = stackslot $0
+    call void @leak(ptr %2)
+    br merge
+
+b:
+    %3 = stackslot $0
+    call void @leak(ptr %3)
+    br merge
+
+merge:
+    %4 = stackslot $0
+    call void @leak(ptr %4)
+    ret i32 %0
+}
