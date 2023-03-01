@@ -50,7 +50,7 @@ pub struct BaseOptions {
     pub inputs: Vec<PathBuf>,
 }
 
-/// Returns a [`bpaf::OptionParser`] preconfigured with the standard Sapphire
+/// Returns a [`OptionParser`] preconfigured with the standard Sapphire
 /// options and additional tool-specific options.
 pub fn tool_with<T>(
     description: &'static str,
@@ -65,7 +65,7 @@ pub fn tool_with<T>(
         .usage(usage)
 }
 
-/// Returns a [`bpaf::OptionParser`] preconfigured with the standard Sapphire
+/// Returns a [`OptionParser`] preconfigured with the standard Sapphire
 /// options and nothing else.
 pub fn tool<T>(description: &'static str, usage: &'static str) -> OptionParser<BaseOptions> {
     default()
@@ -163,4 +163,13 @@ pub fn jobs() -> impl Parser<Option<usize>> {
         .help("the number of concurrent jobs to run tests on")
         .argument::<usize>("JOBS")
         .optional()
+}
+
+/// Gets a list of passes to run over the IR
+pub fn passes() -> impl Parser<Vec<String>> {
+    bpaf::long("passes")
+        .short('p')
+        .help("a pass to run over the input")
+        .argument::<String>("PASS-NAME")
+        .many()
 }

@@ -9,13 +9,13 @@
 //======---------------------------------------------------------------======//
 
 use sapphire::analysis::*;
-use sapphire::cli;
+use sapphire::cli::{emit_machine_format, passes, tool_with};
 use sapphire::ir::Module;
 use sapphire::pass::*;
 use sapphire::transforms::*;
 use std::fs;
 
-fn run_pass(mut module: Module) {
+fn run_passes(mut module: Module, passes: &[String]) {
     let mut fam = FunctionAnalysisManager::new();
     fam.add_analysis(ControlFlowGraphAnalysis);
     fam.add_analysis(DominatorTreeAnalysis);
@@ -26,7 +26,19 @@ fn run_pass(mut module: Module) {
     mam.add_analysis(ModuleStringifyAnalysis);
 
     let mut fpm = FunctionPassManager::new();
-    fpm.add_pass(Mem2RegPass);
+
+    for pass in passes {
+        match pass.as_str() {
+            "mem2reg" => fpm.add_pass(Mem2RegPass),
+            "dce" => fpm.add_pass(DeadCodeEliminationPass),
+            "gvn" => fpm.add_pass(GlobalValueNumberingPass),
+            "simplifyinst" => fpm.add_pass(SimplifyInstPass),
+            "split-crit-edges" => fpm.add_pass(SplitCriticalEdges),
+            _ => {
+                unreachable!()
+            }
+        }
+    }
 
     let mut mpm = ModulePassManager::new();
     mpm.add_pass(VerifyModulePass);
@@ -41,10 +53,10 @@ fn run_pass(mut module: Module) {
 }
 
 fn main() {
-    let (_, base) = cli::tool_with(
+    let ((_, passes), base) = tool_with(
         "static compiler for Sapphire IR",
         "Usage: sirc [options] <input ir>",
-        cli::emit_machine_format(),
+        bpaf::construct!(emit_machine_format(), passes()),
     )
     .run();
 
@@ -54,7 +66,7 @@ fn main() {
         let filename = input.into_os_string().into_string().unwrap();
 
         match sapphire::parse_sir(&filename, &source) {
-            Ok(module) => run_pass(module),
+            Ok(module) => run_passes(module, &passes),
             Err(e) => {
                 eprintln!("failed to parse: {e}");
             }
