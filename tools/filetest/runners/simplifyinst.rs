@@ -9,7 +9,7 @@
 //======---------------------------------------------------------------======//
 
 use crate::runners::optimization_runner::*;
-use crate::subtest::{Subtest, TestResult};
+use crate::subtest::Subtest;
 use sapphire::transforms::SimplifyInstPass;
 
 runner_for_opt!(

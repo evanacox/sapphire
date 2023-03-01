@@ -9,7 +9,7 @@
 //======---------------------------------------------------------------======//
 
 use crate::runners::optimization_runner::*;
-use crate::subtest::{Subtest, TestResult};
+use crate::subtest::Subtest;
 use sapphire::transforms::Mem2RegPass;
 
 runner_for_opt!(mem2reg, FunctionToModulePassAdapter::adapt(Mem2RegPass));
