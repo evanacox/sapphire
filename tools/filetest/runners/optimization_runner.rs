@@ -11,6 +11,7 @@
 macro_rules! runner_for_opt {
     ($name:ident, $opt:expr) => {
         fn $name(name: &str, content: &str) -> crate::subtest::TestResult {
+            use crate::subtest::TestResult;
             use ::sapphire::analysis::*;
             use ::sapphire::pass::*;
             use ::sapphire::transforms;

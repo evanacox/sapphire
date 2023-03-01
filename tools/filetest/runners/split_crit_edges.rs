@@ -1,6 +1,6 @@
 //======---------------------------------------------------------------======//
 //                                                                           //
-// Copyright 2022-2023 Evan Cox <evanacox00@gmail.com>. All rights reserved. //
+// Copyright 2022 Evan Cox <evanacox00@gmail.com>. All rights reserved.      //
 //                                                                           //
 // Use of this source code is governed by a BSD-style license that can be    //
 // found in the LICENSE.txt file at the root of this project, or at the      //
@@ -8,21 +8,15 @@
 //                                                                           //
 //======---------------------------------------------------------------======//
 
-mod dce;
-mod domtree;
-mod flowgraph;
-mod gvn;
-mod mem2reg;
-mod optimization_runner;
-mod parse;
-mod simplifyinst;
-mod split_crit_edges;
+use crate::runners::optimization_runner::*;
+use crate::subtest::Subtest;
+use sapphire::transforms::SplitCriticalEdges;
 
-pub use dce::*;
-pub use domtree::*;
-pub use flowgraph::*;
-pub use gvn::*;
-pub use mem2reg::*;
-pub use parse::*;
-pub use simplifyinst::*;
-pub use split_crit_edges::*;
+runner_for_opt!(
+    split_crit_edges,
+    FunctionToModulePassAdapter::adapt(SplitCriticalEdges)
+);
+
+pub const fn split_crit_edges_subtest() -> Subtest {
+    Subtest::new("split-crit-edges", split_crit_edges)
+}

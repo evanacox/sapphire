@@ -1,0 +1,38 @@
+; MATCH-SECTION
+;
+; fn void @test(bool) {
+; entry(bool %0):
+;   condbr bool %0, bb0, bb1
+;
+; bb0:
+;   condbr bool %0, bb2, bb0.bb3.split_crit_edge
+;
+; bb0.bb3.split_crit_edge:
+;   br bb3
+;
+; bb1:
+;   br bb3
+;
+; bb2:
+;   ret void
+;
+; bb3:
+;   ret void
+; }
+;;
+fn void @test(bool) {
+entry(bool %0):
+    condbr bool %0, bb0, bb1
+
+bb0:
+    condbr bool %0, bb2, bb3
+
+bb1:
+    br bb3
+
+bb2:
+    ret void
+
+bb3:
+    ret void
+}

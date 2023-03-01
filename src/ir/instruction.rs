@@ -378,6 +378,16 @@ impl BlockWithParams {
         }
     }
 
+    /// Consumes `self`, and replaces the block being targeted with `block`.
+    ///
+    /// This is intended to be used for re-targeting branch instructions.
+    #[inline]
+    pub fn rewrite_to(mut self, block: Block) -> Self {
+        self.data[0] = Value::raw_from(block);
+
+        self
+    }
+
     #[inline]
     pub(in crate::ir) fn args_mut(&mut self) -> &mut [Value] {
         match self.data.get_mut(1..) {
@@ -673,6 +683,11 @@ impl BrInst {
     pub(in crate::ir) fn replace_branch_arg(&mut self, idx: usize, new: Value) {
         self.target.args_mut()[idx] = new;
     }
+
+    #[inline]
+    pub(in crate::ir) fn replace_target(&mut self, target: BlockWithParams) -> BlockWithParams {
+        mem::replace(&mut self.target, target)
+    }
 }
 
 impl Terminator for BrInst {
@@ -783,6 +798,15 @@ impl CondBrInst {
         };
 
         slice.unwrap()[idx] = new;
+    }
+
+    #[inline]
+    pub(in crate::ir) fn replace_target(
+        &mut self,
+        target: usize,
+        new: BlockWithParams,
+    ) -> BlockWithParams {
+        mem::replace(&mut self.state.branches[target], new)
     }
 
     fn updated_values(

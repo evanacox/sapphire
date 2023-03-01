@@ -258,6 +258,11 @@ impl DataFlowGraph {
         self.block_names.get(&name).copied()
     }
 
+    /// Iterates over every blocks
+    pub fn all_blocks(&self) -> impl Iterator<Item = &BasicBlock> {
+        self.blocks.values().flatten()
+    }
+
     /// Resolves a block into a full [`BasicBlock`].
     pub fn block(&self, block: Block) -> &BasicBlock {
         debug_assert!(self.is_block_inserted(block));
@@ -544,6 +549,37 @@ impl DataFlowGraph {
 
         if !self.uses[new].contains(&inst) {
             self.uses[new].push(inst);
+        }
+    }
+
+    /// Rewrites a branch that targets `to` to instead branch to `new` (with the args associated
+    /// with `new`).
+    ///
+    /// Returns the old branch target so you can re-use the arguments.
+    pub fn rewrite_branch_target(
+        &mut self,
+        inst: Inst,
+        to: Block,
+        new: BlockWithParams,
+    ) -> BlockWithParams {
+        let data = match &mut self.entities[inst.raw_into()] {
+            EntityData::Inst(data) => data,
+            _ => unreachable!("got an `Inst` that did not refer to an instruction"),
+        };
+
+        // get the old value occupying that slot of the arguments
+        match data {
+            InstData::Br(br) => {
+                debug_assert_eq!(br.target().block(), to);
+
+                br.replace_target(new)
+            }
+            InstData::CondBr(condbr) => {
+                let idx = (condbr.false_branch().block() == to) as usize;
+
+                condbr.replace_target(idx, new)
+            }
+            _ => unreachable!(),
         }
     }
 
