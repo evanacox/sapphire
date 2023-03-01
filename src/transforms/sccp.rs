@@ -8,7 +8,7 @@
 //                                                                           //
 //======---------------------------------------------------------------======//
 
-/// Performs Sparse Conditional Constant Propagation.
+/// A Sparse Conditional Constant Propagation pass.
 ///
 /// This uses the same constant folder internally as `InstSimplify`
 pub struct SCCPPass;

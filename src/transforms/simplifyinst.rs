@@ -17,11 +17,12 @@ use crate::pass::*;
 use crate::transforms::common::has_side_effect;
 use std::mem;
 
-/// A "simplify all the instructions" pass. This is the algebraic simplification
-/// pass, although it will do some trivial constant folding as well. This is
-/// not a full constant propagation pass, but things like `iadd 1, 1` will be
-/// simplified. Notably, it will not simplify any branches, although it may simplify
-/// their conditions.
+/// A peephole optimization and algebraic simplification pass.
+///
+/// While this is the algebraic simplification pass, it will do some trivial
+/// constant folding as well. This is not a full constant propagation pass,
+/// but things like `iadd 1, 1` will be simplified. Notably, it will not
+/// simplify any branches, although it may simplify their conditions.
 ///
 /// This combines three main jobs:
 ///

@@ -16,7 +16,7 @@ use crate::utility::SaHashMap;
 use smallvec::SmallVec;
 use std::hash::Hash;
 
-/// A simple global value numbering pass.
+/// A simple GVN (global value numbering) pass.
 ///
 /// This pass works best when the code is already canonicalized
 /// and isn't full of memory operations, so it would be a good idea to

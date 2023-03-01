@@ -15,7 +15,7 @@ use crate::pass::*;
 use crate::utility::SaHashSet;
 use std::cmp::Ordering;
 
-/// Analysis pass that wraps the [`verify_module`] function.
+/// An IR validity verification pass.
 ///
 /// This scans the entire module, and will do nothing if the module is valid. If
 /// the module isn't valid, it will abort with an error.

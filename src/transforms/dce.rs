@@ -17,14 +17,14 @@ use crate::pass::{FunctionAnalysisManager, FunctionTransformPass, PreservedAnaly
 use crate::transforms::common::{has_side_effect, rewrite_and_remove_block_param};
 use smallvec::SmallVec;
 
-/// Aggressive dead code elimination.
+/// An aggressive dead code elimination pass.
 ///
 /// This algorithm iterates over a function in postorder, and sees all uses
 /// before definitions. It assumes everything (that can't cause side effects)
-/// is dead until proven otherwise. It removes everything that it decides is dead.
+/// is dead until proven otherwise. It removes everything that it cannot prove
+/// is alive.
 ///
-/// This will also remove dead φ nodes from basic blocks, and will remove unreachable
-/// blocks entirely.
+/// This will also remove dead φ nodes from basic blocks.
 pub struct DeadCodeEliminationPass;
 
 /// Scans over an entire function and removes dead instructions and φ nodes.

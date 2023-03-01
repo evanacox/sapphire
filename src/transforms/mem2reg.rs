@@ -16,6 +16,8 @@ use crate::transforms::common::rewrite_pad_branch_argument;
 use crate::utility::{IntoTree, SaHashMap, SaHashSet};
 use smallvec::{smallvec, SmallVec};
 
+/// A memory to SSA promotion pass.
+///
 /// Promotes stack slots that only have `load`s and `store`s as uses into registers.
 /// This is effectively an SSA construction pass, it promotes memory operations into
 /// SSA values and φ nodes.  

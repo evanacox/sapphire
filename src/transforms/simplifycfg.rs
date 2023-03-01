@@ -8,7 +8,13 @@
 //                                                                           //
 //======---------------------------------------------------------------======//
 
-/// Simplifies a CFG by performing the following simplifications:
+/// A control-flow graph simplification pass.
 ///
-/// 1.
+/// Performs the following simplifications:
+///
+/// 1. Removes blocks with no predecessors
+/// 2. Eliminates blocks that only contain an unconditional branch
+/// 3. Eliminates φ nodes for blocks with a single predecessor
+/// 4. Merges blocks into their predecessors if they only have one predecessor
+///    and their predecessor only has one successor
 pub struct SimplifyCFGPass;
