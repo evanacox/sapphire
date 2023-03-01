@@ -21,9 +21,9 @@ use std::hash::Hash;
 /// This pass works best when the code is already canonicalized
 /// and isn't full of memory operations, so it would be a good idea to
 /// run `mem2reg`, `dce` and `simplifyinst` before this pass.
-pub struct GVNPass;
+pub struct GlobalValueNumberingPass;
 
-impl FunctionTransformPass for GVNPass {
+impl FunctionTransformPass for GlobalValueNumberingPass {
     fn run(&mut self, func: &mut Function, am: &mut FunctionAnalysisManager) -> PreservedAnalyses {
         gvn(func, &am.get::<DominatorTreeAnalysis>(func));
 
