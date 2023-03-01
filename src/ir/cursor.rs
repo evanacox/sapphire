@@ -488,8 +488,8 @@ pub trait CursorMut: Cursor {
     /// Creates a single basic block and returns it. This block is appended to
     /// the end of the block list.
     ///
-    /// Note that this does not switch the builder to operate on that block,
-    /// you still need to call [`Self::switch_to`].
+    /// Note that this does not switch the cursor to operate on that block,
+    /// you still need to call `goto_before` or similar.
     fn create_block(&mut self, name: &str) -> Block {
         let string = {
             let mut strings = self.func_mut().ctx().strings_mut();
@@ -619,6 +619,6 @@ impl<'f> CursorMut for FuncCursor<'f> {
     }
 
     fn func_mut(&mut self) -> &mut Function {
-        &mut self.func
+        self.func
     }
 }
