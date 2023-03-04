@@ -1178,16 +1178,26 @@ impl Instruction for AllocaInst {
 pub struct LoadInst {
     pointer: Value,
     output: Type,
+    volatile: bool,
 }
 
 impl LoadInst {
-    pub(in crate::ir) fn new(pointer: Value, output: Type) -> Self {
-        Self { pointer, output }
+    pub(in crate::ir) fn new(pointer: Value, output: Type, volatile: bool) -> Self {
+        Self {
+            pointer,
+            output,
+            volatile,
+        }
     }
 
     /// Gets the pointer being loaded
     pub fn pointer(&self) -> Value {
         self.pointer
+    }
+
+    /// Checks if the load is `volatile`
+    pub fn is_volatile(&self) -> bool {
+        self.volatile
     }
 }
 
@@ -1210,12 +1220,14 @@ impl Instruction for LoadInst {
 #[cfg_attr(feature = "enable-serde", derive(Serialize, Deserialize))]
 pub struct StoreInst {
     operands: [Value; 2],
+    volatile: bool,
 }
 
 impl StoreInst {
-    pub(in crate::ir) fn new(pointer: Value, val: Value) -> Self {
+    pub(in crate::ir) fn new(pointer: Value, val: Value, volatile: bool) -> Self {
         Self {
             operands: [pointer, val],
+            volatile,
         }
     }
 
@@ -1227,6 +1239,11 @@ impl StoreInst {
     /// Gets the value being stored
     pub fn stored(&self) -> Value {
         self.operands[1]
+    }
+
+    /// Checks if the store is `volatile`
+    pub fn is_volatile(&self) -> bool {
+        self.volatile
     }
 }
 

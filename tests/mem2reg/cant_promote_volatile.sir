@@ -1,0 +1,35 @@
+; MATCH-SECTION
+;
+; fn i32 @test() {
+;   $0 = stack i32
+;   $1 = stack i32
+;
+; entry:
+;   %0 = stackslot $0
+;   %1 = stackslot $1
+;   %2 = iconst i32 42
+;   %3 = iconst i32 24
+;   store volatile i32 %2, ptr %0
+;   store i32 %3, ptr %1
+;   %4 = load i32, ptr %0
+;   %5 = load volatile i32, ptr %1
+;   %6 = iadd i32 %4, %5
+;   ret i32 %6
+; }
+;;
+fn i32 @test() {
+  $0 = stack i32
+  $1 = stack i32
+
+entry:
+  %0 = stackslot $0
+  %1 = stackslot $1
+  %2 = iconst i32 42
+  %3 = iconst i32 24
+  store volatile i32 %2, ptr %0
+  store i32 %3, ptr %1
+  %4 = load i32, ptr %0
+  %5 = load volatile i32, ptr %1
+  %6 = iadd i32 %4, %5
+  ret i32 %6
+}

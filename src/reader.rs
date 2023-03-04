@@ -1175,6 +1175,7 @@ expected {expected} arguments but got {count}"
 
         let mut inner = pair.into_inner();
         let result = inner.next_or("expected result");
+        let maybe_volatile = inner.next_or("expected volatile");
         let ty_pair = inner.next_or("expected type");
         let _ = inner.next_or("expected ptr");
         let val_pair = inner.next_or("expected value");
@@ -1183,7 +1184,12 @@ expected {expected} arguments but got {count}"
         let ty = self.parse_ty(ty_pair, &mut builder.ctx().types_mut())?;
         let operand = self.parse_existing_local_of_ty(val_pair, Type::ptr(), builder)?;
 
-        self.append_val(builder, name).load(ty, operand, info);
+        if maybe_volatile.as_str() == "volatile" {
+            self.append_val(builder, name)
+                .load_volatile(ty, operand, info);
+        } else {
+            self.append_val(builder, name).load(ty, operand, info);
+        }
 
         Ok(())
     }
@@ -1197,6 +1203,7 @@ expected {expected} arguments but got {count}"
 
         let pair2 = pair.clone();
         let mut inner = pair.into_inner();
+        let maybe_volatile = inner.next_or("expected volatile");
         let operand = inner.next_or("expected operand");
         let _ = inner.next_or("expected ptr");
         let val_pair = inner.next_or("expected value");
@@ -1205,8 +1212,11 @@ expected {expected} arguments but got {count}"
         let operand = self.parse_operand(operand, builder)?;
         let ptr = self.parse_existing_local_of_ty(val_pair, Type::ptr(), builder)?;
 
-        builder.append().store(operand, ptr, info);
-
+        if maybe_volatile.as_str() == "volatile" {
+            builder.append().store_volatile(operand, ptr, info);
+        } else {
+            builder.append().store(operand, ptr, info);
+        }
         Ok(())
     }
 

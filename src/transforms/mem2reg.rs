@@ -204,14 +204,17 @@ fn find_promotable_slots(
                 if operands.contains(&stackslot) {
                     match data {
                         InstData::Store(store) => {
-                            if store.pointer() != stackslot || *ty != cursor.ty(store.stored()) {
+                            if store.pointer() != stackslot
+                                || *ty != cursor.ty(store.stored())
+                                || store.is_volatile()
+                            {
                                 not_promotable.push(stackslot);
                             } else {
                                 defs.push(inst)
                             }
                         }
                         InstData::Load(load) => {
-                            if load.result_ty().unwrap() != *ty {
+                            if load.result_ty().unwrap() != *ty || load.is_volatile() {
                                 not_promotable.push(stackslot);
                             }
                         }

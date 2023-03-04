@@ -192,11 +192,13 @@ binary_float = { result ~ binary_float_opcode ~ float_ty ~ binary_operands }
 // %0 = alloca T
 alloca = { result ~ "alloca" ~ ty }
 
+maybe_volatile = @{ "volatile"? }
+
 // %1 = load T, ptr %0
-load = { result ~ "load" ~ ty ~ "," ~ ptr_ty ~ local }
+load = { result ~ "load" ~ maybe_volatile ~ ty ~ "," ~ ptr_ty ~ local }
 
 // store T %0, ptr %1
-store = { "store" ~ operand ~ "," ~ ptr_ty ~ local }
+store = { "store" ~ maybe_volatile ~ operand ~ "," ~ ptr_ty ~ local }
 
 // %2 = offset T, ptr %0, iN %1
 offset = { result ~ "offset" ~ ty ~ "," ~ ptr_ty ~ local ~ "," ~ int_ty ~ local }
