@@ -191,7 +191,7 @@ impl DataFlowGraph {
     }
 
     /// Gets a single instruction's [`InstData`].
-    pub fn data(&self, inst: Inst) -> &InstData {
+    pub fn inst_data(&self, inst: Inst) -> &InstData {
         match &self.entities[inst.raw_into()] {
             EntityData::Inst(data) => data,
             _ => unreachable!("got an `Inst` that did not refer to an instruction"),

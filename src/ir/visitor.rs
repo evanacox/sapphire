@@ -126,7 +126,7 @@ pub trait SIRVisitor<'a> {
 
     /// Called whenever an individual instruction is visited.
     fn visit_inst(&mut self, inst: Inst, def: &FunctionDefinition) {
-        self.dispatch_inst(inst, def.dfg.data(inst), def)
+        self.dispatch_inst(inst, def.dfg.inst_data(inst), def)
     }
 
     /// Visits a `call` instruction.
@@ -572,7 +572,7 @@ pub trait FunctionCursorVisitor<'a, T, C: CursorMut>: Sized + GenericInstVisitor
 
     /// Called whenever an individual instruction is visited.
     fn visit_inst(&mut self, inst: Inst) -> T {
-        let data = self.cursor().dfg().data(inst).clone();
+        let data = self.cursor().dfg().inst_data(inst).clone();
 
         self.dispatch_inst(&data)
     }

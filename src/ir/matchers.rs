@@ -145,7 +145,7 @@ pub fn block_param_of_ty<'a>(ty: Type) -> impl IRMatcher<'a> {
 /// A matcher that matches on `iconst` instructions (i.e. matches on constant operands).
 pub fn iconst<'a>() -> impl IRMatcher<'a> {
     BasicInstMatcher {
-        matcher: move |inst, dfg| matches!(dfg.data(inst), InstData::IConst(_)),
+        matcher: move |inst, dfg| matches!(dfg.inst_data(inst), InstData::IConst(_)),
         data: PhantomData::default(),
     }
 }
@@ -153,7 +153,7 @@ pub fn iconst<'a>() -> impl IRMatcher<'a> {
 /// A matcher that matches on `iconst` instructions with a specific value
 pub fn iconst_val<'a>(value: u64) -> impl IRMatcher<'a> {
     BasicInstMatcher {
-        matcher: move |inst, dfg| match dfg.data(inst) {
+        matcher: move |inst, dfg| match dfg.inst_data(inst) {
             InstData::IConst(iconst) => iconst.value() == value,
             _ => false,
         },
@@ -164,7 +164,7 @@ pub fn iconst_val<'a>(value: u64) -> impl IRMatcher<'a> {
 /// A matcher that matches on `iconst` instructions with a specific type
 pub fn iconst_ty<'a>(ty: Type) -> impl IRMatcher<'a> {
     BasicInstMatcher {
-        matcher: move |inst, dfg| match dfg.data(inst) {
+        matcher: move |inst, dfg| match dfg.inst_data(inst) {
             InstData::IConst(iconst) => iconst.result_ty().unwrap() == ty,
             _ => false,
         },
@@ -176,7 +176,7 @@ pub fn iconst_ty<'a>(ty: Type) -> impl IRMatcher<'a> {
 /// a specific type.
 pub fn iconst_ty_val<'a>(ty: Type, value: u64) -> impl IRMatcher<'a> {
     BasicInstMatcher {
-        matcher: move |inst, dfg| match dfg.data(inst) {
+        matcher: move |inst, dfg| match dfg.inst_data(inst) {
             InstData::IConst(iconst) => {
                 iconst.value() == value && iconst.result_ty().unwrap() == ty
             }
@@ -189,7 +189,7 @@ pub fn iconst_ty_val<'a>(ty: Type, value: u64) -> impl IRMatcher<'a> {
 /// Matches on an `iconst` value that is a power of 2
 pub fn power_of_two<'a>() -> impl IRMatcher<'a> {
     BasicInstMatcher {
-        matcher: move |inst, dfg| match dfg.data(inst) {
+        matcher: move |inst, dfg| match dfg.inst_data(inst) {
             InstData::IConst(iconst) => iconst.value().is_power_of_two(),
             _ => false,
         },
@@ -266,7 +266,7 @@ binary_matcher!(frem, FRem, ArithInst, "frem");
 pub fn binary<'a>(out: &'a mut Option<&'a (dyn BinaryInst + 'a)>) -> impl IRMatcher<'a> {
     BasicInstMatcher {
         matcher: |inst, dfg| {
-            *out = match dfg.data(inst) {
+            *out = match dfg.inst_data(inst) {
                 InstData::ICmp(inst) => Some(inst),
                 InstData::FCmp(inst) => Some(inst),
                 InstData::And(inst) => Some(inst),
@@ -312,7 +312,7 @@ pub fn binary_with<'a>(
 ) -> impl IRMatcher<'a> {
     BasicInstMatcher {
         matcher: move |inst, dfg| {
-            *out = match dfg.data(inst) {
+            *out = match dfg.inst_data(inst) {
                 InstData::ICmp(inst) => matches_lhs_rhs!(inst, dfg, lhs, rhs),
                 InstData::FCmp(inst) => matches_lhs_rhs!(inst, dfg, lhs, rhs),
                 InstData::And(inst) => matches_lhs_rhs!(inst, dfg, lhs, rhs),

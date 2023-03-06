@@ -298,7 +298,7 @@ pub trait Cursor: Sized {
 
     /// Gets the data defining a given instruction
     fn inst_data(&self, inst: Inst) -> &InstData {
-        self.def().dfg.data(inst)
+        self.def().dfg.inst_data(inst)
     }
 
     /// Gets the block that an instruction is defined in
@@ -345,7 +345,7 @@ impl<'b> InstBuilder<'b> for ReplaceBuilder<'b> {
 
     fn build(self, data: InstData, debug: DebugInfo) -> (Inst, Option<Value>) {
         debug_assert_eq!(
-            self.def.dfg.data(self.pos).result_ty(),
+            self.def.dfg.inst_data(self.pos).result_ty(),
             data.result_ty(),
             "cannot replace inst with inst of different result"
         );

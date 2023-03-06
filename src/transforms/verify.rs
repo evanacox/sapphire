@@ -304,7 +304,7 @@ impl<'m> SIRVisitor<'m> for Verifier<'m> {
             "cannot have the same `Inst` object twice in a given layout"
         );
 
-        for operand in def.dfg.data(inst).operands() {
+        for operand in def.dfg.inst_data(inst).operands() {
             let value_def = def.dfg.value_def(*operand);
             let defined_in = match value_def {
                 ValueDef::Inst(i) => {
@@ -359,7 +359,7 @@ impl<'m> SIRVisitor<'m> for Verifier<'m> {
             }
         }
 
-        self.dispatch_inst(inst, def.dfg.data(inst), def);
+        self.dispatch_inst(inst, def.dfg.inst_data(inst), def);
     }
 
     fn visit_call(&mut self, inst: Inst, data: &CallInst, def: &FunctionDefinition) {

@@ -13,7 +13,7 @@ use smallvec::SmallVec;
 
 /// Checks whether a given instruction possibly has a side effect.
 pub fn has_side_effect(dfg: &DataFlowGraph, inst: Inst) -> bool {
-    match dfg.data(inst) {
+    match dfg.inst_data(inst) {
         InstData::Load(load) => load.is_volatile(),
         InstData::Call(_)
         | InstData::IndirectCall(_)
