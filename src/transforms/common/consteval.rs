@@ -103,16 +103,16 @@ macro_rules! icmp_comparison_set {
     };
 }
 
-impl<'f, 'c> GenericInstVisitor<Option<()>> for InPlaceConstantFolder<'f, 'c> {
-    fn visit_call(&mut self, _: &CallInst) -> Option<()> {
+impl<'f, 'c> GenericInstVisitor<Option<()>, ()> for InPlaceConstantFolder<'f, 'c> {
+    fn visit_call(&mut self, _: &CallInst, _: ()) -> Option<()> {
         None
     }
 
-    fn visit_indirectcall(&mut self, _: &IndirectCallInst) -> Option<()> {
+    fn visit_indirectcall(&mut self, _: &IndirectCallInst, _: ()) -> Option<()> {
         None
     }
 
-    fn visit_icmp(&mut self, data: &ICmpInst) -> Option<()> {
+    fn visit_icmp(&mut self, data: &ICmpInst, _: ()) -> Option<()> {
         let lhs = self.val_as_int_constant(data.lhs())?;
         let rhs = self.val_as_int_constant(data.rhs())?;
         let dbg = self.dbg();
@@ -152,11 +152,11 @@ impl<'f, 'c> GenericInstVisitor<Option<()>> for InPlaceConstantFolder<'f, 'c> {
         Some(())
     }
 
-    fn visit_fcmp(&mut self, _: &FCmpInst) -> Option<()> {
+    fn visit_fcmp(&mut self, _: &FCmpInst, _: ()) -> Option<()> {
         None
     }
 
-    fn visit_sel(&mut self, data: &SelInst) -> Option<()> {
+    fn visit_sel(&mut self, data: &SelInst, _: ()) -> Option<()> {
         let cond = self.val_as_bool_constant(data.condition())?;
         let curr = self
             .cursor
@@ -175,23 +175,23 @@ impl<'f, 'c> GenericInstVisitor<Option<()>> for InPlaceConstantFolder<'f, 'c> {
         Some(())
     }
 
-    fn visit_br(&mut self, _: &BrInst) -> Option<()> {
+    fn visit_br(&mut self, _: &BrInst, _: ()) -> Option<()> {
         None
     }
 
-    fn visit_condbr(&mut self, _: &CondBrInst) -> Option<()> {
+    fn visit_condbr(&mut self, _: &CondBrInst, _: ()) -> Option<()> {
         None
     }
 
-    fn visit_unreachable(&mut self, _: &UnreachableInst) -> Option<()> {
+    fn visit_unreachable(&mut self, _: &UnreachableInst, _: ()) -> Option<()> {
         None
     }
 
-    fn visit_ret(&mut self, _: &RetInst) -> Option<()> {
+    fn visit_ret(&mut self, _: &RetInst, _: ()) -> Option<()> {
         None
     }
 
-    fn visit_and(&mut self, and: &CommutativeArithInst) -> Option<()> {
+    fn visit_and(&mut self, and: &CommutativeArithInst, _: ()) -> Option<()> {
         let lhs = self.val_as_int_constant(and.lhs())?;
         let rhs = self.val_as_int_constant(and.rhs())?;
         let ty = self.cursor.ty(and.lhs());
@@ -204,7 +204,7 @@ impl<'f, 'c> GenericInstVisitor<Option<()>> for InPlaceConstantFolder<'f, 'c> {
         Some(())
     }
 
-    fn visit_or(&mut self, or: &CommutativeArithInst) -> Option<()> {
+    fn visit_or(&mut self, or: &CommutativeArithInst, _: ()) -> Option<()> {
         let lhs = self.val_as_int_constant(or.lhs())?;
         let rhs = self.val_as_int_constant(or.rhs())?;
         let ty = self.cursor.ty(or.lhs());
@@ -217,7 +217,7 @@ impl<'f, 'c> GenericInstVisitor<Option<()>> for InPlaceConstantFolder<'f, 'c> {
         Some(())
     }
 
-    fn visit_xor(&mut self, xor: &CommutativeArithInst) -> Option<()> {
+    fn visit_xor(&mut self, xor: &CommutativeArithInst, _: ()) -> Option<()> {
         let lhs = self.val_as_int_constant(xor.lhs())?;
         let rhs = self.val_as_int_constant(xor.rhs())?;
         let ty = self.cursor.ty(xor.lhs());
@@ -230,7 +230,7 @@ impl<'f, 'c> GenericInstVisitor<Option<()>> for InPlaceConstantFolder<'f, 'c> {
         Some(())
     }
 
-    fn visit_shl(&mut self, shl: &ArithInst) -> Option<()> {
+    fn visit_shl(&mut self, shl: &ArithInst, _: ()) -> Option<()> {
         let lhs = self.val_as_int_constant(shl.lhs())?;
         let rhs = self.val_as_int_constant(shl.rhs())?;
         let ty = self.cursor.ty(shl.lhs());
@@ -243,7 +243,7 @@ impl<'f, 'c> GenericInstVisitor<Option<()>> for InPlaceConstantFolder<'f, 'c> {
         Some(())
     }
 
-    fn visit_ashr(&mut self, ashr: &ArithInst) -> Option<()> {
+    fn visit_ashr(&mut self, ashr: &ArithInst, _: ()) -> Option<()> {
         let lhs = self.val_as_int_constant(ashr.lhs())?;
         let rhs = self.val_as_int_constant(ashr.rhs())?;
         let ty = self.cursor.ty(ashr.lhs());
@@ -259,7 +259,7 @@ impl<'f, 'c> GenericInstVisitor<Option<()>> for InPlaceConstantFolder<'f, 'c> {
         Some(())
     }
 
-    fn visit_lshr(&mut self, lshr: &ArithInst) -> Option<()> {
+    fn visit_lshr(&mut self, lshr: &ArithInst, _: ()) -> Option<()> {
         let lhs = self.val_as_int_constant(lshr.lhs())?;
         let rhs = self.val_as_int_constant(lshr.rhs())?;
         let ty = self.cursor.ty(lshr.lhs());
@@ -273,7 +273,7 @@ impl<'f, 'c> GenericInstVisitor<Option<()>> for InPlaceConstantFolder<'f, 'c> {
         Some(())
     }
 
-    fn visit_iadd(&mut self, iadd: &CommutativeArithInst) -> Option<()> {
+    fn visit_iadd(&mut self, iadd: &CommutativeArithInst, _: ()) -> Option<()> {
         let lhs = self.val_as_int_constant(iadd.lhs())?;
         let rhs = self.val_as_int_constant(iadd.rhs())?;
         let ty = self.cursor.ty(iadd.lhs());
@@ -286,7 +286,7 @@ impl<'f, 'c> GenericInstVisitor<Option<()>> for InPlaceConstantFolder<'f, 'c> {
         Some(())
     }
 
-    fn visit_isub(&mut self, isub: &ArithInst) -> Option<()> {
+    fn visit_isub(&mut self, isub: &ArithInst, _: ()) -> Option<()> {
         let lhs = self.val_as_int_constant(isub.lhs())?;
         let rhs = self.val_as_int_constant(isub.rhs())?;
         let ty = self.cursor.ty(isub.lhs());
@@ -299,7 +299,7 @@ impl<'f, 'c> GenericInstVisitor<Option<()>> for InPlaceConstantFolder<'f, 'c> {
         Some(())
     }
 
-    fn visit_imul(&mut self, imul: &CommutativeArithInst) -> Option<()> {
+    fn visit_imul(&mut self, imul: &CommutativeArithInst, _: ()) -> Option<()> {
         let lhs = self.val_as_int_constant(imul.lhs())?;
         let rhs = self.val_as_int_constant(imul.rhs())?;
         let ty = self.cursor.ty(imul.lhs());
@@ -312,7 +312,7 @@ impl<'f, 'c> GenericInstVisitor<Option<()>> for InPlaceConstantFolder<'f, 'c> {
         Some(())
     }
 
-    fn visit_sdiv(&mut self, sdiv: &ArithInst) -> Option<()> {
+    fn visit_sdiv(&mut self, sdiv: &ArithInst, _: ()) -> Option<()> {
         let lhs = self.val_as_int_constant(sdiv.lhs())?;
         let rhs = self.val_as_int_constant(sdiv.rhs())?;
 
@@ -332,7 +332,7 @@ impl<'f, 'c> GenericInstVisitor<Option<()>> for InPlaceConstantFolder<'f, 'c> {
         Some(())
     }
 
-    fn visit_udiv(&mut self, udiv: &ArithInst) -> Option<()> {
+    fn visit_udiv(&mut self, udiv: &ArithInst, _: ()) -> Option<()> {
         let lhs = self.val_as_int_constant(udiv.lhs())?;
         let rhs = self.val_as_int_constant(udiv.rhs())?;
         let ty = self.cursor.ty(udiv.lhs());
@@ -345,7 +345,7 @@ impl<'f, 'c> GenericInstVisitor<Option<()>> for InPlaceConstantFolder<'f, 'c> {
         Some(())
     }
 
-    fn visit_srem(&mut self, srem: &ArithInst) -> Option<()> {
+    fn visit_srem(&mut self, srem: &ArithInst, _: ()) -> Option<()> {
         let lhs = self.val_as_int_constant(srem.lhs())?;
         let rhs = self.val_as_int_constant(srem.rhs())?;
 
@@ -365,7 +365,7 @@ impl<'f, 'c> GenericInstVisitor<Option<()>> for InPlaceConstantFolder<'f, 'c> {
         Some(())
     }
 
-    fn visit_urem(&mut self, urem: &ArithInst) -> Option<()> {
+    fn visit_urem(&mut self, urem: &ArithInst, _: ()) -> Option<()> {
         let lhs = self.val_as_int_constant(urem.lhs())?;
         let rhs = self.val_as_int_constant(urem.rhs())?;
         let ty = self.cursor.ty(urem.lhs());
@@ -378,71 +378,71 @@ impl<'f, 'c> GenericInstVisitor<Option<()>> for InPlaceConstantFolder<'f, 'c> {
         Some(())
     }
 
-    fn visit_fneg(&mut self, _: &FloatUnaryInst) -> Option<()> {
+    fn visit_fneg(&mut self, _: &FloatUnaryInst, _: ()) -> Option<()> {
         None
     }
 
-    fn visit_fadd(&mut self, _: &CommutativeArithInst) -> Option<()> {
+    fn visit_fadd(&mut self, _: &CommutativeArithInst, _: ()) -> Option<()> {
         None
     }
 
-    fn visit_fsub(&mut self, _: &ArithInst) -> Option<()> {
+    fn visit_fsub(&mut self, _: &ArithInst, _: ()) -> Option<()> {
         None
     }
 
-    fn visit_fmul(&mut self, _: &CommutativeArithInst) -> Option<()> {
+    fn visit_fmul(&mut self, _: &CommutativeArithInst, _: ()) -> Option<()> {
         None
     }
 
-    fn visit_fdiv(&mut self, _: &ArithInst) -> Option<()> {
+    fn visit_fdiv(&mut self, _: &ArithInst, _: ()) -> Option<()> {
         None
     }
 
-    fn visit_frem(&mut self, _: &ArithInst) -> Option<()> {
+    fn visit_frem(&mut self, _: &ArithInst, _: ()) -> Option<()> {
         None
     }
 
-    fn visit_alloca(&mut self, _: &AllocaInst) -> Option<()> {
+    fn visit_alloca(&mut self, _: &AllocaInst, _: ()) -> Option<()> {
         None
     }
 
-    fn visit_load(&mut self, _: &LoadInst) -> Option<()> {
+    fn visit_load(&mut self, _: &LoadInst, _: ()) -> Option<()> {
         None
     }
 
-    fn visit_store(&mut self, _: &StoreInst) -> Option<()> {
+    fn visit_store(&mut self, _: &StoreInst, _: ()) -> Option<()> {
         None
     }
 
-    fn visit_offset(&mut self, _: &OffsetInst) -> Option<()> {
+    fn visit_offset(&mut self, _: &OffsetInst, _: ()) -> Option<()> {
         None
     }
 
-    fn visit_extract(&mut self, _: &ExtractInst) -> Option<()> {
+    fn visit_extract(&mut self, _: &ExtractInst, _: ()) -> Option<()> {
         None
     }
 
-    fn visit_insert(&mut self, _: &InsertInst) -> Option<()> {
+    fn visit_insert(&mut self, _: &InsertInst, _: ()) -> Option<()> {
         None
     }
 
-    fn visit_elemptr(&mut self, _: &ElemPtrInst) -> Option<()> {
+    fn visit_elemptr(&mut self, _: &ElemPtrInst, _: ()) -> Option<()> {
         None
     }
 
-    fn visit_sext(&mut self, _: &CastInst) -> Option<()> {
+    fn visit_sext(&mut self, _: &CastInst, _: ()) -> Option<()> {
         None
     }
 
-    fn visit_zext(&mut self, _: &CastInst) -> Option<()> {
+    fn visit_zext(&mut self, _: &CastInst, _: ()) -> Option<()> {
         None
     }
 
-    fn visit_trunc(&mut self, _: &CastInst) -> Option<()> {
+    fn visit_trunc(&mut self, _: &CastInst, _: ()) -> Option<()> {
         None
     }
 
-    fn visit_itob(&mut self, data: &CastInst) -> Option<()> {
+    fn visit_itob(&mut self, data: &CastInst, _: ()) -> Option<()> {
         let val = self.val_as_int_constant(data.operand())?;
         let dbg = self.dbg();
 
@@ -451,7 +451,7 @@ impl<'f, 'c> GenericInstVisitor<Option<()>> for InPlaceConstantFolder<'f, 'c> {
         Some(())
     }
 
-    fn visit_btoi(&mut self, data: &CastInst) -> Option<()> {
+    fn visit_btoi(&mut self, data: &CastInst, _: ()) -> Option<()> {
         let val = self.val_as_bool_constant(data.operand())?;
         let dbg = self.dbg();
 
@@ -462,31 +462,31 @@ impl<'f, 'c> GenericInstVisitor<Option<()>> for InPlaceConstantFolder<'f, 'c> {
         Some(())
     }
 
-    fn visit_sitof(&mut self, _: &CastInst) -> Option<()> {
+    fn visit_sitof(&mut self, _: &CastInst, _: ()) -> Option<()> {
         None
     }
 
-    fn visit_uitof(&mut self, _: &CastInst) -> Option<()> {
+    fn visit_uitof(&mut self, _: &CastInst, _: ()) -> Option<()> {
         None
     }
 
-    fn visit_ftosi(&mut self, _: &CastInst) -> Option<()> {
+    fn visit_ftosi(&mut self, _: &CastInst, _: ()) -> Option<()> {
         None
     }
 
-    fn visit_ftoui(&mut self, _: &CastInst) -> Option<()> {
+    fn visit_ftoui(&mut self, _: &CastInst, _: ()) -> Option<()> {
         None
     }
 
-    fn visit_fext(&mut self, _: &CastInst) -> Option<()> {
+    fn visit_fext(&mut self, _: &CastInst, _: ()) -> Option<()> {
         None
     }
 
-    fn visit_ftrunc(&mut self, _: &CastInst) -> Option<()> {
+    fn visit_ftrunc(&mut self, _: &CastInst, _: ()) -> Option<()> {
         None
     }
 
-    fn visit_itop(&mut self, data: &CastInst) -> Option<()> {
+    fn visit_itop(&mut self, data: &CastInst, _: ()) -> Option<()> {
         let val = self.val_as_int_constant(data.operand())?;
 
         if val == 0 {
@@ -500,7 +500,7 @@ impl<'f, 'c> GenericInstVisitor<Option<()>> for InPlaceConstantFolder<'f, 'c> {
         }
     }
 
-    fn visit_ptoi(&mut self, data: &CastInst) -> Option<()> {
+    fn visit_ptoi(&mut self, data: &CastInst, _: ()) -> Option<()> {
         if self.val_is_nullptr(data.operand()) {
             let dbg = self.dbg();
 
@@ -514,31 +514,31 @@ impl<'f, 'c> GenericInstVisitor<Option<()>> for InPlaceConstantFolder<'f, 'c> {
         }
     }
 
-    fn visit_iconst(&mut self, _: &IConstInst) -> Option<()> {
+    fn visit_iconst(&mut self, _: &IConstInst, _: ()) -> Option<()> {
         None
     }
 
-    fn visit_fconst(&mut self, _: &FConstInst) -> Option<()> {
+    fn visit_fconst(&mut self, _: &FConstInst, _: ()) -> Option<()> {
         None
     }
 
-    fn visit_bconst(&mut self, _: &BConstInst) -> Option<()> {
+    fn visit_bconst(&mut self, _: &BConstInst, _: ()) -> Option<()> {
         None
     }
 
-    fn visit_undef(&mut self, _: &UndefConstInst) -> Option<()> {
+    fn visit_undef(&mut self, _: &UndefConstInst, _: ()) -> Option<()> {
         None
     }
 
-    fn visit_null(&mut self, _: &NullConstInst) -> Option<()> {
+    fn visit_null(&mut self, _: &NullConstInst, _: ()) -> Option<()> {
         None
     }
 
-    fn visit_stackslot(&mut self, _: &StackSlotInst) -> Option<()> {
+    fn visit_stackslot(&mut self, _: &StackSlotInst, _: ()) -> Option<()> {
         None
     }
 
-    fn visit_globaladdr(&mut self, _: &GlobalAddrInst) -> Option<()> {
+    fn visit_globaladdr(&mut self, _: &GlobalAddrInst, _: ()) -> Option<()> {
         None
     }
 }
