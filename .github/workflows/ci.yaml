@@ -17,10 +17,10 @@ jobs:
       - name: Checkout sources
         uses: actions/checkout@v3
 
-      - uses: Swatinem/rust-cache@v2
-
       - name: Install stable toolchain
         uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
 
       - name: Run cargo check
         run: cargo check
