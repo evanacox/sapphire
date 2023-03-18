@@ -41,6 +41,21 @@
 //! let e4 = arena.insert(AstNode::Mul(e2, e3)); // => (16 + 3) * 3
 //! ```
 
+mod iter;
+mod key;
+mod map;
+mod secondary;
+mod unique;
+
+pub use iter::*;
+pub use key::ArenaKey;
+pub use map::ArenaMap;
+pub use secondary::SecondaryMap;
+pub use unique::UniqueArenaMap;
+
+use std::fmt;
+use std::fmt::{Debug, Formatter};
+
 pub(in crate::arena) fn debug_write_map<'a, K, V>(
     f: &mut Formatter<'_>,
     name: &'static str,
@@ -54,17 +69,3 @@ where
 
     f.debug_map().entries(it).finish()
 }
-
-mod iter;
-mod key;
-mod map;
-mod secondary;
-mod unique;
-
-pub use iter::*;
-pub use key::ArenaKey;
-pub use map::ArenaMap;
-pub use secondary::SecondaryMap;
-use std::fmt;
-use std::fmt::{Debug, Formatter};
-pub use unique::UniqueArenaMap;

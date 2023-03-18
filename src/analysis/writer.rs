@@ -507,7 +507,7 @@ impl<'m> SIRVisitor<'m> for WriterImpl<'m> {
 
         {
             self.state.whole += "  ";
-            self.dispatch_inst(inst, def.dfg.data(inst), def);
+            self.dispatch_inst(inst, def.dfg.inst_data(inst), def);
             self.state.whole += "\n";
         }
 
@@ -728,15 +728,17 @@ impl<'m> SIRVisitor<'m> for WriterImpl<'m> {
 
         let ty = self.ty(data.result_ty().unwrap());
         let val = self.name_ty(data.pointer(), def);
+        let volatile = data.is_volatile().then_some("volatile ").unwrap_or("");
 
-        self.state.whole += &format!("load {ty}, {val}");
+        self.state.whole += &format!("load {volatile}{ty}, {val}");
     }
 
     fn visit_store(&mut self, _: Inst, data: &StoreInst, def: &FunctionDefinition) {
         let val = self.name_ty(data.stored(), def);
         let ptr = self.name_ty(data.pointer(), def);
+        let volatile = data.is_volatile().then_some("volatile ").unwrap_or("");
 
-        self.state.whole += &format!("store {val}, {ptr}");
+        self.state.whole += &format!("store {volatile}{val}, {ptr}");
     }
 
     fn visit_offset(&mut self, inst: Inst, data: &OffsetInst, def: &FunctionDefinition) {

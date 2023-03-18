@@ -110,6 +110,40 @@ where
     }
 }
 
+/// Logical conjunction operation between two matchers.
+///
+/// The IR being matched must match both matchers provided, or this
+/// matcher doesn't match.
+pub fn both<'a, 'b, 'c, B, C>(lhs: B, rhs: C) -> impl IRMatcher<'a>
+where
+    'a: 'b,
+    'a: 'c,
+    B: IRMatcher<'b> + 'a,
+    C: IRMatcher<'c> + 'a,
+{
+    BasicInstMatcher {
+        matcher: |inst, dfg| lhs.matches_inst(inst, dfg) && rhs.matches_inst(inst, dfg),
+        data: PhantomData::default(),
+    }
+}
+
+/// Logical disjunction operation between two matchers.
+///
+/// The IR being matched must match one of the matchers provided, or this
+/// matcher doesn't match.
+pub fn one_of<'a, 'b, 'c, B, C>(lhs: B, rhs: C) -> impl IRMatcher<'a>
+where
+    'a: 'b,
+    'a: 'c,
+    B: IRMatcher<'b> + 'a,
+    C: IRMatcher<'c> + 'a,
+{
+    BasicInstMatcher {
+        matcher: |inst, dfg| lhs.matches_inst(inst, dfg) || rhs.matches_inst(inst, dfg),
+        data: PhantomData::default(),
+    }
+}
+
 /// A matcher that matches any value
 pub fn val<'a>() -> impl IRMatcher<'a> {
     BasicValMatcher {
@@ -197,6 +231,128 @@ pub fn power_of_two<'a>() -> impl IRMatcher<'a> {
     }
 }
 
+/// A matcher that matches on `fconst` instructions (i.e. matches on constant operands).
+pub fn fconst<'a>() -> impl IRMatcher<'a> {
+    BasicInstMatcher {
+        matcher: move |inst, dfg| matches!(dfg.inst_data(inst), InstData::FConst(_)),
+        data: PhantomData::default(),
+    }
+}
+
+/// A matcher that matches on `fconst` instructions with a specific type
+pub fn fconst_ty<'a>(ty: Type) -> impl IRMatcher<'a> {
+    BasicInstMatcher {
+        matcher: move |inst, dfg| match dfg.inst_data(inst) {
+            InstData::FConst(fconst) => fconst.result_ty().unwrap() == ty,
+            _ => false,
+        },
+        data: PhantomData::default(),
+    }
+}
+
+/// A matcher that matches on `null` instructions (i.e. matches on constant operands).
+pub fn null<'a>() -> impl IRMatcher<'a> {
+    BasicInstMatcher {
+        matcher: move |inst, dfg| matches!(dfg.inst_data(inst), InstData::Null(_)),
+        data: PhantomData::default(),
+    }
+}
+
+/// A matcher that matches on `null` instructions with a specific type
+pub fn null_ty<'a>(ty: Type) -> impl IRMatcher<'a> {
+    BasicInstMatcher {
+        matcher: move |inst, dfg| match dfg.inst_data(inst) {
+            InstData::Null(null) => null.result_ty().unwrap() == ty,
+            _ => false,
+        },
+        data: PhantomData::default(),
+    }
+}
+
+/// A matcher that matches on `null` instructions with an integer type
+pub fn null_int<'a>() -> impl IRMatcher<'a> {
+    BasicInstMatcher {
+        matcher: move |inst, dfg| match dfg.inst_data(inst) {
+            InstData::Null(null) => null.result_ty().unwrap().is_int(),
+            _ => false,
+        },
+        data: PhantomData::default(),
+    }
+}
+
+/// A matcher that matches on `null` instructions with an integer, boolean or pointer type
+pub fn null_integral<'a>() -> impl IRMatcher<'a> {
+    BasicInstMatcher {
+        matcher: move |inst, dfg| match dfg.inst_data(inst) {
+            InstData::Null(null) => {
+                let ty = null.result_ty().unwrap();
+
+                ty.is_bool_or_int() || ty.is_ptr()
+            }
+            _ => false,
+        },
+        data: PhantomData::default(),
+    }
+}
+
+/// A matcher that matches on `null` instructions with a floating-point type
+pub fn null_float<'a>() -> impl IRMatcher<'a> {
+    BasicInstMatcher {
+        matcher: move |inst, dfg| match dfg.inst_data(inst) {
+            InstData::Null(null) => null.result_ty().unwrap().is_float(),
+            _ => false,
+        },
+        data: PhantomData::default(),
+    }
+}
+
+/// A matcher that matches on `undef` instructions (i.e. matches on constant operands).
+pub fn undef<'a>() -> impl IRMatcher<'a> {
+    BasicInstMatcher {
+        matcher: move |inst, dfg| matches!(dfg.inst_data(inst), InstData::Undef(_)),
+        data: PhantomData::default(),
+    }
+}
+
+/// A matcher that matches on `bconst` instructions (i.e. matches on constant operands).
+pub fn bconst<'a>() -> impl IRMatcher<'a> {
+    BasicInstMatcher {
+        matcher: move |inst, dfg| matches!(dfg.inst_data(inst), InstData::BConst(_)),
+        data: PhantomData::default(),
+    }
+}
+
+/// A matcher that matches on `bconst` instructions with a specific value
+pub fn bconst_val<'a>(value: bool) -> impl IRMatcher<'a> {
+    BasicInstMatcher {
+        matcher: move |inst, dfg| match dfg.inst_data(inst) {
+            InstData::BConst(bconst) => bconst.value() == value,
+            _ => false,
+        },
+        data: PhantomData::default(),
+    }
+}
+
+/// Matches a `stackslot` instruction
+pub fn stackslot<'a>() -> impl IRMatcher<'a> {
+    BasicInstMatcher {
+        matcher: move |inst, dfg| matches!(dfg.inst_data(inst), InstData::StackSlot(_)),
+        data: PhantomData::default(),
+    }
+}
+
+/// Matches a `load` instruction
+pub fn load<'a>() -> impl IRMatcher<'a> {
+    BasicInstMatcher {
+        matcher: move |inst, dfg| matches!(dfg.inst_data(inst), InstData::Load(_)),
+        data: PhantomData::default(),
+    }
+}
+
+pub fn load_stack<'a>() -> impl IRMatcher<'a> {
+    //
+}
+
 macro_rules! binary_matcher {
     ($name:ident, $variant:path, $underlying:ty, $str:literal) => {
         paste! {
@@ -206,7 +362,7 @@ macro_rules! binary_matcher {
             #[doc = "instruction with that opcode), this will match."]
             pub fn [< $name >]<'a>() -> impl IRMatcher<'a> {
                 BasicInstMatcher {
-                    matcher: move |inst, dfg| matches!(dfg.data(inst), InstData::$variant(_)),
+                    matcher: move |inst, dfg| matches!(dfg.inst_data(inst), InstData::$variant(_)),
                     data: PhantomData::default(),
                 }
             }
@@ -227,7 +383,7 @@ macro_rules! binary_matcher {
             {
                 BasicInstMatcher {
                     matcher: |inst, dfg| {
-                        match dfg.data(inst) {
+                        match dfg.inst_data(inst) {
                             InstData::$variant(inst) => {
                                 lhs.matches_val(inst.lhs(), dfg) && rhs.matches_val(inst.rhs(), dfg)
                             }
