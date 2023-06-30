@@ -1,0 +1,31 @@
+; STANDARD
+fn i32 @max(i32, i32) {
+  $x = stack i32
+  $y = stack i32
+  $ret = stack i32
+
+entry(i32 %0, i32 %1):
+  %x = stackslot $x
+  %y = stackslot $y
+  %ret = stackslot $ret
+  store i32 %0, ptr %x
+  store i32 %1, ptr %y
+  %2 = load i32, ptr %x
+  %3 = load i32, ptr %y
+  %4 = icmp slt i32 %2, %3
+  condbr bool %4, lhs, rhs
+
+lhs:
+  %5 = load i32, ptr %y
+  store i32 %5, ptr %ret
+  br exit
+
+rhs:
+  %6 = load i32, ptr %x
+  store i32 %6, ptr %ret
+  br exit
+
+exit:
+  %7 = load i32, ptr %ret
+  ret i32 %7
+}

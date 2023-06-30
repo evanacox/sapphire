@@ -10,6 +10,9 @@
 
 //! Defines APIs for pattern-matching on SIR.
 //!
+//! This is meant for use at the SIR level, instruction selection needs
+//! different matchers due to extra invariants needing to be checked.
+//!
 //! ```
 //! # use sapphire::ir::matchers::*;
 //! # use sapphire::ir::*;
@@ -347,10 +350,6 @@ pub fn load<'a>() -> impl IRMatcher<'a> {
         matcher: move |inst, dfg| matches!(dfg.inst_data(inst), InstData::Load(_)),
         data: PhantomData::default(),
     }
-}
-
-pub fn load_stack<'a>() -> impl IRMatcher<'a> {
-    //
 }
 
 macro_rules! binary_matcher {

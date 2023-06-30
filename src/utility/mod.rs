@@ -20,6 +20,7 @@ mod spinlock;
 mod string_pool;
 mod tiny;
 mod trees;
+mod iter;
 
 pub use hash::*;
 pub use packed_option::{Packable, PackedOption};
@@ -27,3 +28,4 @@ pub use spinlock::*;
 pub use string_pool::*;
 pub use tiny::*;
 pub use trees::*;
+pub use iter::*;

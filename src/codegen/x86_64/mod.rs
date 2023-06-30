@@ -8,24 +8,19 @@
 //                                                                           //
 //======---------------------------------------------------------------======//
 
-use crate::ir::{DataFlowGraph, Inst, InstData};
+//! x86-64 Backend
+//!
+//! This is the main module for code specific to the generic "x86-64 backend,"
+//! with code for general x86-64 codegen and code for specific ABIs on x86-64.
 
-/// Checks whether a given instruction possibly has a side effect.
-pub fn has_side_effect(dfg: &DataFlowGraph, inst: Inst) -> bool {
-    match dfg.inst_data(inst) {
-        InstData::Load(load) => load.is_volatile(),
-        InstData::Call(_)
-        | InstData::IndirectCall(_)
-        | InstData::Store(_)
-        | InstData::Ret(_)
-        | InstData::Br(_)
-        | InstData::CondBr(_)
-        | InstData::Unreachable(_) => true,
-        _ => {
-            // any instructions that may not have results should be covered above
-            debug_assert_ne!(dfg.inst_to_result(inst), None);
+mod abi;
+mod emit;
+mod greedy_isel;
+mod mir;
+mod target;
 
-            false
-        }
-    }
-}
+pub use abi::*;
+pub use emit::*;
+pub use greedy_isel::*;
+pub use mir::*;
+pub use target::*;

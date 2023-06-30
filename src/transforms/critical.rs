@@ -62,18 +62,23 @@ pub fn split_crit_edges(func: &mut Function, cfg: &ControlFlowGraph) {
     // block has multiple required splits they end up in the order they were processed in.
     //
     // (predecessor, previously inserted split block)
-    let mut previous = (Block::reserved(), Block::reserved());
+    let (mut previous_pred, mut previous_inserted_split) = (Block::reserved(), Block::reserved());
 
     for (pred, succ) in critical_edges.into_iter() {
         let name = split_block_name(&cursor, pred, succ);
 
         // if our previous is for the same block, we want to name it based off of the same
         // block (with a different .N suffix) and put it after the previous edge split.
-        let insert_after = if previous.0 == pred { previous.1 } else { pred };
+        let insert_after = if previous_pred == pred {
+            previous_inserted_split
+        } else {
+            pred
+        };
+
         let split = cursor.create_block_after(&name, insert_after);
 
         // update previous for our current iteration
-        previous = (pred, split);
+        (previous_pred, previous_inserted_split) = (pred, split);
 
         // rewrite the branch to be an arg-less branch targeting the split node
         cursor.goto_before(pred);

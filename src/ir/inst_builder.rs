@@ -530,7 +530,6 @@ pub trait InstBuilder<'dfg>: Sized {
     /// Builds an `iconst` instruction
     fn iconst(self, into: Type, from: u64, debug: DebugInfo) -> Value {
         debug_assert!(into.is_int());
-        debug_assert!(into.unwrap_int().mask() >= from);
 
         self.build_result(InstData::IConst(IConstInst::new(into, from)), debug)
     }

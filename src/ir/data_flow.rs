@@ -8,7 +8,7 @@
 //                                                                           //
 //======---------------------------------------------------------------======//
 
-use crate::arena::{ArenaKey, ArenaMap, SecondaryMap, UniqueArenaMap};
+use crate::arena::{ArenaKey, ArenaMap, SecondaryMap, SecondarySet, UniqueArenaMap};
 use crate::dense_arena_key;
 use crate::ir::{
     BasicBlock, Block, BlockWithParams, DebugInfo, InstData, Instruction, Sig, Signature,
@@ -622,6 +622,22 @@ impl DataFlowGraph {
         debug_assert!(self.is_stack_slot_inserted(slot));
 
         let _ = self.stack_slots.get_mut(slot).unwrap().take();
+    }
+
+    /// Returns a [`SecondarySet`](crate::arena::SecondarySet) that contains every
+    /// value with exactly one use in the DFG.
+    ///
+    /// **Note: This may include values that are NOT in the associated function layout!**
+    pub fn all_single_use_values(&self) -> SecondarySet<Value> {
+        let mut map = SecondarySet::with_capacity(self.values.capacity());
+
+        for value in self.values.keys() {
+            if self.uses_of(value).len() == 1 {
+                map.insert(value);
+            }
+        }
+
+        map
     }
 
     fn maybe_result(&mut self, key: EntityRef, result: Option<Type>) -> (Inst, Option<Value>) {

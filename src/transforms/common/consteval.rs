@@ -54,7 +54,7 @@ impl<'f, 'c> InPlaceConstantFolder<'f, 'c> {
         // TODO: redesign this so we don't need to clone every single instruction that we even attempt to fold
         let mut obj = Self { cursor, inst };
 
-        obj.dispatch_inst(data).is_some()
+        obj.dispatch_inst(data, ()).is_some()
     }
 
     fn val_is_constant(&self, val: Value) -> bool {

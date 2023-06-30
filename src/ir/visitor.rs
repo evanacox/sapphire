@@ -41,7 +41,8 @@ pub trait SIRVisitor<'a> {
 
     /// Called whenever an individual function is visited.
     fn visit_func(&mut self, func: Func) {
-        let def = match self.module().function(func).definition() {
+        let function = self.module().function(func);
+        let def = match function.definition() {
             Some(def) => def,
             None => return,
         };
@@ -534,6 +535,7 @@ pub trait GenericInstVisitor<T, Context> {
 pub trait FunctionCursorVisitor<'a, T, C, Context>: Sized + GenericInstVisitor<T, Context>
 where
     C: CursorMut,
+    Context: Copy,
 {
     /// Gets the module being visited.
     fn cursor(&mut self) -> &mut C;
@@ -543,7 +545,7 @@ where
 
     /// Walks over the module and calls the expected `visit_*` methods
     fn walk(mut self, context: Context) -> T {
-        self.dispatch_blocks();
+        self.dispatch_blocks(context);
 
         self.result(context)
     }
@@ -552,25 +554,25 @@ where
     /// program order.
     ///
     /// The cursor will be moved to different blocks but this.
-    fn dispatch_blocks(&mut self) {
+    fn dispatch_blocks(&mut self, context: Context) {
         while let Some(bb) = self.cursor().next_block() {
-            self.visit_block(bb);
+            self.visit_block(bb, context);
         }
     }
 
     /// Dispatcher that does the default behavior of iterating over every
     /// instruction in a given block in program order.
-    fn dispatch_insts(&mut self, block: Block) {
+    fn dispatch_insts(&mut self, block: Block, context: Context) {
         self.cursor().goto_before(block);
 
         while let Some(inst) = self.cursor().next_inst() {
-            let _ = self.visit_inst(inst);
+            let _ = self.visit_inst(inst, context);
         }
     }
 
     /// Called whenever an individual block is visited
-    fn visit_block(&mut self, block: Block) {
-        self.dispatch_insts(block);
+    fn visit_block(&mut self, block: Block, context: Context) {
+        self.dispatch_insts(block, context);
     }
 
     /// Called whenever an individual instruction is visited.

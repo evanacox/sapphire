@@ -9,7 +9,7 @@
 //======---------------------------------------------------------------======//
 
 use crate::arena::ArenaKey;
-use std::iter::{Enumerate, FusedIterator};
+use std::iter::{Enumerate, Filter, FusedIterator, Map, Zip};
 use std::marker::PhantomData;
 
 macro_rules! pair_iter_impl {
@@ -182,3 +182,35 @@ impl<K: ArenaKey> DoubleEndedIterator for Keys<K> {
 impl<K: ArenaKey> ExactSizeIterator for Keys<K> {}
 
 impl<K: ArenaKey> FusedIterator for Keys<K> {}
+
+pub(crate) type BitsetFilterIntoIter<T> = Map<
+    Filter<Zip<T, smallbitvec::IntoIter>, fn(&(<T as Iterator>::Item, bool)) -> bool>,
+    fn((<T as Iterator>::Item, bool)) -> <T as Iterator>::Item,
+>;
+
+pub(crate) type BitsetFilterIter<T, Other> = Map<
+    Filter<Zip<T, Other>, fn(&(<T as Iterator>::Item, bool)) -> bool>,
+    fn((<T as Iterator>::Item, bool)) -> <T as Iterator>::Item,
+>;
+
+pub(crate) trait BitsetFilterIterator: Iterator + Sized {
+    fn filter_uninitialized_slots<Other: Iterator<Item = bool>>(
+        self,
+        bits: Other,
+    ) -> BitsetFilterIter<Self, Other> {
+        // for whatever reason, rust nightly won't do the implicit conversion even though
+        // the conversion itself is safe since there's no closure state. i have no idea
+        let filter = (|(_, init)| *init) as fn(&(Self::Item, bool)) -> bool;
+        let mapper = (|(val, _)| val) as fn((Self::Item, bool)) -> Self::Item;
+
+        // we carry alongside the bitset iterator, and go slot by slot
+        // alongside the rest of the iterator and just filter ones where the bitset is 0
+        // bitset 0 at slot => slot is uninitialized, 1 => initialized
+        self //
+            .zip(bits)
+            .filter(filter)
+            .map(mapper)
+    }
+}
+
+impl<T: Iterator> BitsetFilterIterator for T {}

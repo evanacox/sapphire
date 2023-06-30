@@ -10,12 +10,14 @@
 
 use sapphire::analysis::*;
 use sapphire::cli::{emit_machine_format, passes, tool_with};
+use sapphire::codegen::x86_64::X86_64Assembly;
+use sapphire::codegen::PresetBackends;
 use sapphire::ir::Module;
 use sapphire::pass::*;
 use sapphire::transforms::*;
 use std::fs;
 
-fn run_passes(mut module: Module, passes: &[String]) {
+fn run_passes(module: &mut Module, passes: &[String]) {
     let mut fam = FunctionAnalysisManager::new();
     fam.add_analysis(ControlFlowGraphAnalysis);
     fam.add_analysis(DominatorTreeAnalysis);
@@ -45,11 +47,11 @@ fn run_passes(mut module: Module, passes: &[String]) {
     mpm.add_pass(FunctionToModulePassAdapter::adapt(fpm));
     mpm.add_pass(VerifyModulePass);
 
-    print_module(&module);
+    // print_module(&module);
 
-    mpm.run(&mut module, &mut mam);
+    mpm.run(module, &mut mam);
 
-    print_module(&module);
+    // print_module(&module);
 }
 
 fn main() {
@@ -66,7 +68,13 @@ fn main() {
         let filename = input.into_os_string().into_string().unwrap();
 
         match sapphire::parse_sir(&filename, &source) {
-            Ok(module) => run_passes(module, &passes),
+            Ok(mut module) => {
+                run_passes(&mut module, &passes);
+
+                let backend = PresetBackends::x86_64_sys_v_unoptimized(module);
+
+                println!("{}", backend.assembly(X86_64Assembly::GNUIntel));
+            }
             Err(e) => {
                 eprintln!("failed to parse: {e}");
             }

@@ -1,0 +1,27 @@
+; STANDARD
+fn bool @rand()
+
+fn i32 @main(i32, i32) {
+    $x = stack i32
+    $y = stack i32
+
+entry(i32 %0, i32 %1):
+    %x = stackslot $x
+    br loop.head
+
+loop.head:
+    %2 = call bool @rand()
+    condbr bool %2, loop.body, exit
+
+loop.body:
+    %3 = alloca i32
+    %4 = iadd i32 %0, %1
+    store i32 %4, ptr %x
+    br loop.latch
+
+loop.latch:
+    br loop.head
+
+exit:
+    ret i32 %0
+}

@@ -8,24 +8,27 @@
 //                                                                           //
 //======---------------------------------------------------------------======//
 
-use crate::ir::{DataFlowGraph, Inst, InstData};
+//! APIs for the compiler back-end and code-generation facilities
+//!
+//! These APIs mostly abstract away any target-specific details, but
+//! there *is* target-specific code in this module. Anything in a module
+//! with an architecture in its name (e.g. `sapphire::codegen::x86_64::*` or
+//! `sapphire::codegen::aarch64::*`) are CPU-specific.
 
-/// Checks whether a given instruction possibly has a side effect.
-pub fn has_side_effect(dfg: &DataFlowGraph, inst: Inst) -> bool {
-    match dfg.inst_data(inst) {
-        InstData::Load(load) => load.is_volatile(),
-        InstData::Call(_)
-        | InstData::IndirectCall(_)
-        | InstData::Store(_)
-        | InstData::Ret(_)
-        | InstData::Br(_)
-        | InstData::CondBr(_)
-        | InstData::Unreachable(_) => true,
-        _ => {
-            // any instructions that may not have results should be covered above
-            debug_assert_ne!(dfg.inst_to_result(inst), None);
+mod backend;
+mod common;
+mod emitter;
+mod isel;
+mod legalize_aggregates;
+mod mir;
+pub mod patterns;
+mod target;
+pub mod x86_64;
 
-            false
-        }
-    }
-}
+pub use backend::*;
+pub use common::*;
+pub use emitter::*;
+pub use isel::*;
+pub use legalize_aggregates::*;
+pub use mir::*;
+pub use target::*;

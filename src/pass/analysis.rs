@@ -8,7 +8,7 @@
 //                                                                           //
 //======---------------------------------------------------------------======//
 
-use crate::analysis::{ControlFlowGraphAnalysis, DominatorTreeAnalysis};
+use crate::analysis::{ControlFlowGraphAnalysis, DominanceFrontierAnalysis, DominatorTreeAnalysis};
 use crate::arena::{ArenaMap, SecondaryMap};
 use crate::dense_arena_key;
 use crate::ir::{Func, Function, Module, ModuleIdentity};
@@ -614,6 +614,9 @@ impl FunctionAnalysisManager {
     ///
     /// This manager has no analyses registered, they need to be added with [`Self::add_analysis`]
     /// before they can be used by transform passes.
+    ///
+    /// # Note
+    /// Note that [`Self::default()`] can be used to get all analyses pre-registered.
     #[inline]
     pub fn new() -> Self {
         let mut am = AnalysisManager::new();
@@ -659,7 +662,13 @@ impl FunctionAnalysisManager {
 
 impl Default for FunctionAnalysisManager {
     fn default() -> Self {
-        Self::new()
+        let mut fam = Self::new();
+
+        fam.add_analysis(ControlFlowGraphAnalysis);
+        fam.add_analysis(DominatorTreeAnalysis);
+        fam.add_analysis(DominanceFrontierAnalysis);
+
+        fam
     }
 }
 

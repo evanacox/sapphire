@@ -14,6 +14,7 @@ use crate::ir::*;
 use crate::pass::*;
 use crate::utility::SaHashSet;
 use std::cmp::Ordering;
+use std::iter;
 
 /// An IR validity verification pass.
 ///
@@ -263,16 +264,51 @@ impl<'m> SIRVisitor<'m> for Verifier<'m> {
         self.prev_defined.clear();
 
         if let Some(def) = function.definition() {
-            let cfg = ControlFlowGraph::compute(function);
-            let domtree = DominatorTree::compute(function, &cfg);
+            if let Some(bb) = def.layout.entry_block() {
+                let sig = function.signature();
+                let bb_params = def.dfg.block(bb).params();
+                let sig_params = sig.params();
 
-            self.domtree.replace(domtree);
+                verify_assert_eq!(
+                    self,
+                    DebugInfo::fake(),
+                    bb_params.len(),
+                    sig_params.len(),
+                    format!("entry block for function '{}' must have same number of parameters as function signature", function.name())
+                );
 
-            let reachable: Vec<Block> =
-                self.domtree.as_ref().unwrap().reverse_postorder().collect();
+                for (&bb_param, &(sig_param, _)) in iter::zip(bb_params.iter(), sig_params.iter()) {
+                    verify_assert_eq!(
+                        self,
+                        def.dfg.debug(bb_param),
+                        def.dfg.ty(bb_param),
+                        sig_param,
+                        "entry block parameter does not match in type to function signature"
+                    );
+                }
 
-            for block in reachable {
-                self.visit_block(block, def);
+                let cfg = ControlFlowGraph::compute(function);
+                let domtree = DominatorTree::compute(function, &cfg);
+
+                self.domtree.replace(domtree);
+
+                verify_assert_eq!(
+                    self,
+                    DebugInfo::fake(),
+                    cfg.n_predecessors(bb),
+                    0,
+                    format!(
+                        "entry block for function '{}' must not have any predecessors",
+                        function.name()
+                    )
+                );
+
+                let reachable: Vec<Block> =
+                    self.domtree.as_ref().unwrap().reverse_postorder().collect();
+
+                for block in reachable {
+                    self.visit_block(block, def);
+                }
             }
         }
     }

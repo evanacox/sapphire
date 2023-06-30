@@ -17,6 +17,7 @@
     rustdoc::broken_intra_doc_links,
     rustdoc::private_intra_doc_links
 )]
+#![allow(unused_variables)]
 
 //! # Sapphire
 //!
@@ -27,6 +28,7 @@ mod reader;
 pub mod analysis;
 pub mod arena;
 pub mod cli;
+pub mod codegen;
 pub mod ir;
 pub mod pass;
 pub mod transforms;

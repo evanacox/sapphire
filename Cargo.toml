@@ -8,6 +8,11 @@ name = "sirc"
 path = "./tools/sirc/main.rs"
 
 [[bin]]
+name = "playground"
+path = "./tools/playground/main.rs"
+required-features = ["dev-tools", "playground"]
+
+[[bin]]
 name = "filetest"
 path = "./tools/filetest/main.rs"
 test = true
@@ -16,7 +21,7 @@ required-features = ["dev-tools"]
 [dependencies]
 ahash = "0.8.1"
 bitflags = "1.3.2"
-bpaf = "0.7.7"
+bpaf = "0.8.1"
 paste = "1.0.11"
 pest = "2.5.2"
 pest_derive = "2.5.2"
@@ -39,3 +44,4 @@ lazy_static = { version = "1.4.0", optional = true }
 default = ["enable-serde", "dev-tools"]
 dev-tools = ["dep:ansi_term", "dep:diff", "dep:threadpool", "dep:lazy_static", "dep:backtrace"]
 enable-serde = ["dep:serde", "dep:serde_test", "smallvec/serde"]
+playground = []

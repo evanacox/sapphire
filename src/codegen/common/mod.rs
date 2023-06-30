@@ -8,24 +8,7 @@
 //                                                                           //
 //======---------------------------------------------------------------======//
 
-use crate::ir::{DataFlowGraph, Inst, InstData};
+mod layout;
+mod calling_conv;
 
-/// Checks whether a given instruction possibly has a side effect.
-pub fn has_side_effect(dfg: &DataFlowGraph, inst: Inst) -> bool {
-    match dfg.inst_data(inst) {
-        InstData::Load(load) => load.is_volatile(),
-        InstData::Call(_)
-        | InstData::IndirectCall(_)
-        | InstData::Store(_)
-        | InstData::Ret(_)
-        | InstData::Br(_)
-        | InstData::CondBr(_)
-        | InstData::Unreachable(_) => true,
-        _ => {
-            // any instructions that may not have results should be covered above
-            debug_assert_ne!(dfg.inst_to_result(inst), None);
-
-            false
-        }
-    }
-}
+pub use layout::*;

@@ -10,10 +10,10 @@
 
 use crate::arena;
 use crate::arena::iter::Keys;
-use crate::arena::{ArenaKey, ArenaMap};
+use crate::arena::{ArenaKey, ArenaMap, BitsetFilterIntoIter, BitsetFilterIterator};
 use smallbitvec::{sbvec, SmallBitVec};
 use std::fmt::{Debug, Formatter};
-use std::iter::{Enumerate, Filter, Map, Zip};
+use std::iter::{Enumerate, Map};
 use std::marker::PhantomData;
 use std::mem;
 use std::mem::MaybeUninit;
@@ -25,8 +25,9 @@ use serde::{
     de::MapAccess, de::Visitor, ser::SerializeMap, Deserialize, Deserializer, Serialize, Serializer,
 };
 
-/// Intended to be a dense secondary mapping `K -> V` for keys from a primary [`ArenaMap`]. This
-/// is to associate extra data with most (but ideally *all*) keys from a given `PrimaryMap`.
+/// Intended to be a dense secondary mapping `K -> V` for keys from a primary [`ArenaMap`].
+///
+/// This is to associate extra data with most (but ideally *all*) keys from a given `PrimaryMap`.
 ///
 /// While the map *does* track insertion information in a dense bitset, this is not intended to
 /// map only a few keys, as this map stores space for every mapping just like [`ArenaMap`] does. If
@@ -502,7 +503,8 @@ impl<K: ArenaKey, V> SecondaryMap<K, V> {
     /// arena_key! { struct Key; }
     /// let mut map = ArenaMap::default();
     /// let k1: Key = map.insert(15);
-    /// let mut it = map.keys();
+    /// let secondary = SecondaryMap::map_all_keys(&map, |m, k| m[k] * 2);
+    /// let mut it = secondary.keys();
     /// assert_eq!(it.next(), Some(k1));
     /// ```
     pub fn keys(&self) -> impl Iterator<Item = K> + '_ {
@@ -736,8 +738,9 @@ pub struct SecondaryIntoIter<K: ArenaKey, V> {
 
 impl<K: ArenaKey, V> Drop for SecondaryIntoIter<K, V> {
     fn drop(&mut self) {
-        for (_, _) in self.inner.by_ref() {
-            // just need to drop them
+        for (k, v) in self.inner.by_ref() {
+            // could do this implicitly, but this is clearer
+            drop((k, v))
         }
     }
 }
@@ -772,38 +775,6 @@ impl<K: ArenaKey, V> IntoIterator for SecondaryMap<K, V> {
     }
 }
 
-type BitsetFilterIntoIter<T> = Map<
-    Filter<Zip<T, smallbitvec::IntoIter>, fn(&(<T as Iterator>::Item, bool)) -> bool>,
-    fn((<T as Iterator>::Item, bool)) -> <T as Iterator>::Item,
->;
-
-type BitsetFilterIter<T, Other> = Map<
-    Filter<Zip<T, Other>, fn(&(<T as Iterator>::Item, bool)) -> bool>,
-    fn((<T as Iterator>::Item, bool)) -> <T as Iterator>::Item,
->;
-
-trait BitsetFilterIterator: Iterator + Sized {
-    fn filter_uninitialized_slots<Other: Iterator<Item = bool>>(
-        self,
-        bits: Other,
-    ) -> BitsetFilterIter<Self, Other> {
-        // for whatever reason, rust nightly won't do the implicit conversion even though
-        // the conversion itself is safe since there's no closure state. i have no idea
-        let filter = (|(_, init)| *init) as fn(&(Self::Item, bool)) -> bool;
-        let mapper = (|(val, _)| val) as fn((Self::Item, bool)) -> Self::Item;
-
-        // we carry alongside the bitset iterator, and go slot by slot
-        // alongside the rest of the iterator and just filter ones where the bitset is 0
-        // bitset 0 at slot => slot is uninitialized, 1 => initialized
-        self //
-            .zip(bits)
-            .filter(filter)
-            .map(mapper)
-    }
-}
-
-impl<T: Iterator> BitsetFilterIterator for T {}
-
 #[cfg(feature = "enable-serde")]
 impl<K: ArenaKey, V> Serialize for SecondaryMap<K, V>
 where
@@ -822,7 +793,7 @@ where
             .map(|(_, val)| unsafe { val.assume_init_ref() })
             .collect();
 
-        let mut state = serializer.serialize_map(Some(2))?;
+        let mut state = serializer.serialize_map(Some(self.slots.len()))?;
 
         state.serialize_entry("bits", &collected_bits)?;
         state.serialize_entry("slots", &collected_refs)?;

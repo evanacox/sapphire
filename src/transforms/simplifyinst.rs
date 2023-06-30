@@ -118,7 +118,7 @@ impl<'f> FunctionCursorVisitor<'f, Option<Simplification<'f>>, FuncCursor<'f>, (
     }
 
     fn walk(mut self, _: ()) -> Option<Simplification<'f>> {
-        self.dispatch_blocks();
+        self.dispatch_blocks(());
 
         // if the worklist has anything in it, run all the simplifications
         // and then try to refill the worklist. repeat until no more simplifications are found
@@ -132,24 +132,24 @@ impl<'f> FunctionCursorVisitor<'f, Option<Simplification<'f>>, FuncCursor<'f>, (
                 (work)(&mut self, dbg, &data);
             }
 
-            self.dispatch_blocks();
+            self.dispatch_blocks(());
         }
 
         None
     }
 
-    fn dispatch_blocks(&mut self) {
+    fn dispatch_blocks(&mut self, _: ()) {
         // stupid, but you can't iterate over self.rpo while calling `self.visit_block`
         let rpo = mem::take(&mut self.rpo);
 
         for bb in rpo.iter().copied() {
-            self.visit_block(bb);
+            self.visit_block(bb, ());
         }
 
         self.rpo = rpo;
     }
 
-    fn dispatch_insts(&mut self, block: Block) {
+    fn dispatch_insts(&mut self, block: Block, _: ()) {
         self.cursor().goto_before(block);
 
         while let Some(inst) = self.cursor().next_inst() {

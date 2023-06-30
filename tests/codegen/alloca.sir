@@ -1,25 +1,20 @@
 ; STANDARD
 fn i32 @main(i32, ptr) {
 entry(i32 %argc, ptr %argv):
-    %0 = alloca i32
-    %1 = iconst i32 42
-    %2 = icmp eq i32 %argc, %1
-    condbr bool %2, a, exit
+    %x = alloca i32
+    %c1 = iconst i32 42
+    %cond = icmp eq i32 %argc, %c1
+    condbr bool %cond, a, exit
 
 a:
-    %3 = iconst i32 6
-    store i32 %3, ptr %0
+    %c2 = iconst i32 6
+    store i32 %c2, ptr %x
     br c
-
-b:
-    %4 = iconst i32 16
-    store i32 %4, ptr %0
-    br exit
 
 c:
     br exit
 
 exit:
-    %5 = load i32, ptr %0
-    ret i32 %5
+    %result = load i32, ptr %x
+    ret i32 %result
 }

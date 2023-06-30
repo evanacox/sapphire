@@ -44,14 +44,16 @@
 mod iter;
 mod key;
 mod map;
-mod secondary;
+mod secondary_map;
 mod unique;
+mod secondary_set;
 
 pub use iter::*;
 pub use key::ArenaKey;
 pub use map::ArenaMap;
-pub use secondary::SecondaryMap;
+pub use secondary_map::SecondaryMap;
 pub use unique::UniqueArenaMap;
+pub use secondary_set::SecondarySet;
 
 use std::fmt;
 use std::fmt::{Debug, Formatter};

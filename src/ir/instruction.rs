@@ -1470,8 +1470,15 @@ impl IConstInst {
     }
 
     /// Gets the actual const value being yielded as an unsigned integer
+    #[inline(always)]
     pub fn value(&self) -> u64 {
         self.constant & self.mask
+    }
+
+    /// Gets the mask used to mask the value
+    #[inline(always)]
+    pub fn mask(&self) -> u64 {
+        self.mask
     }
 }
 
