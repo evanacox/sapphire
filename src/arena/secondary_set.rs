@@ -38,8 +38,8 @@ use serde::{
 /// let k2 = map.insert(20);
 /// let secondary = SecondarySet::map_keys(&map, |m, k| m[k] % 2 == 0);
 ///
+/// assert_eq!(secondary.contains(k1), false);
 /// assert_eq!(secondary.contains(k2), true);
-/// assert_eq!(secondary.contains(k2), false);
 /// ```
 #[derive(Clone)]
 pub struct SecondarySet<K: ArenaKey> {
@@ -123,8 +123,9 @@ impl<K: ArenaKey> SecondarySet<K> {
         let mut cardinality = 0;
 
         for key in primary.keys() {
-            cardinality += 1;
             bits.push(f(primary, key));
+
+            cardinality += bits.last().unwrap() as usize;
         }
 
         Self {
@@ -143,7 +144,9 @@ impl<K: ArenaKey> SecondarySet<K> {
     /// let mut map = ArenaMap::default();
     /// let k1: Key = map.insert(15);
     /// let k2 = map.insert(20);
-    /// let secondary = SecondarySet::map_keys(&map, |m, k| m[k] % 2 == 0);
+    /// let secondary = SecondarySet::map_keys(&map, |m, k| {
+    /// eprintln!("{}", m[k]);
+    /// m[k] % 2 == 0});
     /// assert_eq!(secondary.cardinality(), 1);
     /// ```
     pub fn cardinality(&self) -> usize {

@@ -84,7 +84,7 @@ pub enum Extern {
     Object(Type),
 }
 
-/// Equivalent of a [`Module`] for MIR.
+/// Equivalent of a [`Module`](crate::ir::Module) for MIR.
 ///
 /// This simply holds a list of [`MachInst`]s. A [`MIRModule`] may or may not
 /// have been register allocated yet, but all instructions are guaranteed to

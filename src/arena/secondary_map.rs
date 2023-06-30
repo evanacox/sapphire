@@ -793,7 +793,7 @@ where
             .map(|(_, val)| unsafe { val.assume_init_ref() })
             .collect();
 
-        let mut state = serializer.serialize_map(Some(self.slots.len()))?;
+        let mut state = serializer.serialize_map(Some(2))?;
 
         state.serialize_entry("bits", &collected_bits)?;
         state.serialize_entry("slots", &collected_refs)?;

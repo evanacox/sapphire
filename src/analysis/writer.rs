@@ -728,7 +728,7 @@ impl<'m> SIRVisitor<'m> for WriterImpl<'m> {
 
         let ty = self.ty(data.result_ty().unwrap());
         let val = self.name_ty(data.pointer(), def);
-        let volatile = data.is_volatile().then_some("volatile ").unwrap_or("");
+        let volatile = if data.is_volatile() { "volatile " } else { "" };
 
         self.state.whole += &format!("load {volatile}{ty}, {val}");
     }
@@ -736,7 +736,7 @@ impl<'m> SIRVisitor<'m> for WriterImpl<'m> {
     fn visit_store(&mut self, _: Inst, data: &StoreInst, def: &FunctionDefinition) {
         let val = self.name_ty(data.stored(), def);
         let ptr = self.name_ty(data.pointer(), def);
-        let volatile = data.is_volatile().then_some("volatile ").unwrap_or("");
+        let volatile = if data.is_volatile() { "volatile " } else { "" };
 
         self.state.whole += &format!("store {volatile}{val}, {ptr}");
     }

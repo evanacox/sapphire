@@ -242,7 +242,7 @@ impl ScaleAnd30BitOffset {
         //
         // any positive offsets can be bit-casted directly too, they just have 0s in the bits
         // that we want to shave off.
-        (offset as u32) & Self::SCALE_MASK
+        (offset as u32) & Self::OFFSET_MASK
     }
 }
 

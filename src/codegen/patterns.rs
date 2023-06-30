@@ -40,7 +40,7 @@ use std::marker::PhantomData;
 
 /// A basic matcher for a single instruction, for use in merging during instruction selection.
 ///
-/// This uses the checks inside the [`LoweringContext`](codegen::LoweringContext) to
+/// This uses the checks inside the [`LoweringContext`] to
 /// see not only if the IR matches the pattern, but to see if the match is able to be
 /// merged.
 pub trait ISelMergeMatcher<Arch, Abi, Inst>
@@ -173,7 +173,7 @@ where
 }
 
 /// Used when you want to actually perform the merge between `base` and its operands after
-/// successfully matching via [`matches`].
+/// successfully matching via [`matches()`].
 ///
 /// Usually you don't want this, use the single step [`merge_if_matches`] instead unless
 /// you specifically need to run additional checks outside the pattern syntax.

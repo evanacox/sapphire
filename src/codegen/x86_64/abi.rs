@@ -22,6 +22,7 @@ pub struct SystemV {
     cpu: X86_64,
 }
 
+#[allow(clippy::upper_case_acronyms)]
 #[repr(u8)]
 #[derive(Copy, Clone)]
 enum SystemVTypeClass {

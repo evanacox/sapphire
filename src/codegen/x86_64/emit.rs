@@ -73,11 +73,11 @@ impl AsmEmitter {
             self.state += "    .intel_syntax noprefix\n";
         }
 
-        self.emit_global_symbols(&module);
-        self.emit_extern_symbols(&module);
+        self.emit_global_symbols(module);
+        self.emit_extern_symbols(module);
 
         for function in module.functions() {
-            self.emit_function(&module, function);
+            self.emit_function(module, function);
         }
 
         if self.mode == X86_64Assembly::MASM {
