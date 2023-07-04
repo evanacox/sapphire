@@ -172,13 +172,20 @@ impl AsmEmitter {
                 .expect("should have name"),
         );
 
-        for (count, &block) in function.program_order().iter().enumerate() {
+        for (count, &block) in function
+            .program_order()
+            .iter()
+            .skip(1) // skip 1, we don't want to put a label on the first block
+            .enumerate()
+        {
             block_names.insert(block, format!(".L{count}"));
         }
 
         for &block in function.program_order().iter() {
-            self.state += &block_names[block];
-            self.state += ":\n";
+            if block_names.contains(block) {
+                self.state += &block_names[block];
+                self.state += ":\n";
+            }
 
             for &inst in function.block(block) {
                 self.state += "    ";
@@ -196,6 +203,8 @@ impl AsmEmitter {
         match inst {
             Inst::Nop(_) => "nop".into(),
             Inst::Mov(mov) => self.emit_mov(mov),
+            Inst::Movsx(movsx) => self.emit_movsx(movsx),
+            Inst::Movzx(movzx) => self.emit_movzx(movzx),
             Inst::MovStore(mov) => self.emit_mov_store(mov),
             Inst::Movabs(movabs) => self.emit_movabs(movabs),
             Inst::ALU(alu) => self.emit_alu(alu),
@@ -467,7 +476,7 @@ impl AsmEmitter {
         }
     }
 
-    fn suffix(&self, width: Width) -> &str {
+    fn suffix(&self, width: Width) -> &'static str {
         if self.mode == X86_64Assembly::GNU {
             match width {
                 Width::Byte => "b",
@@ -489,12 +498,50 @@ impl AsmEmitter {
         format!("mov{suffix} {lhs}, {rhs}")
     }
 
+    fn extension_suffixes(&self, widths: WidthPair) -> (&'static str, &'static str, &'static str) {
+        match self.mode {
+            X86_64Assembly::GNU => (
+                "",
+                self.suffix(widths.src_width()),
+                self.suffix(widths.dest_width()),
+            ),
+            X86_64Assembly::GNUIntel | X86_64Assembly::NASM | X86_64Assembly::MASM => ("x", "", ""),
+        }
+    }
+
+    fn emit_movsx(&self, mov: Movsx) -> String {
+        let src = self.emit_rmi(mov.src, mov.widths.src_width());
+        let dest = self.emit_reg(mov.dest.to_reg(), mov.widths.dest_width());
+        let (lhs, rhs) = self.reorder_operands(src, dest);
+        let (s1, s2, s3) = self.extension_suffixes(mov.widths);
+
+        format!("movs{s1}{s2}{s3} {lhs}, {rhs}")
+    }
+
+    fn emit_movzx(&self, mov: Movzx) -> String {
+        let src = self.emit_rmi(mov.src, mov.widths.src_width());
+        let dest = self.emit_reg(mov.dest.to_reg(), mov.widths.dest_width());
+        let (lhs, rhs) = self.reorder_operands(src, dest);
+        let (s1, s2, s3) = self.extension_suffixes(mov.widths);
+
+        format!("movz{s1}{s2}{s3} {lhs}, {rhs}")
+    }
+
     fn emit_mov_store(&self, mov: MovStore) -> String {
-        todo!()
+        let src = self.emit_rmi(mov.src.into(), mov.width);
+        let dest = self.emit_mem_location(mov.dest, mov.width);
+        let (lhs, rhs) = self.reorder_operands(src, dest);
+        let suffix = self.suffix(mov.width);
+
+        format!("mov{suffix} {lhs}, {rhs}")
     }
 
     fn emit_movabs(&self, movabs: Movabs) -> String {
-        todo!()
+        let value = format!("{}", movabs.value);
+        let dest = self.emit_reg(movabs.dest.to_reg(), Width::Qword);
+        let (lhs, rhs) = self.reorder_operands(value, dest);
+
+        format!("movabs {lhs}, {rhs}")
     }
 
     fn emit_alu(&self, alu: ALU) -> String {
@@ -517,23 +564,40 @@ impl AsmEmitter {
     }
 
     fn emit_not(&self, not: Not) -> String {
-        todo!()
+        let dest = self.emit_reg(not.reg.to_reg(), not.width);
+        let suffix = self.suffix(not.width);
+
+        format!("not{suffix} {dest}")
     }
 
     fn emit_neg(&self, neg: Neg) -> String {
-        todo!()
+        let dest = self.emit_reg(neg.reg.to_reg(), neg.width);
+        let suffix = self.suffix(neg.width);
+
+        format!("neg{suffix} {dest}")
     }
 
     fn emit_imul(&self, imul: IMul) -> String {
-        todo!()
+        let src = self.emit_rmi(imul.rhs, imul.width);
+        let dest = self.emit_reg(imul.lhs.to_reg(), imul.width);
+        let (lhs, rhs) = self.reorder_operands(src, dest);
+        let suffix = self.suffix(imul.width);
+
+        format!("imul{suffix} {lhs}, {rhs}")
     }
 
     fn emit_div(&self, div: Div) -> String {
-        todo!()
+        let src = self.emit_rmi(div.divisor.into(), div.width);
+        let suffix = self.suffix(div.width);
+
+        format!("div{suffix} {src}")
     }
 
     fn emit_idiv(&self, idiv: IDiv) -> String {
-        todo!()
+        let src = self.emit_rmi(idiv.divisor.into(), idiv.width);
+        let suffix = self.suffix(idiv.width);
+
+        format!("idiv{suffix} {src}")
     }
 
     fn emit_cmp(&self, cmp: Cmp) -> String {
@@ -555,19 +619,37 @@ impl AsmEmitter {
     }
 
     fn emit_push(&self, push: Push) -> String {
-        todo!()
+        let reg = self.emit_reg(push.value, push.width);
+        let suffix = self.suffix(push.width);
+
+        format!("push{suffix} {reg}")
     }
 
     fn emit_pop(&self, pop: Pop) -> String {
-        todo!()
+        let reg = self.emit_reg(pop.dest.to_reg(), pop.width);
+        let suffix = self.suffix(pop.width);
+
+        format!("pop{suffix} {reg}")
     }
 
     fn emit_call(&self, call: Call) -> String {
-        todo!()
+        let name = self.pool.get(call.func).unwrap();
+        let suffix = match self.mode {
+            X86_64Assembly::GNU => "q",
+            X86_64Assembly::GNUIntel | X86_64Assembly::NASM | X86_64Assembly::MASM => "",
+        };
+
+        format!("call{suffix} {name}")
     }
 
     fn emit_indirectcall(&self, indirectcall: IndirectCall) -> String {
-        todo!()
+        let value = self.emit_rmi(indirectcall.func, Width::Qword);
+        let (s1, s2) = match self.mode {
+            X86_64Assembly::GNU => ("q", "*"),
+            X86_64Assembly::GNUIntel | X86_64Assembly::NASM | X86_64Assembly::MASM => ("", ""),
+        };
+
+        format!("call{s1} {s2}{value}")
     }
 
     fn condition_code_suffix(condition: ConditionCode) -> &'static str {

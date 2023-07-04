@@ -8,7 +8,7 @@
 //                                                                           //
 //======---------------------------------------------------------------======//
 
-use crate::codegen::common::STANDARD_64_BIT_LAYOUT;
+use crate::codegen::abi::STANDARD_64_BIT_LAYOUT;
 use crate::codegen::{Architecture, CPUArch, PReg, TypeLayout};
 
 const X86_64_REGS: [PReg; 33] = [

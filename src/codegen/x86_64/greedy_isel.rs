@@ -62,7 +62,7 @@ fn width_dword_minimum(width: Width) -> Width {
     }
 }
 
-fn icmp_into_jmp(op: ICmpOp) -> ConditionCode {
+fn icmp_into_cc(op: ICmpOp) -> ConditionCode {
     match op {
         ICmpOp::EQ => ConditionCode::E,
         ICmpOp::NE => ConditionCode::NE,
@@ -118,13 +118,13 @@ where
     ) -> WriteableReg {
         let class = self.val_class(lhs, def);
         let src = ctx.result_reg(lhs, class);
-        let width = value_into_width(lhs, (def, ctx));
+        let width = width_dword_minimum(value_into_width(lhs, (def, ctx)));
 
         // we emit it as a `mov` for dwords so that the entire register is cleared
         ctx.emit(Inst::Mov(Mov {
-            dest,
+            width,
             src: RegMemImm::Reg(src),
-            width: width_dword_minimum(width),
+            dest,
         }));
 
         dest
@@ -206,6 +206,99 @@ where
             condition,
             target: JumpTarget::Local(ctx.mir_block(bb)),
         }));
+    }
+
+    fn signed_division(
+        &self,
+        data: &ArithInst,
+        (def, ctx): Ctx<'module, 'target, 'ctx, Abi>,
+    ) -> (Reg, Width) {
+        let dest = self.curr_result_reg(RegClass::Int, (def, ctx));
+        let lhs = ctx.result_reg(data.lhs(), RegClass::Int);
+        let rhs = self.rhs_operand_rm(data.rhs(), (def, ctx));
+        let mut width = value_into_width(data.lhs(), (def, ctx));
+
+        // IDIV dividend must be located in AX/EAX/RAX
+        ctx.emit(Inst::Mov(Mov {
+            width,
+            src: RegMemImm::Reg(lhs),
+            dest: WriteableReg::from_reg(IDiv::DIVIDEND_LO),
+        }));
+
+        // if we're dealing with 8-bit operands, we sign-extend them to 16-bit
+        // due to a limitation of how we represent partial registers (can't model AL vs AH)
+        if width == Width::Byte {
+            // this is incredibly evil but technically fine, this doesn't actually modify
+            // the value at all. the compiler will never be relying on the upper bits
+            // when a value is being treated as an i8, and the sign extension won't
+            // modify the lower bits that we do rely on
+            ctx.emit(Inst::Movsx(Movsx {
+                widths: WidthPair::from_widths(Width::Byte, Width::Word),
+                src: RegMemImm::Reg(IDiv::DIVIDEND_LO),
+                dest: WriteableReg::from_reg(IDiv::DIVIDEND_LO),
+            }));
+
+            width = Width::Word;
+        }
+
+        // need to sign-extend the dividend into DX:AX/EDX:EAX/RDX:RAX
+        match width {
+            Width::Byte => unreachable!(),
+            Width::Word => ctx.emit(Inst::Cwd(Cwd)),
+            Width::Dword => ctx.emit(Inst::Cdq(Cdq)),
+            Width::Qword => ctx.emit(Inst::Cqo(Cqo)),
+        }
+
+        ctx.emit(Inst::IDiv(IDiv {
+            width,
+            divisor: rhs,
+        }));
+
+        (dest, width)
+    }
+
+    fn unsigned_division(
+        &self,
+        data: &ArithInst,
+        (def, ctx): Ctx<'module, 'target, 'ctx, Abi>,
+    ) -> (Reg, Width) {
+        let dest = self.curr_result_reg(RegClass::Int, (def, ctx));
+        let lhs = ctx.result_reg(data.lhs(), RegClass::Int);
+        let rhs = self.rhs_operand_rm(data.rhs(), (def, ctx));
+        let mut width = value_into_width(data.lhs(), (def, ctx));
+
+        // DIV dividend must be located in AX/EAX/RAX
+        ctx.emit(Inst::Mov(Mov {
+            width,
+            src: RegMemImm::Reg(lhs),
+            dest: WriteableReg::from_reg(Div::DIVIDEND_LO),
+        }));
+
+        // if we're dealing with 8-bit operands, we sign-extend them to 16-bit
+        // due to a limitation of how we represent partial registers (can't model AL vs AH)
+        if width == Width::Byte {
+            // this is incredibly evil but technically fine, this doesn't actually modify
+            // the value at all. the compiler will never be relying on the upper bits
+            // when a value is being treated as an i8, and the zero extension won't
+            // modify the lower bits that we do rely on
+            ctx.emit(Inst::Movzx(Movzx {
+                widths: WidthPair::from_widths(Width::Byte, Width::Word),
+                src: RegMemImm::Reg(Div::DIVIDEND_LO),
+                dest: WriteableReg::from_reg(Div::DIVIDEND_LO),
+            }));
+
+            width = Width::Word;
+        }
+
+        // need to zero the "upper register" to have our unsigned dividend in DX:AX/EDX:EAX/RDX:RAX
+        self.zero(WriteableReg::from_reg(Div::DIVIDEND_HI), (def, ctx));
+
+        ctx.emit(Inst::Div(Div {
+            width,
+            divisor: rhs,
+        }));
+
+        (dest, width)
     }
 }
 
@@ -313,7 +406,7 @@ where
             let condition = if zero_optimization {
                 ConditionCode::Z
             } else {
-                icmp_into_jmp(data.op())
+                icmp_into_cc(data.op())
             };
 
             ctx.emit(Inst::Set(Set { condition, dest }));
@@ -350,7 +443,7 @@ where
                 if let InstData::ICmp(icmp) = inst_data {
                     let true_target = data.true_branch();
                     let false_target = data.false_branch();
-                    let opc = icmp_into_jmp(icmp.op());
+                    let opc = icmp_into_cc(icmp.op());
 
                     self.copy_phis_and_jump(true_target, Some(opc), (def, ctx));
                     self.copy_phis_and_jump(false_target, None, (def, ctx));
@@ -489,25 +582,58 @@ where
     fn visit_imul(
         &mut self,
         data: &CommutativeArithInst,
-        context: Ctx<'module, 'target, 'ctx, Abi>,
+        (def, ctx): Ctx<'module, 'target, 'ctx, Abi>,
     ) {
-        todo!()
+        let dest = self.curr_result_reg(RegClass::Int, (def, ctx));
+        let lhs = self.mov(WriteableReg::from_reg(dest), data.lhs(), (def, ctx));
+        let rhs = self.rhs_operand_rmi(data.rhs(), (def, ctx));
+        let width = value_into_width(data.lhs(), (def, ctx));
+
+        ctx.emit(Inst::IMul(IMul { width, lhs, rhs }));
     }
 
-    fn visit_sdiv(&mut self, data: &ArithInst, context: Ctx<'module, 'target, 'ctx, Abi>) {
-        todo!()
+    fn visit_sdiv(&mut self, data: &ArithInst, (def, ctx): Ctx<'module, 'target, 'ctx, Abi>) {
+        let (dest, width) = self.signed_division(data, (def, ctx));
+
+        // we free RAX back up by moving it into the vreg the result is supposed to be in
+        ctx.emit(Inst::Mov(Mov {
+            width,
+            src: RegMemImm::Reg(IDiv::QUOTIENT),
+            dest: WriteableReg::from_reg(dest),
+        }));
     }
 
-    fn visit_udiv(&mut self, data: &ArithInst, context: Ctx<'module, 'target, 'ctx, Abi>) {
-        todo!()
+    fn visit_udiv(&mut self, data: &ArithInst, (def, ctx): Ctx<'module, 'target, 'ctx, Abi>) {
+        let (dest, width) = self.unsigned_division(data, (def, ctx));
+
+        // we free RDX back up by moving it into the vreg the result is supposed to be in
+        ctx.emit(Inst::Mov(Mov {
+            width,
+            src: RegMemImm::Reg(Div::QUOTIENT),
+            dest: WriteableReg::from_reg(dest),
+        }));
     }
 
-    fn visit_srem(&mut self, data: &ArithInst, context: Ctx<'module, 'target, 'ctx, Abi>) {
-        todo!()
+    fn visit_srem(&mut self, data: &ArithInst, (def, ctx): Ctx<'module, 'target, 'ctx, Abi>) {
+        let (dest, width) = self.signed_division(data, (def, ctx));
+
+        // we free RDX back up by moving it into the vreg the result is supposed to be in
+        ctx.emit(Inst::Mov(Mov {
+            width,
+            src: RegMemImm::Reg(IDiv::REMAINDER),
+            dest: WriteableReg::from_reg(dest),
+        }));
     }
 
-    fn visit_urem(&mut self, data: &ArithInst, context: Ctx<'module, 'target, 'ctx, Abi>) {
-        todo!()
+    fn visit_urem(&mut self, data: &ArithInst, (def, ctx): Ctx<'module, 'target, 'ctx, Abi>) {
+        let (dest, width) = self.unsigned_division(data, (def, ctx));
+
+        // we free RDX back up by moving it into the vreg the result is supposed to be in
+        ctx.emit(Inst::Mov(Mov {
+            width,
+            src: RegMemImm::Reg(Div::REMAINDER),
+            dest: WriteableReg::from_reg(dest),
+        }));
     }
 
     fn visit_fneg(&mut self, data: &FloatUnaryInst, context: Ctx<'module, 'target, 'ctx, Abi>) {
@@ -570,24 +696,60 @@ where
         todo!()
     }
 
-    fn visit_sext(&mut self, data: &CastInst, context: Ctx<'module, 'target, 'ctx, Abi>) {
-        todo!()
+    fn visit_sext(&mut self, data: &CastInst, (def, ctx): Ctx<'module, 'target, 'ctx, Abi>) {
+        let dest = self.curr_result_reg(RegClass::Int, (def, ctx));
+        let dest_width = type_into_width(data.result_ty().unwrap(), ctx);
+        let src_width = value_into_width(data.operand(), (def, ctx));
+        let src = self.rhs_operand_rmi(data.operand(), (def, ctx));
+
+        ctx.emit(Inst::Movsx(Movsx {
+            widths: WidthPair::from_widths(src_width, dest_width),
+            src,
+            dest: WriteableReg::from_reg(dest),
+        }));
     }
 
-    fn visit_zext(&mut self, data: &CastInst, context: Ctx<'module, 'target, 'ctx, Abi>) {
-        todo!()
+    fn visit_zext(&mut self, data: &CastInst, (def, ctx): Ctx<'module, 'target, 'ctx, Abi>) {
+        let dest = self.curr_result_reg(RegClass::Int, (def, ctx));
+        let dest_width = type_into_width(data.result_ty().unwrap(), ctx);
+        let src_width = value_into_width(data.operand(), (def, ctx));
+        let src = self.rhs_operand_rmi(data.operand(), (def, ctx));
+
+        ctx.emit(Inst::Movzx(Movzx {
+            widths: WidthPair::from_widths(src_width, dest_width),
+            src,
+            dest: WriteableReg::from_reg(dest),
+        }));
     }
 
-    fn visit_trunc(&mut self, data: &CastInst, context: Ctx<'module, 'target, 'ctx, Abi>) {
-        todo!()
+    fn visit_trunc(&mut self, data: &CastInst, (def, ctx): Ctx<'module, 'target, 'ctx, Abi>) {
+        let dest = self.curr_result_reg(RegClass::Int, (def, ctx));
+
+        // no-op, we just read from the lower bytes of the register later
+        self.mov(WriteableReg::from_reg(dest), data.operand(), (def, ctx));
     }
 
-    fn visit_itob(&mut self, data: &CastInst, context: Ctx<'module, 'target, 'ctx, Abi>) {
-        todo!()
+    fn visit_itob(&mut self, data: &CastInst, (def, ctx): Ctx<'module, 'target, 'ctx, Abi>) {
+        let dest = self.curr_result_reg(RegClass::Int, (def, ctx));
+
+        // we don't have any requirement on true being 1, it just has to be non-zero.
+        // so we just do a mov. non-zero becomes "true" and zero becomes "false"
+        self.mov(WriteableReg::from_reg(dest), data.operand(), (def, ctx));
     }
 
-    fn visit_btoi(&mut self, data: &CastInst, context: Ctx<'module, 'target, 'ctx, Abi>) {
-        todo!()
+    fn visit_btoi(&mut self, data: &CastInst, (def, ctx): Ctx<'module, 'target, 'ctx, Abi>) {
+        let dest = self.curr_result_reg(RegClass::Int, (def, ctx));
+        let width = width_dword_minimum(type_into_width(data.result_ty().unwrap(), ctx));
+
+        // we're only getting 0 or 1, no need to emit a whole zext. just set the whole register
+        // to that no matter what the width is
+        self.mov(WriteableReg::from_reg(dest), data.operand(), (def, ctx));
+        ctx.emit(Inst::ALU(ALU {
+            opc: ALUOpcode::And,
+            lhs: WriteableReg::from_reg(dest),
+            rhs: RegMemImm::Imm(1),
+            width,
+        }));
     }
 
     fn visit_sitof(&mut self, data: &CastInst, context: Ctx<'module, 'target, 'ctx, Abi>) {
@@ -614,12 +776,18 @@ where
         todo!()
     }
 
-    fn visit_itop(&mut self, data: &CastInst, context: Ctx<'module, 'target, 'ctx, Abi>) {
-        todo!()
+    fn visit_itop(&mut self, data: &CastInst, (def, ctx): Ctx<'module, 'target, 'ctx, Abi>) {
+        let dest = self.curr_result_reg(RegClass::Int, (def, ctx));
+
+        // no-op, just mov from old to new vreg
+        self.mov(WriteableReg::from_reg(dest), data.operand(), (def, ctx));
     }
 
-    fn visit_ptoi(&mut self, data: &CastInst, context: Ctx<'module, 'target, 'ctx, Abi>) {
-        todo!()
+    fn visit_ptoi(&mut self, data: &CastInst, (def, ctx): Ctx<'module, 'target, 'ctx, Abi>) {
+        let dest = self.curr_result_reg(RegClass::Int, (def, ctx));
+
+        // no-op, just mov from old to new vreg
+        self.mov(WriteableReg::from_reg(dest), data.operand(), (def, ctx));
     }
 
     fn visit_iconst(&mut self, data: &IConstInst, (def, ctx): Ctx<'module, 'target, 'ctx, Abi>) {
@@ -673,12 +841,14 @@ where
         }
     }
 
-    fn visit_undef(&mut self, data: &UndefConstInst, context: Ctx<'module, 'target, 'ctx, Abi>) {
-        todo!()
+    fn visit_undef(&mut self, _: &UndefConstInst, _: Ctx<'module, 'target, 'ctx, Abi>) {
+        // do nothing, we have a result register that can be referenced
     }
 
-    fn visit_null(&mut self, data: &NullConstInst, context: Ctx<'module, 'target, 'ctx, Abi>) {
-        todo!()
+    fn visit_null(&mut self, data: &NullConstInst, (def, ctx): Ctx<'module, 'target, 'ctx, Abi>) {
+        let dest = self.curr_result_reg(RegClass::Int, (def, ctx));
+
+        self.zero(WriteableReg::from_reg(dest), (def, ctx));
     }
 
     fn visit_stackslot(&mut self, data: &StackSlotInst, context: Ctx<'module, 'target, 'ctx, Abi>) {

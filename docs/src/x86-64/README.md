@@ -11,6 +11,13 @@ known limitations (see lost copy problem). It is **assumed** that the `split-cri
 pass has been run over the SIR module before codegen begins, if this is not done
 incorrect code can be emitted.
 
+## Type Representation
+
+### `bool`
+
+`bool` is represented the same way as an `i8` (i.e. in `byte`-sized partial registers), with `false` being zero
+and `true` being non-zero.
+
 ## `condbr` and `icmp`/`fcmp` Interactions
 
 Currently, the backend has two states for implementing `condbr`:

@@ -46,16 +46,22 @@ impl WidthPair {
         }
     }
 
+    /// Creates a new [`WidthPair`] from two [`Width`] objects
+    #[inline]
+    pub fn from_widths(src_width: Width, dest_width: Width) -> Self {
+        Self::from_bytes(src_width.into_bytes(), dest_width.into_bytes())
+    }
+
     /// Gets the width of the source in bytes
     #[inline]
     pub fn src_bytes(self) -> usize {
-        (self.data & 0xF0) as usize
+        ((self.data & 0xF0) >> 4) as usize
     }
 
     /// Gets the width of the source in bits
     #[inline]
     pub fn src_bits(self) -> usize {
-        ((self.data & 0xF0) as usize) * 8
+        (((self.data & 0xF0) >> 4) as usize) * 8
     }
 
     /// Gets the width of the destination in bytes
@@ -72,13 +78,13 @@ impl WidthPair {
 
     /// Gets the source size as an [`Width`]
     #[inline]
-    pub fn src_operand_size(self) -> Width {
+    pub fn src_width(self) -> Width {
         Width::from_bytes(self.src_bytes())
     }
 
     /// Gets the source size as an [`Width`]
     #[inline]
-    pub fn dest_operand_size(self) -> Width {
+    pub fn dest_width(self) -> Width {
         Width::from_bytes(self.dest_bytes())
     }
 }
@@ -121,6 +127,14 @@ impl Width {
             Width::Dword => 4,
             Width::Qword => 8,
         }
+    }
+}
+
+impl From<Width> for WidthPair {
+    fn from(value: Width) -> Self {
+        let bytes = value.into_bytes();
+
+        Self::from_bytes(bytes, bytes)
     }
 }
 
@@ -449,35 +463,42 @@ pub struct IMul {
     pub lhs: WriteableReg,
     /// The right-hand operand
     pub rhs: RegMemImm,
-    /// The destination of the high bits of the multiplication
-    pub dest_hi: WriteableReg,
 }
 
 /// Copies the sign bit of the 16-bit source (always `ax`) into the dest (always `dx`)
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Hash)]
-pub struct Cwd {
-    /// The register being "sign-extended"
-    pub src: Reg,
-    /// The register being filled with the sign bit
-    pub dest: WriteableReg,
+pub struct Cwd;
+
+impl Cwd {
+    /// The register being "sign-extended" into `DEST`
+    pub const SRC: Reg = Reg::from_preg(X86_64::RAX);
+
+    /// The register where the upper sign-extension bits go
+    pub const DEST: Reg = Reg::from_preg(X86_64::RDX);
 }
 
 /// Copies the sign bit of the 32-bit source (always `eax`) into the dest (always `edx`)
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Hash)]
-pub struct Cdq {
-    /// The register being "sign-extended"
-    pub src: Reg,
-    /// The register being filled with the sign bit
-    pub dest: WriteableReg,
+pub struct Cdq;
+
+impl Cdq {
+    /// The register being "sign-extended" into `DEST`
+    pub const SRC: Reg = Reg::from_preg(X86_64::RAX);
+
+    /// The register where the upper sign-extension bits go
+    pub const DEST: Reg = Reg::from_preg(X86_64::RDX);
 }
 
 /// Copies the sign bit of the 64-bit source (always `rax`) into the dest (always `rdx`)
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Hash)]
-pub struct Cqo {
-    /// The register being "sign-extended"
-    pub src: Reg,
-    /// The register being filled with the sign bit
-    pub dest: WriteableReg,
+pub struct Cqo;
+
+impl Cqo {
+    /// The register being "sign-extended" into `DEST`
+    pub const SRC: Reg = Reg::from_preg(X86_64::RAX);
+
+    /// The register where the upper sign-extension bits go
+    pub const DEST: Reg = Reg::from_preg(X86_64::RDX);
 }
 
 /// Performs signed integer division. The following assumptions are made:
@@ -489,6 +510,8 @@ pub struct Cqo {
 pub struct IDiv {
     /// The value being divided by.
     pub divisor: RegMem,
+    /// The width of the division
+    pub width: Width,
 }
 
 impl IDiv {
@@ -514,6 +537,8 @@ impl IDiv {
 pub struct Div {
     /// The value being divided by.
     pub divisor: RegMem,
+    /// The width of the division
+    pub width: Width,
 }
 
 impl Div {
@@ -623,6 +648,8 @@ pub struct Jump {
 pub struct Push {
     /// The register to push
     pub value: Reg,
+    /// The width of the push
+    pub width: Width,
 }
 
 /// Pops a value from the stack and writes it to `dest`
@@ -630,6 +657,8 @@ pub struct Push {
 pub struct Pop {
     /// The destination for the top value of the stack
     pub dest: WriteableReg,
+    /// The width of the pop
+    pub width: Width,
 }
 
 /// Calls a known function
@@ -662,6 +691,10 @@ pub enum Inst {
     Nop(Nop),
     /// A `mov` into a register
     Mov(Mov),
+    /// A `movzx` that performs zero-extension
+    Movzx(Movzx),
+    /// A `movzx` that performs zero-extension
+    Movsx(Movsx),
     /// A `mov` that stores into memory
     MovStore(MovStore),
     /// Moves a 64-bit constant into a register
@@ -765,6 +798,12 @@ impl MachInst<X86_64> for Inst {
             Inst::Mov(mov) => {
                 push_if_reg!(RegMemImm, mov.src, collector);
             }
+            Inst::Movzx(movzx) => {
+                push_if_reg!(RegMemImm, movzx.src, collector);
+            }
+            Inst::Movsx(movsx) => {
+                push_if_reg!(RegMemImm, movsx.src, collector);
+            }
             Inst::MovStore(mov) => {
                 push_if_reg!(RegImm, mov.src, collector);
                 push_if_reg!(IndirectAddress, mov.dest, collector);
@@ -798,13 +837,13 @@ impl MachInst<X86_64> for Inst {
             Inst::Pop(_) => {}
             Inst::Movabs(_) => {}
             Inst::Cwd(cwd) => {
-                collector.push(cwd.src);
+                collector.push(Cwd::SRC);
             }
             Inst::Cdq(cdq) => {
-                collector.push(cdq.src);
+                collector.push(Cdq::SRC);
             }
             Inst::Cqo(cqo) => {
-                collector.push(cqo.src);
+                collector.push(Cqo::SRC);
             }
             Inst::Div(div) => {
                 push_if_reg!(RegMem, div.divisor, collector);
@@ -832,6 +871,12 @@ impl MachInst<X86_64> for Inst {
             Inst::Mov(mov) => {
                 collector.push(mov.dest.to_reg());
             }
+            Inst::Movzx(movzx) => {
+                collector.push(movzx.dest.to_reg());
+            }
+            Inst::Movsx(movsx) => {
+                collector.push(movsx.dest.to_reg());
+            }
             Inst::MovStore(_) => {}
             Inst::ALU(alu) => {
                 collector.push(alu.lhs.to_reg());
@@ -844,7 +889,6 @@ impl MachInst<X86_64> for Inst {
             }
             Inst::IMul(mul) => {
                 collector.push(mul.lhs.to_reg());
-                collector.push(mul.dest_hi.to_reg());
             }
             Inst::Cmp(_) => {}
             Inst::Test(_) => {}
@@ -859,13 +903,13 @@ impl MachInst<X86_64> for Inst {
                 collector.push(movabs.dest.to_reg());
             }
             Inst::Cwd(cwd) => {
-                collector.push(cwd.dest.to_reg());
+                collector.push(Cwd::DEST);
             }
             Inst::Cdq(cdq) => {
-                collector.push(cdq.dest.to_reg());
+                collector.push(Cdq::DEST);
             }
             Inst::Cqo(cqo) => {
-                collector.push(cqo.dest.to_reg());
+                collector.push(Cqo::DEST);
             }
             Inst::Div(div) => {
                 collector.push(Div::QUOTIENT);
