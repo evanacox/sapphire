@@ -244,7 +244,8 @@ pub(crate) fn stringify_signature(ctx: &TypePool, sig: &Signature) -> String {
 pub(crate) fn stringify_abi(abi: CallConv) -> &'static str {
     match abi {
         CallConv::C => "ccc",
-        CallConv::Fast => "fastcc",
+        CallConv::SysV => "sysv",
+        CallConv::Win64 => "win64",
     }
 }
 

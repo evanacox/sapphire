@@ -9,7 +9,7 @@
 //======---------------------------------------------------------------======//
 
 use crate::ir::*;
-use crate::utility::{PackedOption, Str, TinyArray};
+use crate::utility::{Str, TinyArray};
 use smallvec::SmallVec;
 
 /// Helper type for building a [`Signature`].

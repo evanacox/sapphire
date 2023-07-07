@@ -9,8 +9,7 @@
 //======---------------------------------------------------------------======//
 
 use crate::dense_arena_key;
-use crate::ir::{BlockWithParams, DataFlowGraph, InstData, Layout, ModuleContext, Type};
-use crate::utility::PackedOption;
+use crate::ir::{DataFlowGraph, InstData, Layout, ModuleContext, Type};
 use smallvec::SmallVec;
 use std::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign};
 
@@ -204,8 +203,10 @@ pub struct FunctionMetadata {
 pub enum CallConv {
     /// The default C convention for the given target platform.
     C,
-    /// Similar to `fastcc` on LLVM, makes calls fast
-    Fast,
+    /// System-V (only valid when targeting x86-64)
+    SysV,
+    /// Windows x64 (only valid when targeting x86-64)
+    Win64,
 }
 
 dense_arena_key! {

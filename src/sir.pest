@@ -44,7 +44,7 @@ ty = { bool_ty | ptr_ty | int_ty | float_ty | array_ty | struct_ty }
 //   - fn T @name(T, U)
 //
 variadic = @{ "..." }
-abi = @{ "ccc" | "fastcc" }
+abi = @{ "ccc" | "sysv" | "win64" }
 
 ret_attribute = @{ "noalias" | "nonnull" }
 ty_or_void_with_attr = { (ret_attribute* ~ ty) | "void" }
