@@ -96,11 +96,13 @@ pub struct StackSlotData {
 
 impl StackSlotData {
     /// Gets the name of the stack slot
+    #[inline]
     pub fn name(self) -> Str {
         self.name
     }
 
     /// Gets the type that the stack slot is allocating space for
+    #[inline]
     pub fn ty(self) -> Type {
         self.ty
     }
@@ -158,6 +160,7 @@ pub struct DataFlowGraph {
     debug: SecondaryMap<EntityRef, DebugInfo>,
     uses: SecondaryMap<Value, SmallVec<[Inst; 4]>>,
     stack_slots: ArenaMap<StackSlot, Option<StackSlotData>>,
+    metadata_affecting_insts: SmallVec<[Inst; 4]>,
 }
 
 impl DataFlowGraph {
@@ -235,9 +238,12 @@ impl DataFlowGraph {
             self.uses[*operand].push(Inst::raw_from(k));
         }
 
+        if let InstData::Alloca(_) | InstData::Call(_) | InstData::IndirectCall(_) = &data {
+            self.metadata_affecting_insts.push(Inst::raw_from(k));
+        }
+
         let _ = self.entities.insert(EntityData::Inst(data));
         self.uses.insert(Value::raw_from(k), smallvec![]);
-
         self.debug.insert(k, debug);
 
         self.maybe_result(k, result)
@@ -624,7 +630,7 @@ impl DataFlowGraph {
         let _ = self.stack_slots.get_mut(slot).unwrap().take();
     }
 
-    /// Returns a [`SecondarySet`](crate::arena::SecondarySet) that contains every
+    /// Returns a [`SecondarySet`](arena::SecondarySet) that contains every
     /// value with exactly one use in the DFG.
     ///
     /// **Note: This may include values that are NOT in the associated function layout!**
@@ -638,6 +644,11 @@ impl DataFlowGraph {
         }
 
         map
+    }
+
+    /// Gets the instructions that can affect the function's metadata in some way
+    pub(in crate::ir) fn all_metadata_affecting_insts(&self) -> &[Inst] {
+        &self.metadata_affecting_insts
     }
 
     fn maybe_result(&mut self, key: EntityRef, result: Option<Type>) -> (Inst, Option<Value>) {

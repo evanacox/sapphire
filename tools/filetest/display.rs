@@ -39,14 +39,23 @@ pub fn print_summary(total: usize, failed: usize, elapsed: Duration) {
 
 fn prettify_diff(expected: &str, got: &str) -> String {
     let mut result = String::from("\n");
+    let mut line_number = 0;
 
-    for (line, diff) in diff::lines(got, expected).into_iter().enumerate() {
-        result += &format!("{:3} |", line + 1);
+    for diff in diff::lines(got, expected).into_iter() {
+        result += &format!("{:3} |", line_number + 1);
 
         let line = match diff {
             diff::Result::Left(l) => Red.paint(format!("- {l}")).to_string(),
-            diff::Result::Both(l, _) => format!("  {l}"),
-            diff::Result::Right(r) => Green.paint(format!("+ {r}")).to_string(),
+            diff::Result::Both(l, _) => {
+                line_number += 1;
+
+                format!("  {l}")
+            }
+            diff::Result::Right(r) => {
+                line_number += 1;
+
+                Green.paint(format!("+ {r}")).to_string()
+            }
         };
 
         result += &line;

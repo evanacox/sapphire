@@ -1,0 +1,2 @@
+; COMPILE-ERROR: can only have parameter attributes on 'ptr' type
+fn void @f(nonnull i64)

@@ -1,0 +1,10 @@
+; MATCH-ENTIRE
+fn nonnull ptr @a(ptr)
+
+fn noalias ptr @b(nonnull ptr)
+
+fn noalias ptr @c(noalias ptr)
+
+fn noalias ptr @d(noalias nonnull ptr)
+
+fn noalias ptr @e(noalias nonnull byval(512) ptr)

@@ -263,6 +263,20 @@ impl<'m> SIRVisitor<'m> for Verifier<'m> {
         self.return_ty = function.signature().return_ty();
         self.prev_defined.clear();
 
+        if let Some((ty, attributes)) = function.signature().return_complete() {
+            if attributes != RetAttributes::NONE {
+                verify_assert!(
+                    self,
+                    DebugInfo::fake(),
+                    ty.is_ptr(),
+                    format!(
+                        "function '{}' can only have return attributes on `ptr` return values",
+                        function.name()
+                    )
+                );
+            }
+        }
+
         if let Some(def) = function.definition() {
             if let Some(bb) = def.layout.entry_block() {
                 let sig = function.signature();
@@ -277,7 +291,18 @@ impl<'m> SIRVisitor<'m> for Verifier<'m> {
                     format!("entry block for function '{}' must have same number of parameters as function signature", function.name())
                 );
 
-                for (&bb_param, &(sig_param, _)) in iter::zip(bb_params.iter(), sig_params.iter()) {
+                for (&bb_param, &(sig_param, attributes)) in
+                    iter::zip(bb_params.iter(), sig_params.iter())
+                {
+                    if attributes != ParamAttributes::NONE {
+                        verify_assert!(
+                            self,
+                            DebugInfo::fake(),
+                            sig_param.is_ptr(),
+                            format!("function '{}' can only have parameter attributes on `ptr` parameters", function.name())
+                        );
+                    }
+
                     verify_assert_eq!(
                         self,
                         def.dfg.debug(bb_param),

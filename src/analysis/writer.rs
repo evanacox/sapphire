@@ -119,6 +119,36 @@ impl ModuleAnalysisPass for ModuleStringifyAnalysis {
     }
 }
 
+pub(crate) fn stringify_ret_attribute_space(attribute: RetAttributes) -> &'static str {
+    if attribute.is_noalias() && attribute.is_nonnull() {
+        "noalias nonnull "
+    } else if attribute.is_noalias() {
+        "noalias "
+    } else if attribute.is_nonnull() {
+        "nonnull "
+    } else {
+        ""
+    }
+}
+
+pub(crate) fn stringify_param_attributes_space(attributes: ParamAttributes) -> String {
+    let mut buf = String::with_capacity(20);
+
+    if attributes.is_noalias() {
+        buf += "noalias ";
+    }
+
+    if attributes.is_nonnull() {
+        buf += "nonnull ";
+    }
+
+    if let Some(n) = attributes.byval_size() {
+        buf += &format!("byval({n}) ");
+    }
+
+    buf
+}
+
 pub(crate) fn stringify_ty(ctx: &TypePool, ty: Type) -> String {
     match ty.unpack() {
         UType::Bool(_) => "bool".to_owned(),
@@ -162,9 +192,14 @@ pub(crate) fn stringify_ty(ctx: &TypePool, ty: Type) -> String {
     }
 }
 
-pub(crate) fn stringify_return_ty(ctx: &TypePool, ty: Option<Type>) -> String {
+pub(crate) fn stringify_return_ty(ctx: &TypePool, ty: Option<(Type, RetAttributes)>) -> String {
     match ty {
-        Some(ty) => stringify_ty(ctx, ty),
+        Some((ty, attributes)) => {
+            let ty_string = stringify_ty(ctx, ty);
+            let attributes = stringify_ret_attribute_space(attributes);
+
+            format!("{attributes}{ty_string}")
+        }
         None => "void".to_owned(),
     }
 }
@@ -174,7 +209,8 @@ fn write_sig_params(buf: &mut String, ctx: &TypePool, sig: &Signature) {
 
     let mut it = sig.params().iter().peekable();
 
-    while let Some((ty, _)) = it.next() {
+    while let Some((ty, attributes)) = it.next() {
+        *buf += &stringify_param_attributes_space(*attributes);
         *buf += &stringify_ty(ctx, *ty);
 
         if it.peek().is_some() {
@@ -196,7 +232,7 @@ pub(crate) fn stringify_signature_params(ctx: &TypePool, sig: &Signature) -> Str
 }
 
 pub(crate) fn stringify_signature(ctx: &TypePool, sig: &Signature) -> String {
-    let mut buf = stringify_return_ty(ctx, sig.return_ty());
+    let mut buf = stringify_return_ty(ctx, sig.return_complete());
 
     buf += " ";
 
@@ -241,8 +277,8 @@ impl<'m> WriterImpl<'m> {
         stringify_ty(&self.pool_guard, ty)
     }
 
-    fn ty_void(&self, ty: Option<Type>) -> String {
-        stringify_return_ty(&self.pool_guard, ty)
+    fn ty_void(&self, ret: Option<(Type, RetAttributes)>) -> String {
+        stringify_return_ty(&self.pool_guard, ret)
     }
 
     fn param_tys(&self, sig: &Signature) -> String {
@@ -398,7 +434,7 @@ impl<'m> SIRVisitor<'m> for WriterImpl<'m> {
         {
             let f = self.module().function(func);
             let sig = f.signature();
-            let ty = self.ty_void(sig.return_ty());
+            let ty = self.ty_void(sig.return_complete());
             let name = self.func_name(func);
             let params = self.param_tys(sig);
 
@@ -519,7 +555,8 @@ impl<'m> SIRVisitor<'m> for WriterImpl<'m> {
     fn visit_call(&mut self, inst: Inst, data: &CallInst, def: &FunctionDefinition) {
         self.result(inst, def);
 
-        let ret = self.ty_void(data.result_ty());
+        let sig = def.dfg.signature(data.sig());
+        let ret = self.ty_void(sig.return_complete());
         let name = self.func_name(data.callee());
         let args = self.args(data.args(), def);
 
@@ -534,7 +571,8 @@ impl<'m> SIRVisitor<'m> for WriterImpl<'m> {
     ) {
         self.result(inst, def);
 
-        let ret = self.ty_void(data.result_ty());
+        let sig = def.dfg.signature(data.sig());
+        let ret = self.ty_void(sig.return_complete());
         let signature = def.dfg.signature(data.sig());
         let sig = stringify_signature_params(&self.pool_guard, signature);
         let callee = self.name_ty(data.callee(), def);
