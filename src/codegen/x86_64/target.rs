@@ -9,7 +9,7 @@
 //======---------------------------------------------------------------======//
 
 use crate::codegen::abi::STANDARD_64_BIT_LAYOUT;
-use crate::codegen::{Architecture, CPUArch, PReg, TypeLayout};
+use crate::codegen::{x86_64, Architecture, CPUArch, PReg, TypeLayout};
 
 const X86_64_REGS: [PReg; 33] = [
     PReg::int(0),    // rax
@@ -110,6 +110,8 @@ impl X86_64 {
 }
 
 impl Architecture for X86_64 {
+    type Inst = x86_64::Inst;
+
     #[inline]
     fn cpu() -> CPUArch {
         CPUArch::X86_64

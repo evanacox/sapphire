@@ -9,10 +9,9 @@
 //======---------------------------------------------------------------======//
 
 use crate::analysis::{ControlFlowGraph, DominatorTree};
-use crate::codegen::{Architecture, MachInst, Target, ABI};
+use crate::codegen::{Architecture, Target};
 use crate::ir::{DataFlowGraph, Func, Function, Module, TypePool, Value};
 use crate::pass::{ModuleAnalysisManager, ModuleTransformPass, PreservedAnalyses};
-use std::marker::PhantomData;
 
 /// Demotion pass that moves any aggregates (arrays, structures) that are "too big"
 /// for a specific arch/abi configuration to deal with in registers onto the stack.
@@ -28,31 +27,17 @@ use std::marker::PhantomData;
 ///
 /// If an aggregate is defined as "too big," it is given a unique stack slot, and
 /// operations with that aggregate are transformed
-pub struct LegalizeAggregatesForABI<Arch, Abi, Inst>
-where
-    Arch: Architecture,
-    Abi: ABI<Arch, Inst>,
-    Inst: MachInst<Arch>,
-{
-    target: Target<Arch, Abi, Inst>,
-    _unused: PhantomData<fn() -> (Arch, Abi, Inst)>,
+pub struct LegalizeAggregatesForABI<Arch: Architecture> {
+    target: Target<Arch>,
 }
 
-impl<Arch, Abi, Inst> LegalizeAggregatesForABI<Arch, Abi, Inst>
-where
-    Arch: Architecture,
-    Abi: ABI<Arch, Inst>,
-    Inst: MachInst<Arch>,
-{
+impl<Arch: Architecture> LegalizeAggregatesForABI<Arch> {
     /// Creates an instance of the legalizer
     ///
     /// The legalizer relies on `target` being configured for the module that will
     /// be legalized.
-    pub fn new(target: Target<Arch, Abi, Inst>) -> Self {
-        Self {
-            target,
-            _unused: PhantomData::default(),
-        }
+    pub fn new(target: Target<Arch>) -> Self {
+        Self { target }
     }
 
     fn demote_aggregates(
@@ -89,12 +74,7 @@ where
     }
 }
 
-impl<Arch, Abi, Inst> ModuleTransformPass for LegalizeAggregatesForABI<Arch, Abi, Inst>
-where
-    Arch: Architecture,
-    Abi: ABI<Arch, Inst>,
-    Inst: MachInst<Arch>,
-{
+impl<Arch: Architecture> ModuleTransformPass for LegalizeAggregatesForABI<Arch> {
     fn run(&mut self, module: &mut Module, am: &mut ModuleAnalysisManager) -> PreservedAnalyses {
         todo!()
     }

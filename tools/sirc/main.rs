@@ -11,7 +11,7 @@
 use sapphire::analysis::*;
 use sapphire::cli::{emit_machine_format, omit_frame_pointer, passes, tool_with};
 use sapphire::codegen::x86_64::X86_64Assembly;
-use sapphire::codegen::{CodegenOptions, PresetBackends};
+use sapphire::codegen::{CodegenOptions, PresetBackends, PresetTargets};
 use sapphire::ir::Module;
 use sapphire::pass::*;
 use sapphire::transforms::*;
@@ -75,7 +75,8 @@ fn main() {
             Ok(mut module) => {
                 run_passes(&mut module, &passes);
 
-                let backend = PresetBackends::x86_64_sys_v_unoptimized(module, options);
+                let target = PresetTargets::linux_x86_64();
+                let backend = PresetBackends::x86_64_unoptimized(module, target, options);
 
                 println!("{}", backend.assembly(X86_64Assembly::GNUIntel));
             }

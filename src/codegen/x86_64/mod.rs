@@ -17,10 +17,14 @@ mod abi;
 mod emit;
 mod greedy_isel;
 mod mir;
+mod platforms;
+mod sysv;
 mod target;
+mod win64;
 
 pub use abi::*;
 pub use emit::*;
 pub use greedy_isel::*;
 pub use mir::*;
+pub use platforms::*;
 pub use target::*;

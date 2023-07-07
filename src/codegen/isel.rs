@@ -24,12 +24,7 @@ use std::marker::PhantomData;
 /// is ready to be register allocated.
 ///
 /// [`Inst`]: ir::Inst
-pub trait InstructionSelector<'module, 'target, Arch, Abi, Inst>: Sized
-where
-    Arch: Architecture,
-    Abi: ABI<Arch, Inst>,
-    Inst: MachInst<Arch>,
-{
+pub trait InstructionSelector<'module, 'target, Arch: Architecture>: Sized {
     /// Creates an instance of the selector with itself configured correctly.
     fn new() -> Self;
 
@@ -43,25 +38,25 @@ where
         &mut self,
         inst: ir::Inst,
         def: &'module FunctionDefinition,
-        frame: &mut <Abi as ABI<Arch, Inst>>::Frame,
-        ctx: &mut LoweringContext<'module, 'target, Arch, Abi, Inst>,
+        frame: &mut dyn StackFrame<Arch>,
+        ctx: &mut LoweringContext<'module, 'target, Arch>,
     );
 }
 
 /// The context passed to any code doing instruction selection
-pub type Ctx<'module, 'frame, 'target, 'ctx, Arch, Abi, Frame, Inst> = (
+pub type Ctx<'module, 'frame, 'target, 'ctx, Arch> = (
     &'module FunctionDefinition,
-    &'frame mut Frame,
-    &'ctx mut LoweringContext<'module, 'target, Arch, Abi, Inst>,
+    &'frame mut dyn StackFrame<Arch>,
+    &'ctx mut LoweringContext<'module, 'target, Arch>,
 );
 
-/// Context passed to instruction selection code that's actually a part of [`FunctionFrame`].
+/// Context passed to instruction selection code that's actually a part of [`StackFrame`].
 ///
 /// The frame is unnecessary here for one (since any code there would have `&self`) and would
 /// actively prevent `&mut self` due to aliasing.
-pub type FramelessCtx<'module, 'target, 'ctx, Arch, Abi, Inst> = (
+pub type FramelessCtx<'module, 'target, 'ctx, Arch> = (
     &'module FunctionDefinition,
-    &'ctx mut LoweringContext<'module, 'target, Arch, Abi, Inst>,
+    &'ctx mut LoweringContext<'module, 'target, Arch>,
 );
 
 // make linter not whine about complex types
@@ -69,24 +64,19 @@ type SilenceLinter<'module, 'target, Arch, Abi, Inst> = fn() -> (&'module Arch, 
 
 /// The main instruction selection pipeline that takes in a target-specific
 /// instruction selector and repeatedly invokes it to lower each instruction.
-pub struct GenericISel<'module, 'target, Arch, Abi, Inst, Selector>
+pub struct GenericISel<'module, 'target, Arch, Selector>
 where
-    Arch: Architecture + 'static,
-    Abi: ABI<Arch, Inst> + 'static,
-    Inst: MachInst<Arch> + 'static,
-    Selector: InstructionSelector<'module, 'target, Arch, Abi, Inst> + 'static,
+    Arch: Architecture,
+    Selector: InstructionSelector<'module, 'target, Arch>,
 {
     selector: Selector,
-    _unused: PhantomData<SilenceLinter<'module, 'target, Arch, Abi, Inst>>,
+    _unused: PhantomData<fn() -> (&'module i32, &'target i32, Arch)>,
 }
 
-impl<'module, 'target, Arch, Abi, Inst, Selector>
-    GenericISel<'module, 'target, Arch, Abi, Inst, Selector>
+impl<'module, 'target, Arch, Selector> GenericISel<'module, 'target, Arch, Selector>
 where
-    Arch: Architecture + 'static,
-    Abi: ABI<Arch, Inst> + 'static,
-    Inst: MachInst<Arch> + 'static,
-    Selector: InstructionSelector<'module, 'target, Arch, Abi, Inst> + 'static,
+    Arch: Architecture,
+    Selector: InstructionSelector<'module, 'target, Arch>,
 {
     /// Performs instruction selection over a SIR [`Module`] and emits
     /// a [`MIRModule`] that is ready for instruction scheduling and register allocation.
@@ -95,10 +85,10 @@ where
     /// used will be valid for the target and must be respected by the register allocator
     /// (as if instructions use specific physical registers it is required for correctness).
     pub fn lower(
-        target: &'target mut Target<Arch, Abi, Inst>,
+        target: &'target mut Target<Arch>,
         module: &'module Module,
         options: CodegenOptions,
-    ) -> MIRModule<Arch, Abi, Inst> {
+    ) -> MIRModule<Arch::Inst> {
         target.prepare_for(module);
 
         let mut isel = Self::new();
@@ -130,8 +120,8 @@ where
     fn perform_isel(
         &mut self,
         func: &'module Function,
-        frame: &mut Abi::Frame,
-        context: &mut LoweringContext<'module, 'target, Arch, Abi, Inst>,
+        frame: &mut dyn StackFrame<Arch>,
+        context: &mut LoweringContext<'module, 'target, Arch>,
         blocks: &ArenaMap<MIRBlock, MIRBlockInterval>,
     ) -> (Vec<MIRBlock>, SecondaryMap<MIRBlock, u32>) {
         let def = func.definition().unwrap();
@@ -205,20 +195,11 @@ where
     fn emit_func(
         &mut self,
         func: &'module Function,
-        context: &mut LoweringContext<'module, 'target, Arch, Abi, Inst>,
-    ) -> (MIRFunction<Arch, Inst>, Abi::Frame) {
-        let mut frame = {
-            let view = FuncView::over(func);
-            let entry = view
-                .entry_block()
-                .expect("function that isn't a decl must have an entry block");
-            let params = view.block_params(entry);
-
-            Abi::new_frame(func.signature(), params, func.compute_metadata().unwrap())
-        };
-
+        context: &mut LoweringContext<'module, 'target, Arch>,
+    ) -> (MIRFunction<Arch::Inst>, Box<dyn StackFrame<Arch>>) {
+        let mut frame = context.target.new_frame(func);
         let (name, mut blocks) = context.prepare_for_func(func);
-        let (order, block_length) = self.perform_isel(func, &mut frame, context, &blocks);
+        let (order, block_length) = self.perform_isel(func, frame.as_mut(), context, &blocks);
 
         // we haven't computed block lengths due to how isel works, need to do that now
         context.compute_block_lengths(&order, &block_length, &mut blocks);
@@ -234,23 +215,18 @@ where
 ///
 /// This is given to a specific selector when its asked to lower an instruction,
 /// this is all the information it needs to update when doing so.
-pub struct LoweringContext<'module, 'target, Arch, Abi, Inst>
-where
-    Arch: Architecture,
-    Abi: ABI<Arch, Inst>,
-    Inst: MachInst<Arch>,
-{
+pub struct LoweringContext<'module, 'target, Arch: Architecture> {
     /// The target that code is being generated for. This should be queried by the selector.
-    pub target: &'target Target<Arch, Abi, Inst>,
+    pub target: &'target Target<Arch>,
     /// The module being lowered. This is here to refer to module-scoped information
     pub module: &'module Module,
     /// Codegen options, available for instruction selection code to access
     pub options: CodegenOptions,
     // this is the final buffer of instructions in program-order
-    current: VecDeque<Inst>,
+    current: VecDeque<Arch::Inst>,
     // when lowering a single instruction, we push into this. when done with that instruction,
     // this is emptied and pushed into `current` in a way that preserves the program order
-    current_linear: Vec<Inst>,
+    current_linear: Vec<Arch::Inst>,
     pool: StringPool,
     // maps an ir::Block to its associated MIR block
     block_lookup: SecondaryMap<Block, MIRBlock>,
@@ -272,17 +248,12 @@ where
     func: Option<&'module Function>,
 }
 
-impl<'module, 'target, Arch, Abi, Inst> LoweringContext<'module, 'target, Arch, Abi, Inst>
-where
-    Arch: Architecture,
-    Abi: ABI<Arch, Inst>,
-    Inst: MachInst<Arch>,
-{
+impl<'module, 'target, Arch: Architecture> LoweringContext<'module, 'target, Arch> {
     const CONSTANT_COLOR: u32 = !0;
 
     /// Creates a [`LoweringContext`] prepared for a specific target and module.
     pub fn new_for(
-        target: &'target mut Target<Arch, Abi, Inst>,
+        target: &'target mut Target<Arch>,
         module: &'module Module,
         options: CodegenOptions,
     ) -> Self {
@@ -328,7 +299,7 @@ where
 
     /// Takes the current instruction buffer, emptying it in the process. The vec returned
     /// will be the contents of the function emitted so far, in program order.
-    pub fn take_insts(&mut self) -> Vec<Inst> {
+    pub fn take_insts(&mut self) -> Vec<Arch::Inst> {
         let _ = self.current.make_contiguous();
         let mut result = Vec::with_capacity(self.current.len());
 
@@ -352,7 +323,7 @@ where
     /// `mul` in the final program, you should call this with `add` and then
     /// call it again with `mul` after.
     #[inline]
-    pub fn emit(&mut self, inst: Inst) {
+    pub fn emit(&mut self, inst: Arch::Inst) {
         self.current_linear.push(inst);
     }
 

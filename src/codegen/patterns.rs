@@ -43,21 +43,15 @@ use std::marker::PhantomData;
 /// This uses the checks inside the [`LoweringContext`] to
 /// see not only if the IR matches the pattern, but to see if the match is able to be
 /// merged.
-pub trait ISelMergeMatcher<Arch, Abi, Inst>
+pub trait ISelMergeMatcher<Arch>
 where
     Arch: Architecture,
-    Abi: ABI<Arch, Inst>,
-    Inst: MachInst<Arch>,
 {
     /// Runs the matcher against an instruction, the instruction as treated as the **base**
     /// of the merge (and is thus not subject to the requirements in [`LoweringContext::able_to_merge_with`]).
     ///
     /// All of the operands of `base` (that are matched on) are subject to the requirements.
-    fn matches_as_base(
-        &self,
-        base: ir::Inst,
-        ctx: FramelessCtx<'_, '_, '_, Arch, Abi, Inst>,
-    ) -> bool;
+    fn matches_as_base(&self, base: ir::Inst, ctx: FramelessCtx<'_, '_, '_, Arch>) -> bool;
 
     /// Runs the matcher against `val`, the instruction as treated as an **operand** of the merge and
     /// is checked against `base` using [`LoweringContext::able_to_merge_with`].
@@ -67,13 +61,13 @@ where
         &self,
         val: Value,
         base: ir::Inst,
-        ctx: FramelessCtx<'_, '_, '_, Arch, Abi, Inst>,
+        ctx: FramelessCtx<'_, '_, '_, Arch>,
     ) -> bool;
 
     /// Once [`Self::matches_as_base`] has been called and returns `true`, this can be used
     /// to actually go update the state of the [`LoweringContext`] and mark that each matched
     /// operand is going to be merged with `base`
-    fn mark_as_merged_base(&self, base: ir::Inst, ctx: FramelessCtx<'_, '_, '_, Arch, Abi, Inst>);
+    fn mark_as_merged_base(&self, base: ir::Inst, ctx: FramelessCtx<'_, '_, '_, Arch>);
 
     /// Once [`Self::matches_as_operand`] has been called and returns `true`, this can be used
     /// to actually go update the state of the [`LoweringContext`] and mark that each matched
@@ -82,7 +76,7 @@ where
         &self,
         val: Value,
         base: ir::Inst,
-        ctx: FramelessCtx<'_, '_, '_, Arch, Abi, Inst>,
+        ctx: FramelessCtx<'_, '_, '_, Arch>,
     );
 }
 
@@ -90,16 +84,14 @@ where
 ///
 /// This is the preferred way to match on patterns when work between the two steps isn't needed.
 #[inline(always)]
-pub fn merge_if_matches<Arch, Abi, Inst, Matcher>(
+pub fn merge_if_matches<Arch, Matcher>(
     base: ir::Inst,
-    (def, ctx): FramelessCtx<'_, '_, '_, Arch, Abi, Inst>,
+    (def, ctx): FramelessCtx<'_, '_, '_, Arch>,
     matcher: Matcher,
 ) -> bool
 where
     Arch: Architecture,
-    Abi: ABI<Arch, Inst>,
-    Inst: MachInst<Arch>,
-    Matcher: ISelMergeMatcher<Arch, Abi, Inst>,
+    Matcher: ISelMergeMatcher<Arch>,
 {
     if matcher.matches_as_base(base, (def, ctx)) {
         matcher.mark_as_merged_base(base, (def, ctx));
@@ -114,17 +106,15 @@ where
 ///
 /// This is the preferred way to match on patterns when work between the two steps isn't needed.
 #[inline(always)]
-pub fn merge_if_matches_operand<Arch, Abi, Inst, Matcher>(
+pub fn merge_if_matches_operand<Arch, Matcher>(
     val: Value,
     base: ir::Inst,
-    (def, ctx): FramelessCtx<'_, '_, '_, Arch, Abi, Inst>,
+    (def, ctx): FramelessCtx<'_, '_, '_, Arch>,
     matcher: Matcher,
 ) -> bool
 where
     Arch: Architecture,
-    Abi: ABI<Arch, Inst>,
-    Inst: MachInst<Arch>,
-    Matcher: ISelMergeMatcher<Arch, Abi, Inst>,
+    Matcher: ISelMergeMatcher<Arch>,
 {
     if matcher.matches_as_operand(val, base, (def, ctx)) {
         matcher.mark_as_merged_operand(val, base, (def, ctx));
@@ -141,16 +131,14 @@ where
 /// Usually you don't want this, use the single step [`merge_if_matches_operand`] instead unless
 /// you specifically need to run additional checks outside the pattern syntax.
 #[inline(always)]
-pub fn matches<Arch, Abi, Inst, Matcher>(
+pub fn matches<Arch, Matcher>(
     base: ir::Inst,
-    ctx: FramelessCtx<'_, '_, '_, Arch, Abi, Inst>,
+    ctx: FramelessCtx<'_, '_, '_, Arch>,
     matcher: &Matcher,
 ) -> bool
 where
     Arch: Architecture,
-    Abi: ABI<Arch, Inst>,
-    Inst: MachInst<Arch>,
-    Matcher: ISelMergeMatcher<Arch, Abi, Inst>,
+    Matcher: ISelMergeMatcher<Arch>,
 {
     matcher.matches_as_base(base, ctx)
 }
@@ -161,17 +149,15 @@ where
 /// Usually you don't want this, use the single step [`merge_if_matches_operand`] instead unless
 /// you specifically need to run additional checks outside the pattern syntax.
 #[inline(always)]
-pub fn matches_operand<Arch, Abi, Inst, Matcher>(
+pub fn matches_operand<Arch, Matcher>(
     val: Value,
     base: ir::Inst,
-    ctx: FramelessCtx<'_, '_, '_, Arch, Abi, Inst>,
+    ctx: FramelessCtx<'_, '_, '_, Arch>,
     matcher: &Matcher,
 ) -> bool
 where
     Arch: Architecture,
-    Abi: ABI<Arch, Inst>,
-    Inst: MachInst<Arch>,
-    Matcher: ISelMergeMatcher<Arch, Abi, Inst>,
+    Matcher: ISelMergeMatcher<Arch>,
 {
     matcher.matches_as_operand(val, base, ctx)
 }
@@ -182,15 +168,13 @@ where
 /// Usually you don't want this, use the single step [`merge_if_matches`] instead unless
 /// you specifically need to run additional checks outside the pattern syntax.
 #[inline(always)]
-pub fn mark_merged<Arch, Abi, Inst, Matcher>(
+pub fn mark_merged<Arch, Matcher>(
     base: ir::Inst,
-    ctx: FramelessCtx<'_, '_, '_, Arch, Abi, Inst>,
+    ctx: FramelessCtx<'_, '_, '_, Arch>,
     matcher: &Matcher,
 ) where
     Arch: Architecture,
-    Abi: ABI<Arch, Inst>,
-    Inst: MachInst<Arch>,
-    Matcher: ISelMergeMatcher<Arch, Abi, Inst>,
+    Matcher: ISelMergeMatcher<Arch>,
 {
     matcher.mark_as_merged_base(base, ctx);
 }
@@ -201,48 +185,41 @@ pub fn mark_merged<Arch, Abi, Inst, Matcher>(
 /// Usually you don't want this, use the single step [`merge_if_matches_operand`] instead unless
 /// you specifically need to run additional checks outside the pattern syntax.
 #[inline(always)]
-pub fn mark_merged_operand<Arch, Abi, Inst, Matcher>(
+pub fn mark_merged_operand<Arch, Matcher>(
     val: Value,
     base: ir::Inst,
-    ctx: FramelessCtx<'_, '_, '_, Arch, Abi, Inst>,
+    ctx: FramelessCtx<'_, '_, '_, Arch>,
     matcher: &Matcher,
 ) where
     Arch: Architecture,
-    Abi: ABI<Arch, Inst>,
-    Inst: MachInst<Arch>,
-    Matcher: ISelMergeMatcher<Arch, Abi, Inst>,
+    Matcher: ISelMergeMatcher<Arch>,
 {
     matcher.mark_as_merged_operand(val, base, ctx);
 }
 
 /// A matcher that wraps up a matcher function.
-pub struct BasicISelMergeMatcher<Arch, Abi, Inst, F1, F2, F3, F4>
+pub struct BasicISelMergeMatcher<Arch, F1, F2, F3, F4>
 where
     Arch: Architecture,
-    Abi: ABI<Arch, Inst>,
-    Inst: MachInst<Arch>,
-    F1: Fn(ir::Inst, FramelessCtx<'_, '_, '_, Arch, Abi, Inst>) -> bool,
-    F2: Fn(ir::Inst, ir::Inst, FramelessCtx<'_, '_, '_, Arch, Abi, Inst>) -> bool,
-    F3: Fn(ir::Inst, FramelessCtx<'_, '_, '_, Arch, Abi, Inst>),
-    F4: Fn(ir::Inst, ir::Inst, FramelessCtx<'_, '_, '_, Arch, Abi, Inst>),
+    F1: Fn(ir::Inst, FramelessCtx<'_, '_, '_, Arch>) -> bool,
+    F2: Fn(ir::Inst, ir::Inst, FramelessCtx<'_, '_, '_, Arch>) -> bool,
+    F3: Fn(ir::Inst, FramelessCtx<'_, '_, '_, Arch>),
+    F4: Fn(ir::Inst, ir::Inst, FramelessCtx<'_, '_, '_, Arch>),
 {
     base_matcher: F1,
     operand_matcher: F2,
     base_merger: F3,
     operand_merger: F4,
-    _unused: PhantomData<SilenceLinter<Arch, Abi, Inst>>,
+    _unused: PhantomData<fn() -> Arch>,
 }
 
-impl<Arch, Abi, Inst, F1, F2, F3, F4> Clone
-    for BasicISelMergeMatcher<Arch, Abi, Inst, F1, F2, F3, F4>
+impl<Arch, F1, F2, F3, F4> Clone for BasicISelMergeMatcher<Arch, F1, F2, F3, F4>
 where
     Arch: Architecture,
-    Abi: ABI<Arch, Inst>,
-    Inst: MachInst<Arch>,
-    F1: Fn(ir::Inst, FramelessCtx<'_, '_, '_, Arch, Abi, Inst>) -> bool + Clone,
-    F2: Fn(ir::Inst, ir::Inst, FramelessCtx<'_, '_, '_, Arch, Abi, Inst>) -> bool + Clone,
-    F3: Fn(ir::Inst, FramelessCtx<'_, '_, '_, Arch, Abi, Inst>) + Clone,
-    F4: Fn(ir::Inst, ir::Inst, FramelessCtx<'_, '_, '_, Arch, Abi, Inst>) + Clone,
+    F1: Fn(ir::Inst, FramelessCtx<'_, '_, '_, Arch>) -> bool + Clone,
+    F2: Fn(ir::Inst, ir::Inst, FramelessCtx<'_, '_, '_, Arch>) -> bool + Clone,
+    F3: Fn(ir::Inst, FramelessCtx<'_, '_, '_, Arch>) + Clone,
+    F4: Fn(ir::Inst, ir::Inst, FramelessCtx<'_, '_, '_, Arch>) + Clone,
 {
     fn clone(&self) -> Self {
         Self {
@@ -255,36 +232,26 @@ where
     }
 }
 
-impl<Arch, Abi, Inst, F1, F2, F3, F4> Copy
-    for BasicISelMergeMatcher<Arch, Abi, Inst, F1, F2, F3, F4>
+impl<Arch, F1, F2, F3, F4> Copy for BasicISelMergeMatcher<Arch, F1, F2, F3, F4>
 where
     Arch: Architecture,
-    Abi: ABI<Arch, Inst>,
-    Inst: MachInst<Arch>,
-    F1: Fn(ir::Inst, FramelessCtx<'_, '_, '_, Arch, Abi, Inst>) -> bool + Copy,
-    F2: Fn(ir::Inst, ir::Inst, FramelessCtx<'_, '_, '_, Arch, Abi, Inst>) -> bool + Copy,
-    F3: Fn(ir::Inst, FramelessCtx<'_, '_, '_, Arch, Abi, Inst>) + Copy,
-    F4: Fn(ir::Inst, ir::Inst, FramelessCtx<'_, '_, '_, Arch, Abi, Inst>) + Copy,
+    F1: Fn(ir::Inst, FramelessCtx<'_, '_, '_, Arch>) -> bool + Copy,
+    F2: Fn(ir::Inst, ir::Inst, FramelessCtx<'_, '_, '_, Arch>) -> bool + Copy,
+    F3: Fn(ir::Inst, FramelessCtx<'_, '_, '_, Arch>) + Copy,
+    F4: Fn(ir::Inst, ir::Inst, FramelessCtx<'_, '_, '_, Arch>) + Copy,
 {
 }
 
-impl<Arch, Abi, Inst, F1, F2, F3, F4> ISelMergeMatcher<Arch, Abi, Inst>
-    for BasicISelMergeMatcher<Arch, Abi, Inst, F1, F2, F3, F4>
+impl<Arch, F1, F2, F3, F4> ISelMergeMatcher<Arch> for BasicISelMergeMatcher<Arch, F1, F2, F3, F4>
 where
     Arch: Architecture,
-    Abi: ABI<Arch, Inst>,
-    Inst: MachInst<Arch>,
-    F1: Fn(ir::Inst, FramelessCtx<'_, '_, '_, Arch, Abi, Inst>) -> bool,
-    F2: Fn(ir::Inst, ir::Inst, FramelessCtx<'_, '_, '_, Arch, Abi, Inst>) -> bool,
-    F3: Fn(ir::Inst, FramelessCtx<'_, '_, '_, Arch, Abi, Inst>),
-    F4: Fn(ir::Inst, ir::Inst, FramelessCtx<'_, '_, '_, Arch, Abi, Inst>),
+    F1: Fn(ir::Inst, FramelessCtx<'_, '_, '_, Arch>) -> bool,
+    F2: Fn(ir::Inst, ir::Inst, FramelessCtx<'_, '_, '_, Arch>) -> bool,
+    F3: Fn(ir::Inst, FramelessCtx<'_, '_, '_, Arch>),
+    F4: Fn(ir::Inst, ir::Inst, FramelessCtx<'_, '_, '_, Arch>),
 {
     #[inline(always)]
-    fn matches_as_base(
-        &self,
-        base: ir::Inst,
-        ctx: FramelessCtx<'_, '_, '_, Arch, Abi, Inst>,
-    ) -> bool {
+    fn matches_as_base(&self, base: ir::Inst, ctx: FramelessCtx<'_, '_, '_, Arch>) -> bool {
         (self.base_matcher)(base, ctx)
     }
 
@@ -293,7 +260,7 @@ where
         &self,
         val: Value,
         base: ir::Inst,
-        (def, ctx): FramelessCtx<'_, '_, '_, Arch, Abi, Inst>,
+        (def, ctx): FramelessCtx<'_, '_, '_, Arch>,
     ) -> bool {
         match def.dfg.value_to_inst(val) {
             Some(inst) => {
@@ -304,7 +271,7 @@ where
     }
 
     #[inline(always)]
-    fn mark_as_merged_base(&self, base: ir::Inst, ctx: FramelessCtx<'_, '_, '_, Arch, Abi, Inst>) {
+    fn mark_as_merged_base(&self, base: ir::Inst, ctx: FramelessCtx<'_, '_, '_, Arch>) {
         (self.base_merger)(base, ctx)
     }
 
@@ -313,7 +280,7 @@ where
         &self,
         val: Value,
         base: ir::Inst,
-        (def, ctx): FramelessCtx<'_, '_, '_, Arch, Abi, Inst>,
+        (def, ctx): FramelessCtx<'_, '_, '_, Arch>,
     ) {
         let inst = def
             .dfg
@@ -324,23 +291,11 @@ where
     }
 }
 
-type SilenceLinter<Arch, Abi, Inst> = fn() -> (Arch, Abi, Inst);
-
-struct ISelMergeAnyMatcher<Arch, Abi, Inst>
-where
-    Arch: Architecture,
-    Abi: ABI<Arch, Inst>,
-    Inst: MachInst<Arch>,
-{
-    _unused: PhantomData<SilenceLinter<Arch, Abi, Inst>>,
+struct ISelMergeAnyMatcher<Arch: Architecture> {
+    _unused: PhantomData<fn() -> Arch>,
 }
 
-impl<Arch, Abi, Inst> Clone for ISelMergeAnyMatcher<Arch, Abi, Inst>
-where
-    Arch: Architecture,
-    Abi: ABI<Arch, Inst>,
-    Inst: MachInst<Arch>,
-{
+impl<Arch: Architecture> Clone for ISelMergeAnyMatcher<Arch> {
     fn clone(&self) -> Self {
         Self {
             _unused: PhantomData::default(),
@@ -348,47 +303,26 @@ where
     }
 }
 
-impl<Arch, Abi, Inst> Copy for ISelMergeAnyMatcher<Arch, Abi, Inst>
-where
-    Arch: Architecture,
-    Abi: ABI<Arch, Inst>,
-    Inst: MachInst<Arch>,
-{
-}
+impl<Arch> Copy for ISelMergeAnyMatcher<Arch> where Arch: Architecture {}
 
-impl<Arch, Abi, Inst> ISelMergeMatcher<Arch, Abi, Inst> for ISelMergeAnyMatcher<Arch, Abi, Inst>
-where
-    Arch: Architecture,
-    Abi: ABI<Arch, Inst>,
-    Inst: MachInst<Arch>,
-{
+impl<Arch: Architecture> ISelMergeMatcher<Arch> for ISelMergeAnyMatcher<Arch> {
     #[inline(always)]
-    fn matches_as_base(&self, _: ir::Inst, _: FramelessCtx<'_, '_, '_, Arch, Abi, Inst>) -> bool {
+    fn matches_as_base(&self, _: ir::Inst, _: FramelessCtx<'_, '_, '_, Arch>) -> bool {
         true
     }
 
     #[inline(always)]
-    fn matches_as_operand(
-        &self,
-        _: Value,
-        _: ir::Inst,
-        _: FramelessCtx<'_, '_, '_, Arch, Abi, Inst>,
-    ) -> bool {
+    fn matches_as_operand(&self, _: Value, _: ir::Inst, _: FramelessCtx<'_, '_, '_, Arch>) -> bool {
         true
     }
 
     #[inline(always)]
-    fn mark_as_merged_base(&self, _: ir::Inst, _: FramelessCtx<'_, '_, '_, Arch, Abi, Inst>) {
+    fn mark_as_merged_base(&self, _: ir::Inst, _: FramelessCtx<'_, '_, '_, Arch>) {
         /* nothing to merge, this is explicitly the "any value in a register" case */
     }
 
     #[inline(always)]
-    fn mark_as_merged_operand(
-        &self,
-        _: Value,
-        _: ir::Inst,
-        _: FramelessCtx<'_, '_, '_, Arch, Abi, Inst>,
-    ) {
+    fn mark_as_merged_operand(&self, _: Value, _: ir::Inst, _: FramelessCtx<'_, '_, '_, Arch>) {
         /* nothing to merge, this is explicitly the "any value in a register" case */
     }
 }
@@ -406,12 +340,7 @@ where
 ///
 /// `any()` will match the phi node, but it would have also matched anything else.
 #[inline(always)]
-pub fn any<Arch, Abi, Inst>() -> impl ISelMergeMatcher<Arch, Abi, Inst> + Copy
-where
-    Arch: Architecture,
-    Abi: ABI<Arch, Inst>,
-    Inst: MachInst<Arch>,
-{
+pub fn any<Arch: Architecture>() -> impl ISelMergeMatcher<Arch> + Copy {
     ISelMergeAnyMatcher {
         _unused: PhantomData::default(),
     }
@@ -419,12 +348,7 @@ where
 
 /// Matches any `load` instruction.
 #[inline(always)]
-pub fn load<Arch, Abi, Inst>() -> impl ISelMergeMatcher<Arch, Abi, Inst> + Copy
-where
-    Arch: Architecture,
-    Abi: ABI<Arch, Inst>,
-    Inst: MachInst<Arch>,
-{
+pub fn load<Arch: Architecture>() -> impl ISelMergeMatcher<Arch> + Copy {
     BasicISelMergeMatcher {
         base_matcher: |base, (def, _)| matches!(def.dfg.inst_data(base), InstData::Load(_)),
         operand_matcher: |inst, _, (def, _)| matches!(def.dfg.inst_data(inst), InstData::Load(_)),
@@ -438,12 +362,7 @@ where
 
 /// Matches any `iconst` instruction.
 #[inline(always)]
-pub fn iconst<Arch, Abi, Inst>() -> impl ISelMergeMatcher<Arch, Abi, Inst> + Copy
-where
-    Arch: Architecture,
-    Abi: ABI<Arch, Inst>,
-    Inst: MachInst<Arch>,
-{
+pub fn iconst<Arch: Architecture>() -> impl ISelMergeMatcher<Arch> + Copy {
     BasicISelMergeMatcher {
         base_matcher: |base, (def, _)| matches!(def.dfg.inst_data(base), InstData::IConst(_)),
         operand_matcher: |inst, _, (def, _)| matches!(def.dfg.inst_data(inst), InstData::IConst(_)),
@@ -457,12 +376,7 @@ where
 
 /// Matches any `iconst` instruction with any value.
 #[inline(always)]
-pub fn iconst_val<Arch, Abi, Inst>(val: u64) -> impl ISelMergeMatcher<Arch, Abi, Inst> + Copy
-where
-    Arch: Architecture,
-    Abi: ABI<Arch, Inst>,
-    Inst: MachInst<Arch>,
-{
+pub fn iconst_val<Arch: Architecture>(val: u64) -> impl ISelMergeMatcher<Arch> + Copy {
     BasicISelMergeMatcher {
         base_matcher: move |base, (def, _)| match def.dfg.inst_data(base) {
             InstData::IConst(iconst) => iconst.value() == val,
@@ -482,14 +396,9 @@ where
 
 /// Matches any `iconst` instruction that has a value that can fit in an imm32
 #[inline(always)]
-pub fn imm32<'a, Arch, Abi, Inst>(
+pub fn imm32<'a, Arch: Architecture + 'a>(
     val: &'a RefCell<i32>,
-) -> impl ISelMergeMatcher<Arch, Abi, Inst> + Copy + 'a
-where
-    Arch: Architecture + 'a,
-    Abi: ABI<Arch, Inst> + 'a,
-    Inst: MachInst<Arch> + 'a,
-{
+) -> impl ISelMergeMatcher<Arch> + Copy + 'a {
     #[inline(always)]
     fn match_if(inst: ir::Inst, val: &RefCell<i32>, def: &FunctionDefinition) -> bool {
         match def.dfg.inst_data(inst) {
@@ -540,12 +449,7 @@ macro_rules! parameterless_match_if_pattern {
 
 /// Matches any instruction that yields a constant `0` value
 #[inline(always)]
-pub fn zero<Arch, Abi, Inst>() -> impl ISelMergeMatcher<Arch, Abi, Inst> + Copy
-where
-    Arch: Architecture,
-    Abi: ABI<Arch, Inst>,
-    Inst: MachInst<Arch>,
-{
+pub fn zero<Arch: Architecture>() -> impl ISelMergeMatcher<Arch> + Copy {
     #[inline(always)]
     fn match_if(inst: ir::Inst, def: &FunctionDefinition) -> bool {
         match def.dfg.inst_data(inst) {
@@ -560,12 +464,7 @@ where
 
 /// Matches an integral constant of `-1` for any integer type
 #[inline(always)]
-pub fn neg1<Arch, Abi, Inst>() -> impl ISelMergeMatcher<Arch, Abi, Inst> + Copy
-where
-    Arch: Architecture,
-    Abi: ABI<Arch, Inst>,
-    Inst: MachInst<Arch>,
-{
+pub fn neg1<Arch: Architecture>() -> impl ISelMergeMatcher<Arch> + Copy {
     #[inline(always)]
     fn match_if(inst: ir::Inst, def: &FunctionDefinition) -> bool {
         match def.dfg.inst_data(inst) {
@@ -582,14 +481,9 @@ where
 /// This is used for times when only specific values can be merged, e.g. immediates that need
 /// to fit inside an `i32`.
 #[inline(always)]
-pub fn iconst_of<'a, Arch, Abi, Inst>(
+pub fn iconst_of<'a, Arch: Architecture + 'a>(
     val: &'a RefCell<u64>,
-) -> impl ISelMergeMatcher<Arch, Abi, Inst> + Copy + 'a
-where
-    Arch: Architecture + 'a,
-    Abi: ABI<Arch, Inst> + 'a,
-    Inst: MachInst<Arch> + 'a,
-{
+) -> impl ISelMergeMatcher<Arch> + Copy + 'a {
     BasicISelMergeMatcher {
         base_matcher: move |base, (def, _)| match def.dfg.inst_data(base) {
             InstData::IConst(iconst) => {
@@ -620,12 +514,7 @@ macro_rules! binary_pattern {
         paste! {
             #[doc = concat!("Matches against `", $str, "` instructions, ignoring operands")]
             #[inline(always)]
-            pub fn [< $name >]<Arch, Abi, Inst>() -> impl ISelMergeMatcher<Arch, Abi, Inst> + Copy
-            where
-                Arch: Architecture,
-                Abi: ABI<Arch, Inst>,
-                Inst: MachInst<Arch>
-            {
+            pub fn [< $name >]<Arch: Architecture>() -> impl ISelMergeMatcher<Arch> + Copy {
                 BasicISelMergeMatcher {
                     base_matcher: |base, (def, _)| matches!(def.dfg.inst_data(base), InstData::$variant(_)),
                     operand_matcher: |inst, _, (def, _)| matches!(def.dfg.inst_data(inst), InstData::$variant(_)),
@@ -638,31 +527,27 @@ macro_rules! binary_pattern {
             }
 
             #[doc = concat!("Matching against `", $str, "` instructions and their operands")]
-            pub fn [< $name _with >]<A, B, Arch, Abi, Inst>(
+            pub fn [< $name _with >]<A, B, Arch>(
                 lhs: A,
                 rhs: B,
-            ) -> impl ISelMergeMatcher<Arch, Abi, Inst> + Copy
+            ) -> impl ISelMergeMatcher<Arch> + Copy
             where
                 Arch: Architecture,
-                Abi: ABI<Arch, Inst>,
-                Inst: MachInst<Arch>,
-                A: ISelMergeMatcher<Arch, Abi, Inst> + Copy,
-                B: ISelMergeMatcher<Arch, Abi, Inst> + Copy,
+                A: ISelMergeMatcher<Arch> + Copy,
+                B: ISelMergeMatcher<Arch> + Copy,
             {
                 #[inline(always)]
-                fn match_if<A, B, Arch, Abi, Inst>(
+                fn match_if<A, B, Arch>(
                     inst: ir::Inst,
                     base: ir::Inst,
                     lhs: A,
                     rhs: B,
-                    (def, ctx): FramelessCtx<'_, '_, '_, Arch, Abi, Inst>,
+                    (def, ctx): FramelessCtx<'_, '_, '_, Arch>,
                 ) -> bool
                 where
                     Arch: Architecture,
-                    Abi: ABI<Arch, Inst>,
-                    Inst: MachInst<Arch>,
-                    A: ISelMergeMatcher<Arch, Abi, Inst> + Copy,
-                    B: ISelMergeMatcher<Arch, Abi, Inst> + Copy,
+                    A: ISelMergeMatcher<Arch> + Copy,
+                    B: ISelMergeMatcher<Arch> + Copy,
                 {
                     if let InstData::$variant(p) = def.dfg.inst_data(inst) {
                         lhs.matches_as_operand(p.lhs(), base, (def, ctx))
@@ -673,18 +558,16 @@ macro_rules! binary_pattern {
                 }
 
                 #[inline(always)]
-                fn merge<A, B, Arch, Abi, Inst>(
+                fn merge<A, B, Arch>(
                     inst: ir::Inst,
                     base: ir::Inst,
                     lhs: A,
                     rhs: B,
-                    (def, ctx): FramelessCtx<'_, '_, '_, Arch, Abi, Inst>,
+                    (def, ctx): FramelessCtx<'_, '_, '_, Arch>,
                 ) where
                     Arch: Architecture,
-                    Abi: ABI<Arch, Inst>,
-                    Inst: MachInst<Arch>,
-                    A: ISelMergeMatcher<Arch, Abi, Inst> + Copy,
-                    B: ISelMergeMatcher<Arch, Abi, Inst> + Copy,
+                    A: ISelMergeMatcher<Arch> + Copy,
+                    B: ISelMergeMatcher<Arch> + Copy,
                 {
                     if let InstData::$variant(p) = def.dfg.inst_data(inst) {
                         lhs.mark_as_merged_operand(p.lhs(), base, (def, ctx));
@@ -738,12 +621,7 @@ binary_pattern!(frem, FRem, ArithInst, "frem");
 
 /// Matches on any `icmp` instruction without matching on any of its operands.
 #[inline(always)]
-pub fn icmp<Arch, Abi, Inst>() -> impl ISelMergeMatcher<Arch, Abi, Inst> + Copy
-where
-    Arch: Architecture,
-    Abi: ABI<Arch, Inst>,
-    Inst: MachInst<Arch>,
-{
+pub fn icmp<Arch: Architecture>() -> impl ISelMergeMatcher<Arch> + Copy {
     BasicISelMergeMatcher {
         base_matcher: |base, (def, _)| matches!(def.dfg.inst_data(base), InstData::ICmp(_)),
         operand_matcher: |inst, _, (def, _)| matches!(def.dfg.inst_data(inst), InstData::ICmp(_)),
@@ -757,33 +635,25 @@ where
 
 /// Matches on an `icmp` instruction with a specific condition, and two matching operands.
 #[inline(always)]
-pub fn icmp_with<A, B, Arch, Abi, Inst>(
-    op: ICmpOp,
-    lhs: A,
-    rhs: B,
-) -> impl ISelMergeMatcher<Arch, Abi, Inst> + Copy
+pub fn icmp_with<A, B, Arch>(op: ICmpOp, lhs: A, rhs: B) -> impl ISelMergeMatcher<Arch> + Copy
 where
     Arch: Architecture,
-    Abi: ABI<Arch, Inst>,
-    Inst: MachInst<Arch>,
-    A: ISelMergeMatcher<Arch, Abi, Inst> + Copy,
-    B: ISelMergeMatcher<Arch, Abi, Inst> + Copy,
+    A: ISelMergeMatcher<Arch> + Copy,
+    B: ISelMergeMatcher<Arch> + Copy,
 {
     #[inline(always)]
-    fn match_if<A, B, Arch, Abi, Inst>(
+    fn match_if<A, B, Arch>(
         inst: ir::Inst,
         base: ir::Inst,
         op: ICmpOp,
         lhs: A,
         rhs: B,
-        (def, ctx): FramelessCtx<'_, '_, '_, Arch, Abi, Inst>,
+        (def, ctx): FramelessCtx<'_, '_, '_, Arch>,
     ) -> bool
     where
         Arch: Architecture,
-        Abi: ABI<Arch, Inst>,
-        Inst: MachInst<Arch>,
-        A: ISelMergeMatcher<Arch, Abi, Inst> + Copy,
-        B: ISelMergeMatcher<Arch, Abi, Inst> + Copy,
+        A: ISelMergeMatcher<Arch> + Copy,
+        B: ISelMergeMatcher<Arch> + Copy,
     {
         if let InstData::ICmp(icmp) = def.dfg.inst_data(inst) {
             icmp.op() == op
@@ -795,18 +665,16 @@ where
     }
 
     #[inline(always)]
-    fn merge<A, B, Arch, Abi, Inst>(
+    fn merge<A, B, Arch>(
         inst: ir::Inst,
         base: ir::Inst,
         lhs: A,
         rhs: B,
-        (def, ctx): FramelessCtx<'_, '_, '_, Arch, Abi, Inst>,
+        (def, ctx): FramelessCtx<'_, '_, '_, Arch>,
     ) where
         Arch: Architecture,
-        Abi: ABI<Arch, Inst>,
-        Inst: MachInst<Arch>,
-        A: ISelMergeMatcher<Arch, Abi, Inst> + Copy + Clone,
-        B: ISelMergeMatcher<Arch, Abi, Inst> + Copy + Clone,
+        A: ISelMergeMatcher<Arch> + Copy + Clone,
+        B: ISelMergeMatcher<Arch> + Copy + Clone,
     {
         if let InstData::ICmp(icmp) = def.dfg.inst_data(inst) {
             lhs.mark_as_merged_operand(icmp.lhs(), base, (def, ctx));
@@ -864,7 +732,7 @@ mod tests {
         b.append().ret_val(v3, DebugInfo::fake());
         let main = b.define();
 
-        let mut target = PresetTargets::sys_v();
+        let mut target = PresetTargets::linux_x86_64();
 
         let function = module.function(main);
         let def = function.definition().unwrap();
@@ -874,11 +742,7 @@ mod tests {
 
         // two-step base
         {
-            let mut ctx = LoweringContext::<X86_64, SystemV, x86_64::Inst>::new_for(
-                &mut target,
-                &module,
-                options,
-            );
+            let mut ctx = LoweringContext::<X86_64>::new_for(&mut target, &module, options);
             ctx.prepare_for_func(function);
 
             let matcher = icmp_with(ICmpOp::EQ, any(), iconst());
@@ -892,11 +756,7 @@ mod tests {
 
         // single-step base
         {
-            let mut ctx = LoweringContext::<X86_64, SystemV, x86_64::Inst>::new_for(
-                &mut target,
-                &module,
-                options,
-            );
+            let mut ctx = LoweringContext::new_for(&mut target, &module, options);
             ctx.prepare_for_func(function);
 
             let matcher = icmp_with(ICmpOp::EQ, any(), iconst());
@@ -907,11 +767,7 @@ mod tests {
 
         // two-step operand
         {
-            let mut ctx = LoweringContext::<X86_64, SystemV, x86_64::Inst>::new_for(
-                &mut target,
-                &module,
-                options,
-            );
+            let mut ctx = LoweringContext::new_for(&mut target, &module, options);
             ctx.prepare_for_func(function);
 
             let matcher = iconst();
@@ -925,11 +781,7 @@ mod tests {
 
         // one-step operand
         {
-            let mut ctx = LoweringContext::<X86_64, SystemV, x86_64::Inst>::new_for(
-                &mut target,
-                &module,
-                options,
-            );
+            let mut ctx = LoweringContext::new_for(&mut target, &module, options);
             ctx.prepare_for_func(function);
 
             let matcher = iconst();
@@ -965,7 +817,7 @@ mod tests {
         b.append().ret_val(v3, DebugInfo::fake());
         let main = b.define();
 
-        let mut target = PresetTargets::sys_v();
+        let mut target = PresetTargets::linux_x86_64();
 
         let function = module.function(main);
         let def = function.definition().unwrap();
@@ -973,11 +825,7 @@ mod tests {
         let v3inst = def.dfg.value_to_inst(v3).unwrap();
 
         let options = CodegenOptions::default();
-        let mut ctx = LoweringContext::<X86_64, SystemV, x86_64::Inst>::new_for(
-            &mut target,
-            &module,
-            options,
-        );
+        let mut ctx = LoweringContext::new_for(&mut target, &module, options);
         ctx.prepare_for_func(function);
 
         let matcher = iadd_with(any(), iconst_val(13));
@@ -1037,18 +885,14 @@ mod tests {
         b.append().ret_void(DebugInfo::fake());
         let main = b.define();
 
-        let mut target = PresetTargets::sys_v();
+        let mut target = PresetTargets::linux_x86_64();
 
         let function = module.function(main);
         let def = function.definition().unwrap();
         let options = CodegenOptions::default();
 
         for val in [v0_yes, v1_yes, v2_yes, v3_yes, v4_yes] {
-            let mut ctx = LoweringContext::<X86_64, SystemV, x86_64::Inst>::new_for(
-                &mut target,
-                &module,
-                options,
-            );
+            let mut ctx = LoweringContext::new_for(&mut target, &module, options);
             ctx.prepare_for_func(function);
 
             let refcell = RefCell::new(0);
@@ -1058,11 +902,7 @@ mod tests {
         }
 
         for val in [v5_no, v6_no] {
-            let mut ctx = LoweringContext::<X86_64, SystemV, x86_64::Inst>::new_for(
-                &mut target,
-                &module,
-                options,
-            );
+            let mut ctx = LoweringContext::new_for(&mut target, &module, options);
             ctx.prepare_for_func(function);
 
             let refcell = RefCell::new(0);
@@ -1109,18 +949,14 @@ mod tests {
         b.append().ret_void(DebugInfo::fake());
         let main = b.define();
 
-        let mut target = PresetTargets::sys_v();
+        let mut target = PresetTargets::linux_x86_64();
 
         let function = module.function(main);
         let def = function.definition().unwrap();
         let options = CodegenOptions::default();
 
         for val in [v0, v1, v2, v3, v4] {
-            let mut ctx = LoweringContext::<X86_64, SystemV, x86_64::Inst>::new_for(
-                &mut target,
-                &module,
-                options,
-            );
+            let mut ctx = LoweringContext::new_for(&mut target, &module, options);
             ctx.prepare_for_func(function);
 
             let matcher = super::zero();
@@ -1129,11 +965,7 @@ mod tests {
         }
 
         {
-            let mut ctx = LoweringContext::<X86_64, SystemV, x86_64::Inst>::new_for(
-                &mut target,
-                &module,
-                options,
-            );
+            let mut ctx = LoweringContext::new_for(&mut target, &module, options);
             ctx.prepare_for_func(function);
 
             let matcher = super::zero();
@@ -1198,18 +1030,14 @@ mod tests {
         b.append().ret_void(DebugInfo::fake());
         let main = b.define();
 
-        let mut target = PresetTargets::sys_v();
+        let mut target = PresetTargets::linux_x86_64();
 
         let function = module.function(main);
         let def = function.definition().unwrap();
         let options = CodegenOptions::default();
 
         for val in [v0, v1, v2, v3] {
-            let mut ctx = LoweringContext::<X86_64, SystemV, x86_64::Inst>::new_for(
-                &mut target,
-                &module,
-                options,
-            );
+            let mut ctx = LoweringContext::new_for(&mut target, &module, options);
             ctx.prepare_for_func(function);
 
             let matcher = super::neg1();
@@ -1218,11 +1046,7 @@ mod tests {
         }
 
         for val in [v4_not, v5_not, v6_not] {
-            let mut ctx = LoweringContext::<X86_64, SystemV, x86_64::Inst>::new_for(
-                &mut target,
-                &module,
-                options,
-            );
+            let mut ctx = LoweringContext::new_for(&mut target, &module, options);
             ctx.prepare_for_func(function);
 
             let matcher = super::neg1();

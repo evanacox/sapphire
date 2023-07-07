@@ -8,9 +8,9 @@
 //                                                                           //
 //======---------------------------------------------------------------======//
 
-use crate::codegen::x86_64::{GreedyISel, SystemV, X86_64};
-use crate::codegen::{x86_64, CodegenOptions, GenericISel, PresetTargets, ABI};
-use crate::codegen::{Architecture, Emitter, MIRModule, MachInst};
+use crate::codegen::x86_64::{GreedyISel, X86_64};
+use crate::codegen::{x86_64, CodegenOptions, GenericISel, Target};
+use crate::codegen::{Architecture, Emitter, MIRModule};
 use crate::ir::Module;
 use crate::pass::*;
 use crate::transforms::*;
@@ -19,23 +19,19 @@ use std::marker::PhantomData;
 /// A generic backend using a specified emitter. The [`Backend`] doesn't directly
 /// perform instruction selection by itself, that is done during the creation
 /// of the [`Backend`] instance.
-pub struct Backend<Arch, Abi, Inst, Emit>
+pub struct Backend<Arch, Emit>
 where
     Arch: Architecture,
-    Abi: ABI<Arch, Inst>,
-    Inst: MachInst<Arch>,
-    Emit: Emitter<Arch, Abi, Inst>,
+    Emit: Emitter<Arch>,
 {
-    mir: MIRModule<Arch, Abi, Inst>,
+    mir: MIRModule<Arch::Inst>,
     _unused: PhantomData<fn() -> Emit>,
 }
 
-impl<Arch, Abi, Inst, Emit> Backend<Arch, Abi, Inst, Emit>
+impl<Arch, Emit> Backend<Arch, Emit>
 where
     Arch: Architecture,
-    Abi: ABI<Arch, Inst>,
-    Inst: MachInst<Arch>,
-    Emit: Emitter<Arch, Abi, Inst>,
+    Emit: Emitter<Arch>,
 {
     /// Emits assembly in a format specified by the emitter, returning
     /// a string that can be written to a file
@@ -55,11 +51,12 @@ where
 pub struct PresetBackends;
 
 impl PresetBackends {
-    /// An 'optimized' pipeline preset for x86-64 on the System V ABI.
-    pub fn x86_64_sys_v_optimized(
+    /// An 'optimized' pipeline preset for x86-64 with a given target
+    pub fn x86_64_optimized(
         mut module: Module,
+        mut target: Target<X86_64>,
         options: CodegenOptions,
-    ) -> Backend<X86_64, SystemV, x86_64::Inst, x86_64::Emit> {
+    ) -> Backend<X86_64, x86_64::Emit> {
         let fam = FunctionAnalysisManager::default();
         let mut mam = ModuleAnalysisManager::new();
         let mut fpm = FunctionPassManager::new();
@@ -80,21 +77,18 @@ impl PresetBackends {
         mpm.add_pass(FunctionToModulePassAdapter::adapt(fpm));
         mpm.run(&mut module, &mut mam);
 
-        let mut target = PresetTargets::sys_v();
-        let module =
-            GenericISel::<_, _, _, GreedyISel<SystemV>>::lower(&mut target, &module, options);
-
         Backend {
-            mir: module,
+            mir: GenericISel::<X86_64, GreedyISel>::lower(&mut target, &module, options),
             _unused: PhantomData::default(),
         }
     }
 
     /// An "unoptimized" pipeline for x86-64 on the System V ABI.
-    pub fn x86_64_sys_v_unoptimized(
+    pub fn x86_64_unoptimized(
         mut module: Module,
+        mut target: Target<X86_64>,
         options: CodegenOptions,
-    ) -> Backend<X86_64, SystemV, x86_64::Inst, x86_64::Emit> {
+    ) -> Backend<X86_64, x86_64::Emit> {
         let fam = FunctionAnalysisManager::default();
         let mut mam = ModuleAnalysisManager::new();
         let mut fpm = FunctionPassManager::new();
@@ -108,15 +102,8 @@ impl PresetBackends {
         mpm.add_pass(FunctionToModulePassAdapter::adapt(fpm));
         mpm.run(&mut module, &mut mam);
 
-        #[cfg(playground)]
-        crate::analysis::print_module(&module);
-
-        let mut target = PresetTargets::sys_v();
-        let module =
-            GenericISel::<_, _, _, GreedyISel<SystemV>>::lower(&mut target, &module, options);
-
         Backend {
-            mir: module,
+            mir: GenericISel::<X86_64, GreedyISel>::lower(&mut target, &module, options),
             _unused: PhantomData::default(),
         }
     }

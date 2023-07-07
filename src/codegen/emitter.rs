@@ -8,18 +8,13 @@
 //                                                                           //
 //======---------------------------------------------------------------======//
 
-use crate::codegen::{Architecture, MIRModule, MachInst, ABI};
+use crate::codegen::{Architecture, MIRModule};
 
 /// An emitter that can emit different formats from a given type of [`MachInst`].
 ///
 /// This is divided into two main categories, assembly output and object code
 /// output.
-pub trait Emitter<Arch, Abi, Inst>: Sized
-where
-    Arch: Architecture,
-    Abi: ABI<Arch, Inst>,
-    Inst: MachInst<Arch>,
-{
+pub trait Emitter<Arch: Architecture>: Sized {
     /// Different types of assembly, if supported by the emitter. This should be used
     /// for e.g. different assembly dialects.
     type AssemblyFormat;
@@ -30,10 +25,10 @@ where
 
     /// Emits assembly in a format specified by the emitter, returning a string
     /// that can be written to a file or printed.
-    fn assembly(module: &MIRModule<Arch, Abi, Inst>, format: Self::AssemblyFormat) -> String;
+    fn assembly(module: &MIRModule<Arch::Inst>, format: Self::AssemblyFormat) -> String;
 
     /// Emits object code in a format specified by the emitter, returning
     /// a byte buffer containing the correctly-formatted object code that can
     /// be written to a file.
-    fn object(module: &MIRModule<Arch, Abi, Inst>, format: Self::ObjectCodeFormat) -> Vec<u8>;
+    fn object(module: &MIRModule<Arch::Inst>, format: Self::ObjectCodeFormat) -> Vec<u8>;
 }

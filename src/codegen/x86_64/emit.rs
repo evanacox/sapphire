@@ -10,7 +10,7 @@
 
 use crate::arena::SecondaryMap;
 use crate::codegen::x86_64::*;
-use crate::codegen::{Emitter, Extern, MIRBlock, MIRFunction, MIRModule, Reg, RegClass, ABI};
+use crate::codegen::{Emitter, Extern, MIRBlock, MIRFunction, MIRModule, Reg, RegClass};
 use crate::ir::{FloatFormat, UType};
 use crate::utility::StringPool;
 
@@ -40,14 +40,11 @@ pub enum X86_64ObjectFile {
 /// to do the actual emitting.
 pub struct Emit;
 
-impl<Abi> Emitter<X86_64, Abi, Inst> for Emit
-where
-    Abi: ABI<X86_64, Inst>,
-{
+impl Emitter<X86_64> for Emit {
     type AssemblyFormat = X86_64Assembly;
     type ObjectCodeFormat = X86_64ObjectFile;
 
-    fn assembly(module: &MIRModule<X86_64, Abi, Inst>, format: Self::AssemblyFormat) -> String {
+    fn assembly(module: &MIRModule<Inst>, format: Self::AssemblyFormat) -> String {
         let emitter = AsmEmitter {
             mode: format,
             state: String::default(),
@@ -57,7 +54,7 @@ where
         emitter.emit(module)
     }
 
-    fn object(module: &MIRModule<X86_64, Abi, Inst>, format: Self::ObjectCodeFormat) -> Vec<u8> {
+    fn object(module: &MIRModule<Inst>, format: Self::ObjectCodeFormat) -> Vec<u8> {
         todo!()
     }
 }
@@ -69,10 +66,7 @@ struct AsmEmitter {
 }
 
 impl AsmEmitter {
-    fn emit<Abi>(mut self, module: &MIRModule<X86_64, Abi, Inst>) -> String
-    where
-        Abi: ABI<X86_64, Inst>,
-    {
+    fn emit(mut self, module: &MIRModule<Inst>) -> String {
         self.pool = module.symbols().clone();
 
         if self.mode == X86_64Assembly::GNUIntel {
@@ -98,10 +92,7 @@ impl AsmEmitter {
         self.state
     }
 
-    fn emit_global_symbols<Abi>(&mut self, module: &MIRModule<X86_64, Abi, Inst>)
-    where
-        Abi: ABI<X86_64, Inst>,
-    {
+    fn emit_global_symbols(&mut self, module: &MIRModule<Inst>) {
         let strings = module.symbols();
 
         for (function, frame) in module.functions() {
@@ -143,10 +134,7 @@ impl AsmEmitter {
         format!("EXTRN {name}:{ty} \n")
     }
 
-    fn emit_extern_symbols<Abi>(&mut self, module: &MIRModule<X86_64, Abi, Inst>)
-    where
-        Abi: ABI<X86_64, Inst>,
-    {
+    fn emit_extern_symbols(&mut self, module: &MIRModule<Inst>) {
         if self.mode == X86_64Assembly::MASM || self.mode == X86_64Assembly::NASM {
             for &(name, ty) in module.externals() {
                 let formatted = {
@@ -175,7 +163,7 @@ impl AsmEmitter {
         self.state += &name;
     }
 
-    fn emit_function(&mut self, name: &str, function: &MIRFunction<X86_64, Inst>) {
+    fn emit_function(&mut self, name: &str, function: &MIRFunction<Inst>) {
         let mut block_names = SecondaryMap::with_capacity(function.program_order().len());
 
         self.emit_function_name(name);

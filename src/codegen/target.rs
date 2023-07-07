@@ -9,10 +9,11 @@
 //======---------------------------------------------------------------======//
 
 use crate::arena::ArenaKey;
-use crate::codegen::x86_64::{SystemV, WindowsX64, X86_64};
-use crate::codegen::{x86_64, MachInst, ABI};
-use crate::ir::{FloatFormat, Module, Type, TypePool, UType};
+use crate::codegen::x86_64::{LinuxX86_64, MacOSX86_64, WindowsX86_64, X86_64};
+use crate::codegen::{CallingConv, MachInst, StackFrame};
+use crate::ir::{FloatFormat, Function, Module, Type, TypePool, UType};
 use crate::utility::SaHashMap;
+use std::fmt::Debug;
 use std::marker::PhantomData;
 
 /// Models the specific CPU architecture that is being targeted.
@@ -297,6 +298,9 @@ impl ArenaKey for WriteableReg {
 /// Models the architecture-specific details that a backend needs to deal with,
 /// mainly fundamental type layouts.
 pub trait Architecture {
+    /// The MIR instruction type used for the architecture
+    type Inst: MachInst<Arch = Self>;
+
     /// Returns the specific CPU architecture this is configured for
     fn cpu() -> CPUArch;
 
@@ -331,25 +335,29 @@ pub trait Architecture {
     fn instruction_pointer() -> PReg;
 }
 
-/// Models the data-layout, calling conventions and other details necessary
-/// for generating code for a specific architecture and ABI.
-#[derive(Clone, Debug)]
-pub struct Target<Arch, Abi, Inst>
-where
-    Arch: Architecture,
-    Abi: ABI<Arch, Inst>,
-    Inst: MachInst<Arch>,
-{
-    aggregate_type_layouts: SaHashMap<Type, TypeLayout>,
-    _unused: PhantomData<fn() -> (Arch, Abi, Inst)>,
+/// Models the idea of a "platform," i.e. a target operating environment that
+/// code is being generated for.
+///
+/// This mostly deals with ABI shenanigans for the code generator.
+pub trait Platform<Arch: Architecture>: Debug {
+    /// Returns an instance of the default calling convention for the platform.
+    fn default_calling_convention(&self) -> &'static dyn CallingConv<Arch>;
+
+    /// Creates an instance of the default stack frame object for the platform,
+    /// preconfiguring it for `func`.
+    fn default_stack_frame(&self, func: &Function) -> Box<dyn StackFrame<Arch>>;
 }
 
-impl<Arch, Abi, Inst> Target<Arch, Abi, Inst>
-where
-    Arch: Architecture,
-    Abi: ABI<Arch, Inst>,
-    Inst: MachInst<Arch>,
-{
+/// Models the data-layout, calling conventions and other details necessary
+/// for generating code for a specific architecture and ABI.
+#[derive(Debug)]
+pub struct Target<Arch: Architecture> {
+    platform: Box<dyn Platform<Arch>>,
+    aggregate_type_layouts: SaHashMap<Type, TypeLayout>,
+    _unused: PhantomData<fn() -> Arch>,
+}
+
+impl<Arch: Architecture> Target<Arch> {
     /// Calculates all the type layouts for every type present in a given module.
     ///
     /// This must be called before the target can be queried for the layouts of
@@ -369,6 +377,18 @@ where
             .unwrap_or_else(|| self.aggregate_type_layouts[&ty])
     }
 
+    /// Gets a new stack frame for a given function
+    #[inline]
+    pub fn new_frame(&self, func: &Function) -> Box<dyn StackFrame<Arch>> {
+        self.platform.default_stack_frame(func)
+    }
+
+    /// Gets a new calling convention for a given function
+    #[inline]
+    pub fn new_callcc(&self) -> &'static dyn CallingConv<Arch> {
+        self.platform.default_calling_convention()
+    }
+
     /// Returns the specific CPU architecture this is configured for
     #[inline]
     pub fn cpu(&self) -> CPUArch {
@@ -385,32 +405,6 @@ where
     #[inline]
     pub fn instruction_pointer(&self) -> PReg {
         Arch::instruction_pointer()
-    }
-
-    /// Returns a list of all the registers that are preserved by the **caller** of
-    /// a function. These are also known as "volatile" registers in some ABIs.
-    ///
-    /// If a function calls another and needs to maintain values in these registers,
-    /// they must be preserved somehow.
-    #[inline]
-    pub fn callee_preserved() -> &'static [PReg] {
-        Abi::callee_preserved()
-    }
-
-    /// Returns a list of all the registers that are preserved by the **callee**
-    /// of a function. These are known as "non-volatile" registers in some ABIs.
-    ///
-    /// If a function needs to modify these, they must preserve
-    /// their values first and restore them before returning.
-    #[inline]
-    pub fn caller_preserved() -> &'static [PReg] {
-        Abi::caller_preserved()
-    }
-
-    /// Returns the required stack alignment for a function call to be performed.
-    #[inline]
-    pub fn stack_alignment(&self) -> u64 {
-        Abi::stack_alignment()
     }
 
     fn maybe_layout_of(&self, ty: Type) -> Option<TypeLayout> {
@@ -459,23 +453,34 @@ where
 pub struct PresetTargets;
 
 impl PresetTargets {
-    /// Returns a [`Target`] that is configured for the x86_64 System V ABI.
-    ///
-    /// This is suitable for x86_64 Linux and macOS.
+    /// Returns a [`Target`] that is configured for the x86-64 System V ABI
+    /// on Linux-based operating systems.
     #[inline]
-    pub fn sys_v() -> Target<X86_64, SystemV, x86_64::Inst> {
+    pub fn linux_x86_64() -> Target<X86_64> {
         Target {
+            platform: Box::new(LinuxX86_64),
             aggregate_type_layouts: SaHashMap::default(),
             _unused: PhantomData::default(),
         }
     }
 
-    /// Returns a [`Target`] that is configured for the x86_64 Windows ABI.
-    ///
-    /// This is suitable for x86_64 Windows.
+    /// Returns a [`Target`] that is configured for the x86-64 System V ABI
+    /// on x86-64 macOS.
     #[inline]
-    pub fn win64() -> Target<X86_64, WindowsX64, x86_64::Inst> {
+    pub fn mac_os_x86_64() -> Target<X86_64> {
         Target {
+            platform: Box::new(MacOSX86_64),
+            aggregate_type_layouts: SaHashMap::default(),
+            _unused: PhantomData::default(),
+        }
+    }
+
+    /// Returns a [`Target`] that is configured for the x86-64 Windows ABI
+    /// and is targeting x86-64 Windows.
+    #[inline]
+    pub fn windows_x86_64() -> Target<X86_64> {
+        Target {
+            platform: Box::new(WindowsX86_64),
             aggregate_type_layouts: SaHashMap::default(),
             _unused: PhantomData::default(),
         }

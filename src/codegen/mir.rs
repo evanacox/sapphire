@@ -9,13 +9,12 @@
 //======---------------------------------------------------------------======//
 
 use crate::arena::ArenaMap;
-use crate::codegen::{Architecture, Reg, WriteableReg, ABI};
+use crate::codegen::{Architecture, Reg, StackFrame, WriteableReg};
 use crate::dense_arena_key;
 use crate::ir::Type;
 use crate::utility::{Packable, Str, StringPool};
 use smallvec::SmallVec;
 use std::fmt::Debug;
-use std::marker::PhantomData;
 use std::ops::Range;
 
 /// An abstract representation of a `mov` between two registers
@@ -39,21 +38,25 @@ pub type RegCollector<const N: usize> = SmallVec<[Reg; N]>;
 /// that target), but they all provide the same basic operations. This enables
 /// cross-target code sharing for things like instruction scheduling and
 /// register allocation.
-pub trait MachInst<Arch: Architecture>: Copy + Debug + Sized {
+pub trait MachInst: Copy + Debug + Sized {
+    /// The related architecture type that defines the architecture
+    /// this specific MIR type targets
+    type Arch: Architecture;
+
     /// Pushes every register being used by `self` into `collector`.
     ///
     /// It can be assumed that if the live ranges of these end at this
     /// instruction that they can be used as the destination.
-    fn uses<const N: usize, Abi: ABI<Arch, Self>>(
+    fn uses<const N: usize>(
         &self,
-        frame: &Abi::Frame,
+        frame: &dyn StackFrame<Self::Arch>,
         collector: &mut RegCollector<N>,
     );
 
     /// Pushes every register being defined by `self` into `collector`.
-    fn defs<const N: usize, Abi: ABI<Arch, Self>>(
+    fn defs<const N: usize>(
         &self,
-        frame: &Abi::Frame,
+        frame: &dyn StackFrame<Self::Arch>,
         collector: &mut RegCollector<N>,
     );
 
@@ -98,23 +101,13 @@ pub enum Extern {
 /// have been register allocated yet, but all instructions are guaranteed to
 /// be valid for the target (besides potentially using virtual registers
 /// instead of physical ones).  
-pub struct MIRModule<Arch, Abi, Inst>
-where
-    Arch: Architecture,
-    Abi: ABI<Arch, Inst>,
-    Inst: MachInst<Arch>,
-{
+pub struct MIRModule<Inst: MachInst> {
     symbols: StringPool,
     externals: Vec<(Str, Extern)>,
-    functions: Vec<(MIRFunction<Arch, Inst>, Abi::Frame)>,
+    functions: Vec<(MIRFunction<Inst>, Box<dyn StackFrame<Inst::Arch>>)>,
 }
 
-impl<Arch, Abi, Inst> MIRModule<Arch, Abi, Inst>
-where
-    Arch: Architecture,
-    Abi: ABI<Arch, Inst>,
-    Inst: MachInst<Arch>,
-{
+impl<Inst: MachInst> MIRModule<Inst> {
     /// Creates a "module" of MIR.
     ///
     /// This requires providing the symbol pool used by all the MIR, a list of external
@@ -122,7 +115,7 @@ where
     pub fn new(
         symbols: StringPool,
         externals: Vec<(Str, Extern)>,
-        functions: Vec<(MIRFunction<Arch, Inst>, Abi::Frame)>,
+        functions: Vec<(MIRFunction<Inst>, Box<dyn StackFrame<Inst::Arch>>)>,
     ) -> Self {
         Self {
             symbols,
@@ -132,12 +125,12 @@ where
     }
 
     /// Returns all the functions that are in the module, along with their associated frame info
-    pub fn functions(&self) -> &[(MIRFunction<Arch, Inst>, Abi::Frame)] {
+    pub fn functions(&self) -> &[(MIRFunction<Inst>, Box<dyn StackFrame<Inst::Arch>>)] {
         &self.functions
     }
 
     /// Returns a mutable reference to all the functions in the module
-    pub fn functions_mut(&mut self) -> &mut [(MIRFunction<Arch, Inst>, Abi::Frame)] {
+    pub fn functions_mut(&mut self) -> &mut [(MIRFunction<Inst>, Box<dyn StackFrame<Inst::Arch>>)] {
         &mut self.functions
     }
 
@@ -207,23 +200,14 @@ impl Packable for MIRBlockInterval {
 ///
 /// "Blocks" are defined as a sublist of the full list of instructions, they are
 /// represented as intervals of indices for the overall list.
-pub struct MIRFunction<Arch, Inst>
-where
-    Arch: Architecture,
-    Inst: MachInst<Arch>,
-{
+pub struct MIRFunction<Inst: MachInst> {
     name: Str,
     insts: Vec<Inst>,
     order: Vec<MIRBlock>,
     blocks: ArenaMap<MIRBlock, MIRBlockInterval>,
-    _unused: PhantomData<fn() -> Arch>,
 }
 
-impl<Arch, Inst> MIRFunction<Arch, Inst>
-where
-    Arch: Architecture,
-    Inst: MachInst<Arch>,
-{
+impl<Inst: MachInst> MIRFunction<Inst> {
     pub(in crate::codegen) fn new(
         name: Str,
         insts: Vec<Inst>,
@@ -235,7 +219,6 @@ where
             insts,
             blocks,
             order,
-            _unused: PhantomData::default(),
         }
     }
 

@@ -9,7 +9,7 @@
 //======---------------------------------------------------------------======//
 
 use crate::arena::SecondaryMap;
-use crate::codegen::{Architecture, MIRBlock, MIRFunction, MachInst, Reg};
+use crate::codegen::{MIRBlock, MIRFunction, MachInst, Reg};
 use smallvec::SmallVec;
 
 /// Models the live range information necessary for the register allocators.
@@ -22,11 +22,7 @@ pub struct LiveRanges {
 
 impl LiveRanges {
     /// Computes a precise set of live ranges for each v-reg (and p-reg) in `mir`
-    pub fn compute<Arch, Inst>(mir: &MIRFunction<Arch, Inst>) -> Self
-    where
-        Arch: Architecture,
-        Inst: MachInst<Arch>,
-    {
+    pub fn compute<Inst: MachInst>(mir: &MIRFunction<Inst>) -> Self {
         //
         todo!()
     }
@@ -44,13 +40,13 @@ impl LiveInterval {
     ///
     #[inline]
     pub fn first_defined_after(self) -> u32 {
-        self.0 .0
+        (self.0).0
     }
 
     /// The linear index of the instruction that last uses this register as an input
     #[inline]
     pub fn last_used_by(self) -> u32 {
-        self.0 .1
+        (self.0).1
     }
 }
 
@@ -65,12 +61,8 @@ pub struct LiveIntervals {
 
 impl LiveIntervals {
     /// Computes a conservative set of live intervals for each v-reg (and p-reg).
-    pub fn compute<Arch, Inst>(mir: &MIRFunction<Arch, Inst>) -> Self
-    where
-        Arch: Architecture,
-        Inst: MachInst<Arch>,
-    {
-        let mut intervals = SecondaryMap::default();
+    pub fn compute<Inst: MachInst>(mir: &MIRFunction<Inst>) -> Self {
+        let intervals = SecondaryMap::default();
 
         for (i, &inst) in mir.all_instructions().iter().enumerate() {
             //

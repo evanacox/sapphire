@@ -9,7 +9,7 @@
 //======---------------------------------------------------------------======//
 
 use crate::codegen::x86_64::X86_64;
-use crate::codegen::{MIRBlock, MachInst, Move, Reg, RegCollector, WriteableReg, ABI};
+use crate::codegen::{MIRBlock, MachInst, Move, Reg, RegCollector, StackFrame, WriteableReg};
 use crate::ir;
 use crate::utility::Str;
 use static_assertions::assert_eq_size;
@@ -796,10 +796,12 @@ macro_rules! push_if_reg {
     };
 }
 
-impl MachInst<X86_64> for Inst {
-    fn uses<const N: usize, Abi: ABI<X86_64, Inst>>(
+impl MachInst for Inst {
+    type Arch = X86_64;
+
+    fn uses<const N: usize>(
         &self,
-        frame: &Abi::Frame,
+        frame: &dyn StackFrame<X86_64>,
         collector: &mut RegCollector<N>,
     ) {
         match self {
@@ -879,9 +881,9 @@ impl MachInst<X86_64> for Inst {
         }
     }
 
-    fn defs<const N: usize, Abi: ABI<X86_64, Inst>>(
+    fn defs<const N: usize>(
         &self,
-        frame: &Abi::Frame,
+        frame: &dyn StackFrame<X86_64>,
         collector: &mut RegCollector<N>,
     ) {
         match self {
