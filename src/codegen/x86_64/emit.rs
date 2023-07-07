@@ -10,7 +10,7 @@
 
 use crate::arena::SecondaryMap;
 use crate::codegen::x86_64::*;
-use crate::codegen::{Emitter, Extern, MIRBlock, MIRFunction, MIRModule, Reg, RegClass};
+use crate::codegen::{Emitter, Extern, MIRBlock, MIRFunction, MIRModule, Reg, RegClass, ABI};
 use crate::ir::{FloatFormat, UType};
 use crate::utility::StringPool;
 
@@ -40,11 +40,14 @@ pub enum X86_64ObjectFile {
 /// to do the actual emitting.
 pub struct Emit;
 
-impl Emitter<X86_64, Inst> for Emit {
+impl<Abi> Emitter<X86_64, Abi, Inst> for Emit
+where
+    Abi: ABI<X86_64, Inst>,
+{
     type AssemblyFormat = X86_64Assembly;
     type ObjectCodeFormat = X86_64ObjectFile;
 
-    fn assembly(module: &MIRModule<X86_64, Inst>, format: Self::AssemblyFormat) -> String {
+    fn assembly(module: &MIRModule<X86_64, Abi, Inst>, format: Self::AssemblyFormat) -> String {
         let emitter = AsmEmitter {
             mode: format,
             state: String::default(),
@@ -54,7 +57,7 @@ impl Emitter<X86_64, Inst> for Emit {
         emitter.emit(module)
     }
 
-    fn object(module: &MIRModule<X86_64, Inst>, format: Self::ObjectCodeFormat) -> Vec<u8> {
+    fn object(module: &MIRModule<X86_64, Abi, Inst>, format: Self::ObjectCodeFormat) -> Vec<u8> {
         todo!()
     }
 }
@@ -66,7 +69,10 @@ struct AsmEmitter {
 }
 
 impl AsmEmitter {
-    fn emit(mut self, module: &MIRModule<X86_64, Inst>) -> String {
+    fn emit<Abi>(mut self, module: &MIRModule<X86_64, Abi, Inst>) -> String
+    where
+        Abi: ABI<X86_64, Inst>,
+    {
         self.pool = module.symbols().clone();
 
         if self.mode == X86_64Assembly::GNUIntel {
@@ -76,8 +82,13 @@ impl AsmEmitter {
         self.emit_global_symbols(module);
         self.emit_extern_symbols(module);
 
-        for function in module.functions() {
-            self.emit_function(module, function);
+        for (function, frame) in module.functions() {
+            let name = module
+                .symbols()
+                .get(function.name())
+                .expect("should have name");
+
+            self.emit_function(name, function);
         }
 
         if self.mode == X86_64Assembly::MASM {
@@ -87,10 +98,13 @@ impl AsmEmitter {
         self.state
     }
 
-    fn emit_global_symbols(&mut self, module: &MIRModule<X86_64, Inst>) {
+    fn emit_global_symbols<Abi>(&mut self, module: &MIRModule<X86_64, Abi, Inst>)
+    where
+        Abi: ABI<X86_64, Inst>,
+    {
         let strings = module.symbols();
 
-        for function in module.functions() {
+        for (function, frame) in module.functions() {
             let name = strings
                 .get(function.name())
                 .expect("function name must be valid");
@@ -129,7 +143,10 @@ impl AsmEmitter {
         format!("EXTRN {name}:{ty} \n")
     }
 
-    fn emit_extern_symbols(&mut self, module: &MIRModule<X86_64, Inst>) {
+    fn emit_extern_symbols<Abi>(&mut self, module: &MIRModule<X86_64, Abi, Inst>)
+    where
+        Abi: ABI<X86_64, Inst>,
+    {
         if self.mode == X86_64Assembly::MASM || self.mode == X86_64Assembly::NASM {
             for &(name, ty) in module.externals() {
                 let formatted = {
@@ -158,19 +175,10 @@ impl AsmEmitter {
         self.state += &name;
     }
 
-    fn emit_function(
-        &mut self,
-        module: &MIRModule<X86_64, Inst>,
-        function: &MIRFunction<X86_64, Inst>,
-    ) {
+    fn emit_function(&mut self, name: &str, function: &MIRFunction<X86_64, Inst>) {
         let mut block_names = SecondaryMap::with_capacity(function.program_order().len());
 
-        self.emit_function_name(
-            module
-                .symbols()
-                .get(function.name())
-                .expect("should have name"),
-        );
+        self.emit_function_name(name);
 
         for (count, &block) in function
             .program_order()
@@ -207,6 +215,7 @@ impl AsmEmitter {
             Inst::Movzx(movzx) => self.emit_movzx(movzx),
             Inst::MovStore(mov) => self.emit_mov_store(mov),
             Inst::Movabs(movabs) => self.emit_movabs(movabs),
+            Inst::Lea(lea) => self.emit_lea(lea),
             Inst::ALU(alu) => self.emit_alu(alu),
             Inst::Not(not) => self.emit_not(not),
             Inst::Neg(neg) => self.emit_neg(neg),
@@ -385,8 +394,12 @@ impl AsmEmitter {
 
                 if self.mode == X86_64Assembly::GNU {
                     format!("{offset}({emit})")
-                } else {
+                } else if offset >= 0 {
                     format!("[{emit} + {offset}]")
+                } else {
+                    let abs = offset.abs();
+
+                    format!("[{emit} - {abs}]")
                 }
             }
             IndirectAddress::ScaledReg(reg, scale) => {
@@ -439,16 +452,16 @@ impl AsmEmitter {
         let prefix = match self.mode {
             X86_64Assembly::GNU => "",
             X86_64Assembly::NASM => match width {
-                Width::Byte => "byte",
-                Width::Word => "word",
-                Width::Dword => "dword",
-                Width::Qword => "qword",
+                Width::Byte => "byte ",
+                Width::Word => "word ",
+                Width::Dword => "dword ",
+                Width::Qword => "qword ",
             },
             X86_64Assembly::GNUIntel | X86_64Assembly::MASM => match width {
-                Width::Byte => "byte ptr",
-                Width::Word => "word ptr",
-                Width::Dword => "dword ptr",
-                Width::Qword => "qword ptr",
+                Width::Byte => "byte ptr ",
+                Width::Word => "word ptr ",
+                Width::Dword => "dword ptr ",
+                Width::Qword => "qword ptr ",
             },
         };
 
@@ -542,6 +555,15 @@ impl AsmEmitter {
         let (lhs, rhs) = self.reorder_operands(value, dest);
 
         format!("movabs {lhs}, {rhs}")
+    }
+
+    fn emit_lea(&self, lea: Lea) -> String {
+        let address = self.emit_indirect_address(lea.src);
+        let dest = self.emit_reg(lea.dest.to_reg(), Width::Qword);
+        let (lhs, rhs) = self.reorder_operands(address, dest);
+        let suffix = self.suffix(Width::Qword);
+
+        format!("lea{suffix} {lhs}, {rhs}")
     }
 
     fn emit_alu(&self, alu: ALU) -> String {

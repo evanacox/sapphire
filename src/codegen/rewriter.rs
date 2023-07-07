@@ -8,31 +8,21 @@
 //                                                                           //
 //======---------------------------------------------------------------======//
 
-//! APIs for the compiler back-end and code-generation facilities
-//!
-//! These APIs mostly abstract away any target-specific details, but
-//! there *is* target-specific code in this module. Anything in a module
-//! with an architecture in its name (e.g. `sapphire::codegen::x86_64::*` or
-//! `sapphire::codegen::aarch64::*`) are CPU-specific.
+/// Performs the final phase of codegen, rewriting register-allocated x86-64
+/// MIR to be fully valid x86-64 instructions that are ready to emit.
+///
+/// The main tasks being performed are these:
+///
+/// 1. Rewriting instructions to use hardware registers (based on register allocation)
+/// 2. Emitting any necessary prologue/epilogue code
+/// 3. Rewriting stack accesses to have correct offsets (since register allocation
+///    can spill registers and that will change any stack offsets relative to the
+///    stack pointer)
+/// 3. Eliminating redundant `mov` instructions (e.g. `mov rax, rax`)
+pub struct Rewriter {
+    //
+}
 
-mod abi;
-mod backend;
-mod emitter;
-mod isel;
-mod mir;
-mod options;
-pub mod patterns;
-mod regalloc;
-mod rewriter;
-mod target;
-pub mod x86_64;
-
-pub use abi::*;
-pub use backend::*;
-pub use emitter::*;
-pub use isel::*;
-pub use mir::*;
-pub use options::*;
-pub use regalloc::*;
-pub use rewriter::*;
-pub use target::*;
+impl Rewriter {
+    //
+}

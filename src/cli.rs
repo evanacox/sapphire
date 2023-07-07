@@ -156,6 +156,13 @@ pub fn emit_sir() -> impl Parser<IRFormat> {
         })
 }
 
+/// Whether or not to omit the frame pointer
+pub fn omit_frame_pointer() -> impl Parser<bool> {
+    bpaf::long("omit-frame-pointer")
+        .help("whether to attempt to omit the frame pointer in generated code")
+        .flag(true, false)
+}
+
 /// Gets the number of concurrent threads to use for a given task
 pub fn jobs() -> impl Parser<Option<usize>> {
     bpaf::long("jobs")

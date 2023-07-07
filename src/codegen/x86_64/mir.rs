@@ -9,7 +9,8 @@
 //======---------------------------------------------------------------======//
 
 use crate::codegen::x86_64::X86_64;
-use crate::codegen::{MIRBlock, MachInst, Move, Reg, RegCollector, WriteableReg};
+use crate::codegen::{MIRBlock, MachInst, Move, Reg, RegCollector, WriteableReg, ABI};
+use crate::ir;
 use crate::utility::Str;
 use static_assertions::assert_eq_size;
 
@@ -666,6 +667,8 @@ pub struct Pop {
 pub struct Call {
     /// The name of the function to call
     pub func: Str,
+    /// The IR function being called, required for ABI constraint stuff
+    pub ir_func: ir::Func,
 }
 
 /// Performs an indirect call to a register, function pointer in memory, etc.
@@ -693,12 +696,14 @@ pub enum Inst {
     Mov(Mov),
     /// A `movzx` that performs zero-extension
     Movzx(Movzx),
-    /// A `movzx` that performs zero-extension
+    /// A `movsx` that performs sign-extension
     Movsx(Movsx),
     /// A `mov` that stores into memory
     MovStore(MovStore),
     /// Moves a 64-bit constant into a register
     Movabs(Movabs),
+    /// An `lea` instruction that computes an address
+    Lea(Lea),
     /// An ALU instruction with a given opcode that operates on two registers.
     ALU(ALU),
     /// Performs bitwise NOT on a register
@@ -792,7 +797,11 @@ macro_rules! push_if_reg {
 }
 
 impl MachInst<X86_64> for Inst {
-    fn uses<const N: usize>(&self, collector: &mut RegCollector<N>) {
+    fn uses<const N: usize, Abi: ABI<X86_64, Inst>>(
+        &self,
+        frame: &Abi::Frame,
+        collector: &mut RegCollector<N>,
+    ) {
         match self {
             Inst::Nop(_) => {}
             Inst::Mov(mov) => {
@@ -807,6 +816,9 @@ impl MachInst<X86_64> for Inst {
             Inst::MovStore(mov) => {
                 push_if_reg!(RegImm, mov.src, collector);
                 push_if_reg!(IndirectAddress, mov.dest, collector);
+            }
+            Inst::Lea(lea) => {
+                push_if_reg!(IndirectAddress, lea.src, collector);
             }
             Inst::ALU(alu) => {
                 push_if_reg!(RegMemImm, alu.rhs, collector);
@@ -855,7 +867,9 @@ impl MachInst<X86_64> for Inst {
                 collector.push(IDiv::DIVIDEND_LO);
                 collector.push(IDiv::DIVIDEND_HI);
             }
-            Inst::Call(_) => {}
+            Inst::Call(call) => {
+                todo!()
+            }
             Inst::IndirectCall(call) => {
                 push_if_reg!(RegMemImm, call.func, collector);
             }
@@ -865,7 +879,11 @@ impl MachInst<X86_64> for Inst {
         }
     }
 
-    fn defs<const N: usize>(&self, collector: &mut RegCollector<N>) {
+    fn defs<const N: usize, Abi: ABI<X86_64, Inst>>(
+        &self,
+        frame: &Abi::Frame,
+        collector: &mut RegCollector<N>,
+    ) {
         match self {
             Inst::Nop(_) => {}
             Inst::Mov(mov) => {
@@ -878,6 +896,9 @@ impl MachInst<X86_64> for Inst {
                 collector.push(movsx.dest.to_reg());
             }
             Inst::MovStore(_) => {}
+            Inst::Lea(lea) => {
+                collector.push(lea.dest.to_reg());
+            }
             Inst::ALU(alu) => {
                 collector.push(alu.lhs.to_reg());
             }
@@ -919,7 +940,9 @@ impl MachInst<X86_64> for Inst {
                 collector.push(IDiv::QUOTIENT);
                 collector.push(IDiv::REMAINDER);
             }
-            Inst::Call(_) => {}
+            Inst::Call(call) => {
+                todo!()
+            }
             Inst::IndirectCall(_) => {}
             Inst::Jump(_) => {}
             Inst::Ret(_) => {}

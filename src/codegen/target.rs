@@ -9,9 +9,9 @@
 //======---------------------------------------------------------------======//
 
 use crate::arena::ArenaKey;
-use crate::codegen::x86_64::{IndirectAddress, RegMemImm, SystemV, WindowsX64, X86_64};
-use crate::codegen::MachInst;
-use crate::ir::{FloatFormat, Module, Signature, StackSlot, Type, TypePool, UType};
+use crate::codegen::x86_64::{SystemV, WindowsX64, X86_64};
+use crate::codegen::{x86_64, MachInst, ABI};
+use crate::ir::{FloatFormat, Module, Type, TypePool, UType};
 use crate::utility::SaHashMap;
 use std::marker::PhantomData;
 
@@ -331,120 +331,24 @@ pub trait Architecture {
     fn instruction_pointer() -> PReg;
 }
 
-/// Details about a specific target ABI necessary for code generation.
-pub trait ABI<A: Architecture> {
-    /// A builder that handles calling convention shenanigans for a single call.
-    ///
-    /// This allows instruction selection code to just delegate to the builder for
-    /// the ABI-specific details of calling a function.
-    type CallingConvBuilder;
-
-    /// Models the stack frame for a function.
-    type FrameInfo;
-
-    /// Returns a list of all the registers that are preserved by the **caller** of
-    /// a function. These are also known as "volatile" registers in some ABIs.
-    ///
-    /// If a function calls another and needs to maintain values in these registers,
-    /// they must be preserved somehow.
-    fn callee_preserved() -> &'static [PReg];
-
-    /// Returns a list of all the registers that are preserved by the **callee**
-    /// of a function. These are known as "non-volatile" registers in some ABIs.
-    ///
-    /// If a function needs to modify these, they must preserve
-    /// their values first and restore them before returning.
-    fn caller_preserved() -> &'static [PReg];
-
-    /// Gets the frame pointer register for the ABI
-    fn frame_pointer() -> PReg;
-
-    /// Gets the `sp` register for the ABI
-    fn stack_pointer() -> PReg;
-
-    /// Returns the required stack alignment for a function call to be performed.
-    fn stack_alignment() -> u64;
-
-    /// Returns a builder that can help place parameters in the correct places for a call
-    fn start_call() -> Self::CallingConvBuilder;
-
-    /// Gets a new frame for the current function
-    fn new_frame(sig: &Signature) -> Self::FrameInfo;
-
-    /// Checks if a type can be passed in registers or not.
-    fn can_pass_in_registers(pool: &TypePool, ty: Type, layout: TypeLayout) -> bool;
-}
-
-/// The location of a single "variable." This denotes something at the ABI level,
-/// e.g. `stackslot`s, parameters and the like. This identifies where they are
-/// in a way that the code generator can understand.
-pub enum VariableLocation<Arch, Abi>
-where
-    Arch: Architecture,
-    Abi: ABI<Arch>,
-{
-    /// Says that a variable is located in a register
-    InReg(Reg),
-    /// Says that a variable is located at an offset relative to the frame pointer
-    RelativeToFP(i32, PhantomData<fn() -> (Arch, Abi)>),
-    /// Says that a variable is located at an offset relative to the stack pointer
-    RelativeToSP(i32, PhantomData<fn() -> (Arch, Abi)>),
-}
-
-impl<Arch, Abi> From<VariableLocation<Arch, Abi>> for RegMemImm
-where
-    Arch: Architecture,
-    Abi: ABI<Arch>,
-{
-    fn from(value: VariableLocation<Arch, Abi>) -> Self {
-        match value {
-            VariableLocation::InReg(reg) => Self::Reg(reg),
-            VariableLocation::RelativeToFP(offset, _) => Self::Mem(IndirectAddress::RegOffset(
-                Reg::from_preg(Abi::frame_pointer()),
-                offset,
-            )),
-            VariableLocation::RelativeToSP(offset, _) => Self::Mem(IndirectAddress::RegOffset(
-                Reg::from_preg(Abi::stack_pointer()),
-                offset,
-            )),
-        }
-    }
-}
-
-/// Interface for a generic "stack frame" that a target can implement. This is used by the code generator
-/// to place data in the correct place at the function level.
-///
-/// This is a stateful type, the code generator
-pub trait Frame<Inst: MachInst<Self::Arch>> {
-    /// The architecture that the frame is for
-    type Arch: Architecture;
-
-    /// The ABI that the frame is for
-    type Abi: ABI<Self::Arch>;
-
-    /// Creates a new stack frame with nothing in it
-    fn new(sig: &Signature) -> Self;
-
-    /// Creates a stack slot, returning a location that it goes to
-    fn stack_slot(&mut self, stack: StackSlot) -> VariableLocation<Self::Arch, Self::Abi>;
-}
-
 /// Models the data-layout, calling conventions and other details necessary
 /// for generating code for a specific architecture and ABI.
 #[derive(Clone, Debug)]
-pub struct Target<Arch, Abi>
+pub struct Target<Arch, Abi, Inst>
 where
     Arch: Architecture,
-    Abi: ABI<Arch>,
+    Abi: ABI<Arch, Inst>,
+    Inst: MachInst<Arch>,
 {
     aggregate_type_layouts: SaHashMap<Type, TypeLayout>,
-    _unused: PhantomData<fn() -> (Arch, Abi)>,
+    _unused: PhantomData<fn() -> (Arch, Abi, Inst)>,
 }
 
-impl<Arch, Abi> Target<Arch, Abi>
+impl<Arch, Abi, Inst> Target<Arch, Abi, Inst>
 where
     Arch: Architecture,
-    Abi: ABI<Arch>,
+    Abi: ABI<Arch, Inst>,
+    Inst: MachInst<Arch>,
 {
     /// Calculates all the type layouts for every type present in a given module.
     ///
@@ -509,12 +413,6 @@ where
         Abi::stack_alignment()
     }
 
-    /// Returns a builder that can help place parameters in the correct places for a call
-    #[inline]
-    pub fn start_call(&self) -> Abi::CallingConvBuilder {
-        Abi::start_call()
-    }
-
     fn maybe_layout_of(&self, ty: Type) -> Option<TypeLayout> {
         match ty.unpack() {
             UType::Bool(_) => Some(Arch::bool_layout()),
@@ -565,7 +463,7 @@ impl PresetTargets {
     ///
     /// This is suitable for x86_64 Linux and macOS.
     #[inline]
-    pub fn sys_v() -> Target<X86_64, SystemV> {
+    pub fn sys_v() -> Target<X86_64, SystemV, x86_64::Inst> {
         Target {
             aggregate_type_layouts: SaHashMap::default(),
             _unused: PhantomData::default(),
@@ -576,7 +474,7 @@ impl PresetTargets {
     ///
     /// This is suitable for x86_64 Windows.
     #[inline]
-    pub fn win64() -> Target<X86_64, WindowsX64> {
+    pub fn win64() -> Target<X86_64, WindowsX64, x86_64::Inst> {
         Target {
             aggregate_type_layouts: SaHashMap::default(),
             _unused: PhantomData::default(),

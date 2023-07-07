@@ -9,7 +9,7 @@
 //======---------------------------------------------------------------======//
 
 use crate::arena::ArenaMap;
-use crate::codegen::{Architecture, Reg, WriteableReg};
+use crate::codegen::{Architecture, Reg, WriteableReg, ABI};
 use crate::dense_arena_key;
 use crate::ir::Type;
 use crate::utility::{Packable, Str, StringPool};
@@ -44,10 +44,18 @@ pub trait MachInst<Arch: Architecture>: Copy + Debug + Sized {
     ///
     /// It can be assumed that if the live ranges of these end at this
     /// instruction that they can be used as the destination.
-    fn uses<const N: usize>(&self, collector: &mut RegCollector<N>);
+    fn uses<const N: usize, Abi: ABI<Arch, Self>>(
+        &self,
+        frame: &Abi::Frame,
+        collector: &mut RegCollector<N>,
+    );
 
     /// Pushes every register being defined by `self` into `collector`.
-    fn defs<const N: usize>(&self, collector: &mut RegCollector<N>);
+    fn defs<const N: usize, Abi: ABI<Arch, Self>>(
+        &self,
+        frame: &Abi::Frame,
+        collector: &mut RegCollector<N>,
+    );
 
     /// Checks if the instruction is a `mov` (or the equivalent for the
     /// target architecture) between two registers, i.e. a copy.
@@ -90,19 +98,21 @@ pub enum Extern {
 /// have been register allocated yet, but all instructions are guaranteed to
 /// be valid for the target (besides potentially using virtual registers
 /// instead of physical ones).  
-pub struct MIRModule<Arch, Inst>
+pub struct MIRModule<Arch, Abi, Inst>
 where
     Arch: Architecture,
+    Abi: ABI<Arch, Inst>,
     Inst: MachInst<Arch>,
 {
     symbols: StringPool,
     externals: Vec<(Str, Extern)>,
-    functions: Vec<MIRFunction<Arch, Inst>>,
+    functions: Vec<(MIRFunction<Arch, Inst>, Abi::Frame)>,
 }
 
-impl<Arch, Inst> MIRModule<Arch, Inst>
+impl<Arch, Abi, Inst> MIRModule<Arch, Abi, Inst>
 where
     Arch: Architecture,
+    Abi: ABI<Arch, Inst>,
     Inst: MachInst<Arch>,
 {
     /// Creates a "module" of MIR.
@@ -112,7 +122,7 @@ where
     pub fn new(
         symbols: StringPool,
         externals: Vec<(Str, Extern)>,
-        functions: Vec<MIRFunction<Arch, Inst>>,
+        functions: Vec<(MIRFunction<Arch, Inst>, Abi::Frame)>,
     ) -> Self {
         Self {
             symbols,
@@ -121,13 +131,13 @@ where
         }
     }
 
-    /// Returns all the functions that are in the module
-    pub fn functions(&self) -> &[MIRFunction<Arch, Inst>] {
+    /// Returns all the functions that are in the module, along with their associated frame info
+    pub fn functions(&self) -> &[(MIRFunction<Arch, Inst>, Abi::Frame)] {
         &self.functions
     }
 
     /// Returns a mutable reference to all the functions in the module
-    pub fn functions_mut(&mut self) -> &mut [MIRFunction<Arch, Inst>] {
+    pub fn functions_mut(&mut self) -> &mut [(MIRFunction<Arch, Inst>, Abi::Frame)] {
         &mut self.functions
     }
 
@@ -259,6 +269,15 @@ where
     #[inline]
     pub fn program_order_mut(&mut self) -> &mut [MIRBlock] {
         &mut self.order
+    }
+
+    /// Returns the entire function as a linear list of instructions without any control-flow info.
+    ///
+    /// This is here for passes like LSRA which treat the function as a linear set of instructions
+    /// rather than as a CFG.
+    #[inline]
+    pub fn all_instructions(&self) -> &[Inst] {
+        &self.insts
     }
 
     /// Gets a reference to the name of the function. This can be used at the `symbols`

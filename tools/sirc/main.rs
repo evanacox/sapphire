@@ -9,9 +9,9 @@
 //======---------------------------------------------------------------======//
 
 use sapphire::analysis::*;
-use sapphire::cli::{emit_machine_format, passes, tool_with};
+use sapphire::cli::{emit_machine_format, omit_frame_pointer, passes, tool_with};
 use sapphire::codegen::x86_64::X86_64Assembly;
-use sapphire::codegen::PresetBackends;
+use sapphire::codegen::{CodegenOptions, PresetBackends};
 use sapphire::ir::Module;
 use sapphire::pass::*;
 use sapphire::transforms::*;
@@ -55,12 +55,16 @@ fn run_passes(module: &mut Module, passes: &[String]) {
 }
 
 fn main() {
-    let ((_, passes), base) = tool_with(
+    let ((_, passes, omit_fp), base) = tool_with(
         "static compiler for Sapphire IR",
         "Usage: sirc [options] <input ir>",
-        bpaf::construct!(emit_machine_format(), passes()),
+        bpaf::construct!(emit_machine_format(), passes(), omit_frame_pointer()),
     )
     .run();
+
+    let options = CodegenOptions {
+        omit_frame_pointer: omit_fp,
+    };
 
     for input in base.inputs {
         // for now, non-utf8 path names aren't real
@@ -71,7 +75,7 @@ fn main() {
             Ok(mut module) => {
                 run_passes(&mut module, &passes);
 
-                let backend = PresetBackends::x86_64_sys_v_unoptimized(module);
+                let backend = PresetBackends::x86_64_sys_v_unoptimized(module, options);
 
                 println!("{}", backend.assembly(X86_64Assembly::GNUIntel));
             }

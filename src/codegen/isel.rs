@@ -27,7 +27,7 @@ use std::marker::PhantomData;
 pub trait InstructionSelector<'module, 'target, Arch, Abi, Inst>: Sized
 where
     Arch: Architecture,
-    Abi: ABI<Arch>,
+    Abi: ABI<Arch, Inst>,
     Inst: MachInst<Arch>,
 {
     /// Creates an instance of the selector with itself configured correctly.
@@ -42,13 +42,24 @@ where
     fn lower(
         &mut self,
         inst: ir::Inst,
-        func: &'module FunctionDefinition,
+        def: &'module FunctionDefinition,
+        frame: &mut <Abi as ABI<Arch, Inst>>::Frame,
         ctx: &mut LoweringContext<'module, 'target, Arch, Abi, Inst>,
     );
 }
 
 /// The context passed to any code doing instruction selection
-pub type Ctx<'module, 'target, 'ctx, Arch, Abi, Inst> = (
+pub type Ctx<'module, 'frame, 'target, 'ctx, Arch, Abi, Frame, Inst> = (
+    &'module FunctionDefinition,
+    &'frame mut Frame,
+    &'ctx mut LoweringContext<'module, 'target, Arch, Abi, Inst>,
+);
+
+/// Context passed to instruction selection code that's actually a part of [`FunctionFrame`].
+///
+/// The frame is unnecessary here for one (since any code there would have `&self`) and would
+/// actively prevent `&mut self` due to aliasing.
+pub type FramelessCtx<'module, 'target, 'ctx, Arch, Abi, Inst> = (
     &'module FunctionDefinition,
     &'ctx mut LoweringContext<'module, 'target, Arch, Abi, Inst>,
 );
@@ -61,7 +72,7 @@ type SilenceLinter<'module, 'target, Arch, Abi, Inst> = fn() -> (&'module Arch, 
 pub struct GenericISel<'module, 'target, Arch, Abi, Inst, Selector>
 where
     Arch: Architecture + 'static,
-    Abi: ABI<Arch> + 'static,
+    Abi: ABI<Arch, Inst> + 'static,
     Inst: MachInst<Arch> + 'static,
     Selector: InstructionSelector<'module, 'target, Arch, Abi, Inst> + 'static,
 {
@@ -73,7 +84,7 @@ impl<'module, 'target, Arch, Abi, Inst, Selector>
     GenericISel<'module, 'target, Arch, Abi, Inst, Selector>
 where
     Arch: Architecture + 'static,
-    Abi: ABI<Arch> + 'static,
+    Abi: ABI<Arch, Inst> + 'static,
     Inst: MachInst<Arch> + 'static,
     Selector: InstructionSelector<'module, 'target, Arch, Abi, Inst> + 'static,
 {
@@ -84,14 +95,15 @@ where
     /// used will be valid for the target and must be respected by the register allocator
     /// (as if instructions use specific physical registers it is required for correctness).
     pub fn lower(
-        target: &'target mut Target<Arch, Abi>,
+        target: &'target mut Target<Arch, Abi, Inst>,
         module: &'module Module,
-    ) -> MIRModule<Arch, Inst> {
+        options: CodegenOptions,
+    ) -> MIRModule<Arch, Abi, Inst> {
         target.prepare_for(module);
 
         let mut isel = Self::new();
         let mut functions = Vec::default();
-        let mut context = LoweringContext::new_for(target, module);
+        let mut context = LoweringContext::new_for(target, module, options);
 
         for func in module.functions() {
             let f = module.function(func);
@@ -118,6 +130,7 @@ where
     fn perform_isel(
         &mut self,
         func: &'module Function,
+        frame: &mut Abi::Frame,
         context: &mut LoweringContext<'module, 'target, Arch, Abi, Inst>,
         blocks: &ArenaMap<MIRBlock, MIRBlockInterval>,
     ) -> (Vec<MIRBlock>, SecondaryMap<MIRBlock, u32>) {
@@ -126,7 +139,9 @@ where
         let mut block_length = SecondaryMap::<_, u32>::with_primary(blocks);
         let mut order = VecDeque::default();
 
-        // first step: we go backwards over the instructions, codegen-ing single instructions as needed
+        frame.compute_stack_layout(func, context);
+
+        // we go backwards over the instructions, codegen-ing single instructions as needed
         // to determine which instructions are folded into others and which actually need to be generated
         //
         // we also track the length of each block, but not the interval. the interval will need to be updated later,
@@ -151,10 +166,30 @@ where
 
                         // every instruction is lowered regardless of if it is used. any
                         // DCE should be done at the SIR level, not here.
-                        self.selector.lower(inst, def, context);
+                        self.selector.lower(inst, def, frame, context);
 
                         context.end_linear_lowering();
                     }
+                }
+
+                // the entry block's parameters are formal parameters, we need to get those from
+                // physical registers and copy them to virtual registers for the rest of the codegen
+                if cursor.is_entry_block(block) {
+                    context.begin_linear_lowering();
+
+                    // find the parameters that were actually used in the function body and
+                    // get the ABI code to copy them into the correct spot
+                    for &param in cursor.block_params(block).iter() {
+                        if let Some(&reg) = context.vreg_constraints.get(param) {
+                            frame.lower_parameter(
+                                param,
+                                WriteableReg::from_reg(reg),
+                                (def, context),
+                            );
+                        }
+                    }
+
+                    context.end_linear_lowering();
                 }
 
                 context.current.len() - begin
@@ -171,14 +206,27 @@ where
         &mut self,
         func: &'module Function,
         context: &mut LoweringContext<'module, 'target, Arch, Abi, Inst>,
-    ) -> MIRFunction<Arch, Inst> {
+    ) -> (MIRFunction<Arch, Inst>, Abi::Frame) {
+        let mut frame = {
+            let view = FuncView::over(func);
+            let entry = view
+                .entry_block()
+                .expect("function that isn't a decl must have an entry block");
+            let params = view.block_params(entry);
+
+            Abi::new_frame(func.signature(), params, func.compute_metadata().unwrap())
+        };
+
         let (name, mut blocks) = context.prepare_for_func(func);
-        let (order, block_length) = self.perform_isel(func, context, &blocks);
+        let (order, block_length) = self.perform_isel(func, &mut frame, context, &blocks);
 
         // we haven't computed block lengths due to how isel works, need to do that now
         context.compute_block_lengths(&order, &block_length, &mut blocks);
 
-        MIRFunction::new(name, context.take_insts(), blocks, order)
+        (
+            MIRFunction::new(name, context.take_insts(), blocks, order),
+            frame,
+        )
     }
 }
 
@@ -189,13 +237,15 @@ where
 pub struct LoweringContext<'module, 'target, Arch, Abi, Inst>
 where
     Arch: Architecture,
-    Abi: ABI<Arch>,
+    Abi: ABI<Arch, Inst>,
     Inst: MachInst<Arch>,
 {
     /// The target that code is being generated for. This should be queried by the selector.
-    pub target: &'target Target<Arch, Abi>,
+    pub target: &'target Target<Arch, Abi, Inst>,
     /// The module being lowered. This is here to refer to module-scoped information
     pub module: &'module Module,
+    /// Codegen options, available for instruction selection code to access
+    pub options: CodegenOptions,
     // this is the final buffer of instructions in program-order
     current: VecDeque<Inst>,
     // when lowering a single instruction, we push into this. when done with that instruction,
@@ -225,16 +275,21 @@ where
 impl<'module, 'target, Arch, Abi, Inst> LoweringContext<'module, 'target, Arch, Abi, Inst>
 where
     Arch: Architecture,
-    Abi: ABI<Arch>,
+    Abi: ABI<Arch, Inst>,
     Inst: MachInst<Arch>,
 {
     const CONSTANT_COLOR: u32 = !0;
 
     /// Creates a [`LoweringContext`] prepared for a specific target and module.
-    pub fn new_for(target: &'target mut Target<Arch, Abi>, module: &'module Module) -> Self {
+    pub fn new_for(
+        target: &'target mut Target<Arch, Abi, Inst>,
+        module: &'module Module,
+        options: CodegenOptions,
+    ) -> Self {
         Self {
             target,
             module,
+            options,
             block_lookup: SecondaryMap::default(),
             pool: StringPool::default(),
             current: VecDeque::default(),

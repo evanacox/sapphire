@@ -16,7 +16,7 @@ incorrect code can be emitted.
 ### `bool`
 
 `bool` is represented the same way as an `i8` (i.e. in `byte`-sized partial registers), with `false` being zero
-and `true` being non-zero.
+and `true` being `1`.
 
 ## `condbr` and `icmp`/`fcmp` Interactions
 

@@ -26,7 +26,7 @@ use std::marker::PhantomData;
 /// the first valid instruction pattern.
 pub struct GreedyISel<Abi>
 where
-    Abi: ABI<X86_64>,
+    Abi: ABI<X86_64, Inst>,
 {
     current: ir::Inst,
     _unused: PhantomData<fn() -> Abi>,
@@ -42,11 +42,23 @@ macro_rules! pat {
     };
 }
 
-fn value_into_width<Abi: ABI<X86_64>>(val: Value, (def, ctx): Ctx<'_, '_, '_, Abi>) -> Width {
+macro_rules! cast {
+    ($val:expr, $def:expr, $pat:path) => {
+        match $def.dfg.inst_data($def.dfg.value_to_inst($val).unwrap()) {
+            $pat(inner) => inner,
+            _ => unreachable!(),
+        }
+    };
+}
+
+fn value_into_width<Abi: ABI<X86_64, Inst>>(
+    val: Value,
+    (def, _, ctx): Ctx<'_, '_, '_, '_, Abi>,
+) -> Width {
     type_into_width(def.dfg.ty(val), ctx)
 }
 
-fn type_into_width<Abi: ABI<X86_64>>(
+fn type_into_width<Abi: ABI<X86_64, Inst>>(
     ty: Type,
     ctx: &mut LoweringContext<'_, '_, X86_64, Abi, Inst>,
 ) -> Width {
@@ -77,35 +89,121 @@ fn icmp_into_cc(op: ICmpOp) -> ConditionCode {
     }
 }
 
-impl<'module, 'target, 'ctx, Abi> GreedyISel<Abi>
+/// Emits a `mov` that zeroes the upper bits of a register if necessary
+#[inline]
+pub(in crate::codegen::x86_64) fn zeroing_mov<Abi: ABI<X86_64, Inst>>(
+    dest: WriteableReg,
+    src: RegMemImm,
+    ty: Type,
+    ctx: &mut LoweringContext<'_, '_, X86_64, Abi, Inst>,
+) {
+    let width = width_dword_minimum(type_into_width(ty, ctx));
+
+    // we emit it as a `mov` for dwords so that the entire register is cleared
+    ctx.emit(Inst::Mov(Mov { width, src, dest }));
+}
+
+impl<'module, 'frame, 'target, 'ctx, Abi> GreedyISel<Abi>
 where
     'module: 'ctx,
     'target: 'ctx,
-    Abi: ABI<X86_64>,
+    Abi: ABI<X86_64, Inst>,
 {
-    // performs right-hand operand folding for memory accesses
-    fn rhs_operand_rm(&self, rhs: Value, (def, ctx): Ctx<'module, 'target, 'ctx, Abi>) -> RegMem {
+    // holds all the different **pointer** patterns, e.g. `offset(stackslot(), 4)`
+    #[inline]
+    fn internal_rhs_pointer(
+        &self,
+        rhs: Value,
+        (def, fr, ctx): Ctx<'module, 'frame, 'target, 'ctx, Abi>,
+    ) -> Option<IndirectAddress> {
         // TODO
 
+        None
+    }
+
+    // holds all the different right-hand side patterns
+    #[inline]
+    fn internal_rhs_immediate(
+        &self,
+        rhs: Value,
+        (def, fr, ctx): Ctx<'module, 'frame, 'target, 'ctx, Abi>,
+    ) -> Option<i32> {
+        let base = self.current;
+        let val = RefCell::new(0);
+
+        // any imm8/imm32 we immediately fold
+        if pat!(rhs, base, def, ctx, imm32(&val)) {
+            return Some(*val.borrow());
+        }
+
+        None
+    }
+
+    // performs right-hand operand folding for indirect addressing, this is
+    // specifically for `load`/`store` instructions trying to fold their source/dest
+    fn rhs_pointer_indirect_address(
+        &self,
+        rhs: Value,
+        (def, fr, ctx): Ctx<'module, 'frame, 'target, 'ctx, Abi>,
+    ) -> IndirectAddress {
+        match self.internal_rhs_pointer(rhs, (def, fr, ctx)) {
+            Some(address) => address,
+            None => IndirectAddress::Reg(ctx.result_reg(rhs, RegClass::Int)),
+        }
+    }
+
+    // performs right-hand operand folding for memory accesses
+    fn rhs_operand_rm(
+        &self,
+        rhs: Value,
+        (def, fr, ctx): Ctx<'module, 'frame, 'target, 'ctx, Abi>,
+    ) -> RegMem {
+        let base = self.current;
+
+        // if the thing on the right-hand side is a load, we can try to
+        // see if we can fold the pointer's source into our instruction
+        if pat!(rhs, base, def, ctx, load()) {
+            let load = cast!(rhs, def, InstData::Load);
+            let ptr = load.pointer();
+
+            // if we were able to perform a second fold, we return that better fold.
+            // otherwise, we just return an access to the register where the pointer is
+            return if let Some(address) = self.internal_rhs_pointer(ptr, (def, fr, ctx)) {
+                RegMem::Mem(address)
+            } else {
+                RegMem::Mem(IndirectAddress::Reg(ctx.result_reg(ptr, RegClass::Int)))
+            };
+        }
+
         RegMem::Reg(ctx.result_reg(rhs, self.val_class(rhs, def)))
+    }
+
+    // performs right-hand operand folding for immediates
+    fn rhs_operand_ri(
+        &self,
+        rhs: Value,
+        (def, fr, ctx): Ctx<'module, 'frame, 'target, 'ctx, Abi>,
+    ) -> RegImm {
+        match self.internal_rhs_immediate(rhs, (def, fr, ctx)) {
+            // if we get any imm8/imm32s, we fold it right in
+            Some(imm32) => RegImm::Imm(imm32),
+            // if we don't match anything, we just use the register directly
+            None => RegImm::Reg(ctx.result_reg(rhs, self.val_class(rhs, def))),
+        }
     }
 
     // performs right-hand operand folding for immediates and memory accesses
     fn rhs_operand_rmi(
         &self,
         rhs: Value,
-        (def, ctx): Ctx<'module, 'target, 'ctx, Abi>,
+        (def, fr, ctx): Ctx<'module, 'frame, 'target, 'ctx, Abi>,
     ) -> RegMemImm {
-        let base = self.current;
-        let val = RefCell::new(0);
-
-        // any imm8/imm32 we immediately fold into the instruction
-        if pat!(rhs, base, def, ctx, imm32(&val)) {
-            return RegMemImm::Imm(*val.borrow());
+        match self.internal_rhs_immediate(rhs, (def, fr, ctx)) {
+            // if we get any imm8/imm32s, we fold it right in
+            Some(imm32) => RegMemImm::Imm(imm32),
+            // if we match any of our optimize-able `mov` patterns, we'll get it here
+            None => self.rhs_operand_rm(rhs, (def, fr, ctx)).into(),
         }
-
-        // if we match any of our optimize-able `mov` patterns, we'll get it here
-        self.rhs_operand_rm(rhs, (def, ctx)).into()
     }
 
     // constrains a value to be put into a specific register, and then generates a mov
@@ -114,23 +212,21 @@ where
         &self,
         dest: WriteableReg,
         lhs: Value,
-        (def, ctx): Ctx<'module, 'target, 'ctx, Abi>,
+        (def, fr, ctx): Ctx<'module, 'frame, 'target, 'ctx, Abi>,
     ) -> WriteableReg {
         let class = self.val_class(lhs, def);
         let src = ctx.result_reg(lhs, class);
-        let width = width_dword_minimum(value_into_width(lhs, (def, ctx)));
 
-        // we emit it as a `mov` for dwords so that the entire register is cleared
-        ctx.emit(Inst::Mov(Mov {
-            width,
-            src: RegMemImm::Reg(src),
-            dest,
-        }));
+        zeroing_mov(dest, RegMemImm::Reg(src), def.dfg.ty(lhs), ctx);
 
         dest
     }
 
-    fn zero(&self, dest: WriteableReg, (_, ctx): Ctx<'module, 'target, 'ctx, Abi>) {
+    fn zero(
+        &self,
+        dest: WriteableReg,
+        ctx: &mut LoweringContext<'module, 'target, X86_64, Abi, Inst>,
+    ) {
         ctx.emit(Inst::ALU(ALU {
             opc: ALUOpcode::Xor,
             width: Width::Dword,
@@ -139,7 +235,7 @@ where
         }));
     }
 
-    #[inline(always)]
+    #[inline]
     fn val_class(&self, val: Value, def: &'ctx FunctionDefinition) -> RegClass {
         match def.dfg.ty(val).unpack() {
             UType::Float(_) => RegClass::Float,
@@ -150,24 +246,27 @@ where
         }
     }
 
-    #[inline(always)]
+    #[inline]
     fn curr_val(&self, def: &'ctx FunctionDefinition) -> Value {
         def.dfg
             .inst_to_result(self.current)
             .expect("attempted to get value for instruction without result")
     }
 
-    #[inline(always)]
+    #[inline]
     fn curr_result_reg(
         &self,
         class: RegClass,
-        (def, ctx): Ctx<'module, 'target, 'ctx, Abi>,
+        (def, fr, ctx): Ctx<'module, 'frame, 'target, 'ctx, Abi>,
     ) -> Reg {
         ctx.result_reg(self.curr_val(def), class)
     }
 
-    #[inline(always)]
-    fn maybe_curr_result_reg(&self, (def, ctx): Ctx<'module, 'target, 'ctx, Abi>) -> Option<Reg> {
+    #[inline]
+    fn maybe_curr_result_reg(
+        &self,
+        (def, fr, ctx): Ctx<'module, 'frame, 'target, 'ctx, Abi>,
+    ) -> Option<Reg> {
         ctx.maybe_result_reg(self.curr_val(def))
     }
 
@@ -190,7 +289,7 @@ where
         &mut self,
         target: &BlockWithParams,
         condition: Option<ConditionCode>,
-        (def, ctx): Ctx<'module, 'target, 'ctx, Abi>,
+        (def, fr, ctx): Ctx<'module, 'frame, 'target, 'ctx, Abi>,
     ) {
         let bb = target.block();
         let args = target.args();
@@ -199,7 +298,7 @@ where
             let class = self.val_class(param, def);
             let param_reg = ctx.result_reg(param, class);
 
-            self.mov(WriteableReg::from_reg(param_reg), arg, (def, ctx));
+            self.mov(WriteableReg::from_reg(param_reg), arg, (def, fr, ctx));
         }
 
         ctx.emit(Inst::Jump(Jump {
@@ -211,12 +310,12 @@ where
     fn signed_division(
         &self,
         data: &ArithInst,
-        (def, ctx): Ctx<'module, 'target, 'ctx, Abi>,
+        (def, fr, ctx): Ctx<'module, 'frame, 'target, 'ctx, Abi>,
     ) -> (Reg, Width) {
-        let dest = self.curr_result_reg(RegClass::Int, (def, ctx));
+        let dest = self.curr_result_reg(RegClass::Int, (def, fr, ctx));
         let lhs = ctx.result_reg(data.lhs(), RegClass::Int);
-        let rhs = self.rhs_operand_rm(data.rhs(), (def, ctx));
-        let mut width = value_into_width(data.lhs(), (def, ctx));
+        let rhs = self.rhs_operand_rm(data.rhs(), (def, fr, ctx));
+        let mut width = value_into_width(data.lhs(), (def, fr, ctx));
 
         // IDIV dividend must be located in AX/EAX/RAX
         ctx.emit(Inst::Mov(Mov {
@@ -260,12 +359,12 @@ where
     fn unsigned_division(
         &self,
         data: &ArithInst,
-        (def, ctx): Ctx<'module, 'target, 'ctx, Abi>,
+        (def, fr, ctx): Ctx<'module, 'frame, 'target, 'ctx, Abi>,
     ) -> (Reg, Width) {
-        let dest = self.curr_result_reg(RegClass::Int, (def, ctx));
+        let dest = self.curr_result_reg(RegClass::Int, (def, fr, ctx));
         let lhs = ctx.result_reg(data.lhs(), RegClass::Int);
-        let rhs = self.rhs_operand_rm(data.rhs(), (def, ctx));
-        let mut width = value_into_width(data.lhs(), (def, ctx));
+        let rhs = self.rhs_operand_rm(data.rhs(), (def, fr, ctx));
+        let mut width = value_into_width(data.lhs(), (def, fr, ctx));
 
         // DIV dividend must be located in AX/EAX/RAX
         ctx.emit(Inst::Mov(Mov {
@@ -291,7 +390,7 @@ where
         }
 
         // need to zero the "upper register" to have our unsigned dividend in DX:AX/EDX:EAX/RDX:RAX
-        self.zero(WriteableReg::from_reg(Div::DIVIDEND_HI), (def, ctx));
+        self.zero(WriteableReg::from_reg(Div::DIVIDEND_HI), ctx);
 
         ctx.emit(Inst::Div(Div {
             width,
@@ -305,7 +404,7 @@ where
 impl<'module, 'target, Abi> InstructionSelector<'module, 'target, X86_64, Abi, Inst>
     for GreedyISel<Abi>
 where
-    Abi: ABI<X86_64>,
+    Abi: ABI<X86_64, Inst>,
 {
     fn new() -> Self {
         Self {
@@ -318,24 +417,33 @@ where
         &mut self,
         inst: ir::Inst,
         func: &'module FunctionDefinition,
+        frame: &mut <Abi as ABI<X86_64, Inst>>::Frame,
         ctx: &mut LoweringContext<'module, 'target, X86_64, Abi, Inst>,
     ) {
         let data = func.dfg.inst_data(inst);
 
         self.current = inst;
-        self.dispatch_inst(data, (func, ctx))
+        self.dispatch_inst(data, (func, frame, ctx))
     }
 }
 
-type Ctx<'module, 'target, 'ctx, Abi> =
-    crate::codegen::Ctx<'module, 'target, 'ctx, X86_64, Abi, x86_64::Inst>;
+type Ctx<'module, 'frame, 'target, 'ctx, Abi> = crate::codegen::Ctx<
+    'module,
+    'frame,
+    'target,
+    'ctx,
+    X86_64,
+    Abi,
+    <Abi as ABI<X86_64, Inst>>::Frame,
+    x86_64::Inst,
+>;
 
 macro_rules! alu {
-    ($self:expr, $data:expr, $def:expr, $ctx:expr, $opc:expr) => {{
-        let dest = $self.curr_result_reg(RegClass::Int, ($def, $ctx));
-        let lhs = $self.mov(WriteableReg::from_reg(dest), $data.lhs(), ($def, $ctx));
-        let rhs = $self.rhs_operand_rmi($data.rhs(), ($def, $ctx));
-        let width = value_into_width($data.lhs(), ($def, $ctx));
+    ($self:expr, $data:expr, $def:expr, $fr:expr, $ctx:expr, $opc:expr) => {{
+        let dest = $self.curr_result_reg(RegClass::Int, ($def, $fr, $ctx));
+        let lhs = $self.mov(WriteableReg::from_reg(dest), $data.lhs(), ($def, $fr, $ctx));
+        let rhs = $self.rhs_operand_rmi($data.rhs(), ($def, $fr, $ctx));
+        let width = value_into_width($data.lhs(), ($def, $fr, $ctx));
 
         $ctx.emit(Inst::ALU(ALU {
             opc: $opc,
@@ -346,40 +454,54 @@ macro_rules! alu {
     }};
 }
 
-impl<'module, 'target, 'ctx, Abi> GenericInstVisitor<(), Ctx<'module, 'target, 'ctx, Abi>>
-    for GreedyISel<Abi>
+impl<'module, 'frame, 'target, 'ctx, Abi>
+    GenericInstVisitor<(), Ctx<'module, 'frame, 'target, 'ctx, Abi>> for GreedyISel<Abi>
 where
-    Abi: ABI<X86_64>,
+    Abi: ABI<X86_64, Inst>,
 {
-    fn visit_call(&mut self, data: &CallInst, (def, ctx): Ctx<'module, 'target, 'ctx, Abi>) {
+    fn visit_call(
+        &mut self,
+        data: &CallInst,
+        (def, fr, ctx): Ctx<'module, 'frame, 'target, 'ctx, Abi>,
+    ) {
         if self.lower_builtin(data.callee(), ctx) {
             return;
         }
 
-        todo!()
+        let result = self.maybe_curr_result_reg((def, fr, ctx));
+
+        fr.lower_call(
+            data,
+            result.map(|reg| WriteableReg::from_reg(reg)),
+            (def, ctx),
+        );
     }
 
     fn visit_indirectcall(
         &mut self,
         data: &IndirectCallInst,
-        context: Ctx<'module, 'target, 'ctx, Abi>,
+        context: Ctx<'module, 'frame, 'target, 'ctx, Abi>,
     ) {
         todo!()
     }
 
-    fn visit_icmp(&mut self, data: &ICmpInst, (def, ctx): Ctx<'module, 'target, 'ctx, Abi>) {
-        let width = value_into_width(data.lhs(), (def, ctx));
+    fn visit_icmp(
+        &mut self,
+        data: &ICmpInst,
+        (def, fr, ctx): Ctx<'module, 'frame, 'target, 'ctx, Abi>,
+    ) {
+        let width = value_into_width(data.lhs(), (def, fr, ctx));
         let class = self.val_class(data.rhs(), def);
         let lhs = ctx.result_reg(data.lhs(), class);
-        let rhs = self.rhs_operand_rmi(data.rhs(), (def, ctx));
-        let maybe_result = self.maybe_curr_result_reg((def, ctx));
+        let rhs = self.rhs_operand_rmi(data.rhs(), (def, fr, ctx));
+        let maybe_result = self.maybe_curr_result_reg((def, fr, ctx));
         let mut zero_optimization = false;
 
         // this is only needed if the `setCC` is emitted, but it must happen **before** the
         // test/cmp is emitted so it doesn't screw up the condition flags
         if let Some(reg) = maybe_result {
             // we need to make sure to zero the upper bits of the register, since we're only writing a byte
-            self.zero(WriteableReg::from_reg(reg), (def, ctx));
+            self.zero(WriteableReg::from_reg(reg), ctx);
         }
 
         // TODO: right now the `cmp reg, 0` => `test reg, reg` transform is only safe for
@@ -413,19 +535,27 @@ where
         }
     }
 
-    fn visit_fcmp(&mut self, data: &FCmpInst, context: Ctx<'module, 'target, 'ctx, Abi>) {
+    fn visit_fcmp(&mut self, data: &FCmpInst, context: Ctx<'module, 'frame, 'target, 'ctx, Abi>) {
         todo!()
     }
 
-    fn visit_sel(&mut self, data: &SelInst, context: Ctx<'module, 'target, 'ctx, Abi>) {
+    fn visit_sel(&mut self, data: &SelInst, context: Ctx<'module, 'frame, 'target, 'ctx, Abi>) {
         todo!()
     }
 
-    fn visit_br(&mut self, data: &BrInst, (def, ctx): Ctx<'module, 'target, 'ctx, Abi>) {
-        self.copy_phis_and_jump(data.target(), None, (def, ctx));
+    fn visit_br(
+        &mut self,
+        data: &BrInst,
+        (def, fr, ctx): Ctx<'module, 'frame, 'target, 'ctx, Abi>,
+    ) {
+        self.copy_phis_and_jump(data.target(), None, (def, fr, ctx));
     }
 
-    fn visit_condbr(&mut self, data: &CondBrInst, (def, ctx): Ctx<'module, 'target, 'ctx, Abi>) {
+    fn visit_condbr(
+        &mut self,
+        data: &CondBrInst,
+        (def, fr, ctx): Ctx<'module, 'frame, 'target, 'ctx, Abi>,
+    ) {
         let cond = data.condition();
         let cond_source = def.dfg.value_to_inst(cond);
 
@@ -445,8 +575,8 @@ where
                     let false_target = data.false_branch();
                     let opc = icmp_into_cc(icmp.op());
 
-                    self.copy_phis_and_jump(true_target, Some(opc), (def, ctx));
-                    self.copy_phis_and_jump(false_target, None, (def, ctx));
+                    self.copy_phis_and_jump(true_target, Some(opc), (def, fr, ctx));
+                    self.copy_phis_and_jump(false_target, None, (def, fr, ctx));
 
                     return;
                 }
@@ -482,46 +612,47 @@ where
     fn visit_unreachable(
         &mut self,
         data: &UnreachableInst,
-        context: Ctx<'module, 'target, 'ctx, Abi>,
+        (_, _, ctx): Ctx<'module, 'frame, 'target, 'ctx, Abi>,
     ) {
-        todo!()
+        // we actually do emit something rather than just nothing. If DCE didn't get
+        // any optimizations out of this, it's not worth saving the 2 bytes in return for
+        // some extra insanity lying around when the programmer makes a mistake
+        ctx.emit(Inst::Ud2(Ud2 {}))
     }
 
-    fn visit_ret(&mut self, data: &RetInst, (def, ctx): Ctx<'module, 'target, 'ctx, Abi>) {
-        if let Some(val) = data.value() {
-            let out = Reg::from_preg(X86_64::RAX);
-
-            self.mov(WriteableReg::from_reg(out), val, (def, ctx));
-        }
-
-        ctx.emit(Inst::Ret(Ret {}));
+    fn visit_ret(
+        &mut self,
+        data: &RetInst,
+        (def, fr, ctx): Ctx<'module, 'frame, 'target, 'ctx, Abi>,
+    ) {
+        fr.lower_ret(data, (def, ctx));
     }
 
     fn visit_and(
         &mut self,
         data: &CommutativeArithInst,
-        (def, ctx): Ctx<'module, 'target, 'ctx, Abi>,
+        (def, fr, ctx): Ctx<'module, 'frame, 'target, 'ctx, Abi>,
     ) {
-        alu!(self, data, def, ctx, ALUOpcode::And);
+        alu!(self, data, def, fr, ctx, ALUOpcode::And);
     }
 
     fn visit_or(
         &mut self,
         data: &CommutativeArithInst,
-        (def, ctx): Ctx<'module, 'target, 'ctx, Abi>,
+        (def, fr, ctx): Ctx<'module, 'frame, 'target, 'ctx, Abi>,
     ) {
-        alu!(self, data, def, ctx, ALUOpcode::Or);
+        alu!(self, data, def, fr, ctx, ALUOpcode::Or);
     }
 
     fn visit_xor(
         &mut self,
         data: &CommutativeArithInst,
-        (def, ctx): Ctx<'module, 'target, 'ctx, Abi>,
+        (def, fr, ctx): Ctx<'module, 'frame, 'target, 'ctx, Abi>,
     ) {
-        let dest = self.curr_result_reg(RegClass::Int, (def, ctx));
-        let lhs = self.mov(WriteableReg::from_reg(dest), data.lhs(), (def, ctx));
-        let rhs = self.rhs_operand_rmi(data.rhs(), (def, ctx));
-        let width = value_into_width(data.lhs(), (def, ctx));
+        let dest = self.curr_result_reg(RegClass::Int, (def, fr, ctx));
+        let lhs = self.mov(WriteableReg::from_reg(dest), data.lhs(), (def, fr, ctx));
+        let rhs = self.rhs_operand_rmi(data.rhs(), (def, fr, ctx));
+        let width = value_into_width(data.lhs(), (def, fr, ctx));
 
         // x ^ -1 => not x
         if pat!(self.current, def, ctx, xor_with(any(), neg1())) {
@@ -538,31 +669,47 @@ where
         }));
     }
 
-    fn visit_shl(&mut self, data: &ArithInst, (def, ctx): Ctx<'module, 'target, 'ctx, Abi>) {
-        alu!(self, data, def, ctx, ALUOpcode::Shl);
+    fn visit_shl(
+        &mut self,
+        data: &ArithInst,
+        (def, fr, ctx): Ctx<'module, 'frame, 'target, 'ctx, Abi>,
+    ) {
+        alu!(self, data, def, fr, ctx, ALUOpcode::Shl);
     }
 
-    fn visit_ashr(&mut self, data: &ArithInst, (def, ctx): Ctx<'module, 'target, 'ctx, Abi>) {
-        alu!(self, data, def, ctx, ALUOpcode::Sar);
+    fn visit_ashr(
+        &mut self,
+        data: &ArithInst,
+        (def, fr, ctx): Ctx<'module, 'frame, 'target, 'ctx, Abi>,
+    ) {
+        alu!(self, data, def, fr, ctx, ALUOpcode::Sar);
     }
 
-    fn visit_lshr(&mut self, data: &ArithInst, (def, ctx): Ctx<'module, 'target, 'ctx, Abi>) {
-        alu!(self, data, def, ctx, ALUOpcode::Shr);
+    fn visit_lshr(
+        &mut self,
+        data: &ArithInst,
+        (def, fr, ctx): Ctx<'module, 'frame, 'target, 'ctx, Abi>,
+    ) {
+        alu!(self, data, def, fr, ctx, ALUOpcode::Shr);
     }
 
     fn visit_iadd(
         &mut self,
         data: &CommutativeArithInst,
-        (def, ctx): Ctx<'module, 'target, 'ctx, Abi>,
+        (def, fr, ctx): Ctx<'module, 'frame, 'target, 'ctx, Abi>,
     ) {
-        alu!(self, data, def, ctx, ALUOpcode::Add);
+        alu!(self, data, def, fr, ctx, ALUOpcode::Add);
     }
 
-    fn visit_isub(&mut self, data: &ArithInst, (def, ctx): Ctx<'module, 'target, 'ctx, Abi>) {
-        let dest = self.curr_result_reg(RegClass::Int, (def, ctx));
-        let lhs = self.mov(WriteableReg::from_reg(dest), data.lhs(), (def, ctx));
-        let rhs = self.rhs_operand_rmi(data.rhs(), (def, ctx));
-        let width = value_into_width(data.lhs(), (def, ctx));
+    fn visit_isub(
+        &mut self,
+        data: &ArithInst,
+        (def, fr, ctx): Ctx<'module, 'frame, 'target, 'ctx, Abi>,
+    ) {
+        let dest = self.curr_result_reg(RegClass::Int, (def, fr, ctx));
+        let lhs = self.mov(WriteableReg::from_reg(dest), data.lhs(), (def, fr, ctx));
+        let rhs = self.rhs_operand_rmi(data.rhs(), (def, fr, ctx));
+        let width = value_into_width(data.lhs(), (def, fr, ctx));
 
         // 0 - x => neg x
         if pat!(self.current, def, ctx, isub_with(zero(), any())) {
@@ -582,18 +729,22 @@ where
     fn visit_imul(
         &mut self,
         data: &CommutativeArithInst,
-        (def, ctx): Ctx<'module, 'target, 'ctx, Abi>,
+        (def, fr, ctx): Ctx<'module, 'frame, 'target, 'ctx, Abi>,
     ) {
-        let dest = self.curr_result_reg(RegClass::Int, (def, ctx));
-        let lhs = self.mov(WriteableReg::from_reg(dest), data.lhs(), (def, ctx));
-        let rhs = self.rhs_operand_rmi(data.rhs(), (def, ctx));
-        let width = value_into_width(data.lhs(), (def, ctx));
+        let dest = self.curr_result_reg(RegClass::Int, (def, fr, ctx));
+        let lhs = self.mov(WriteableReg::from_reg(dest), data.lhs(), (def, fr, ctx));
+        let rhs = self.rhs_operand_rmi(data.rhs(), (def, fr, ctx));
+        let width = value_into_width(data.lhs(), (def, fr, ctx));
 
         ctx.emit(Inst::IMul(IMul { width, lhs, rhs }));
     }
 
-    fn visit_sdiv(&mut self, data: &ArithInst, (def, ctx): Ctx<'module, 'target, 'ctx, Abi>) {
-        let (dest, width) = self.signed_division(data, (def, ctx));
+    fn visit_sdiv(
+        &mut self,
+        data: &ArithInst,
+        (def, fr, ctx): Ctx<'module, 'frame, 'target, 'ctx, Abi>,
+    ) {
+        let (dest, width) = self.signed_division(data, (def, fr, ctx));
 
         // we free RAX back up by moving it into the vreg the result is supposed to be in
         ctx.emit(Inst::Mov(Mov {
@@ -603,8 +754,12 @@ where
         }));
     }
 
-    fn visit_udiv(&mut self, data: &ArithInst, (def, ctx): Ctx<'module, 'target, 'ctx, Abi>) {
-        let (dest, width) = self.unsigned_division(data, (def, ctx));
+    fn visit_udiv(
+        &mut self,
+        data: &ArithInst,
+        (def, fr, ctx): Ctx<'module, 'frame, 'target, 'ctx, Abi>,
+    ) {
+        let (dest, width) = self.unsigned_division(data, (def, fr, ctx));
 
         // we free RDX back up by moving it into the vreg the result is supposed to be in
         ctx.emit(Inst::Mov(Mov {
@@ -614,8 +769,12 @@ where
         }));
     }
 
-    fn visit_srem(&mut self, data: &ArithInst, (def, ctx): Ctx<'module, 'target, 'ctx, Abi>) {
-        let (dest, width) = self.signed_division(data, (def, ctx));
+    fn visit_srem(
+        &mut self,
+        data: &ArithInst,
+        (def, fr, ctx): Ctx<'module, 'frame, 'target, 'ctx, Abi>,
+    ) {
+        let (dest, width) = self.signed_division(data, (def, fr, ctx));
 
         // we free RDX back up by moving it into the vreg the result is supposed to be in
         ctx.emit(Inst::Mov(Mov {
@@ -625,8 +784,12 @@ where
         }));
     }
 
-    fn visit_urem(&mut self, data: &ArithInst, (def, ctx): Ctx<'module, 'target, 'ctx, Abi>) {
-        let (dest, width) = self.unsigned_division(data, (def, ctx));
+    fn visit_urem(
+        &mut self,
+        data: &ArithInst,
+        (def, fr, ctx): Ctx<'module, 'frame, 'target, 'ctx, Abi>,
+    ) {
+        let (dest, width) = self.unsigned_division(data, (def, fr, ctx));
 
         // we free RDX back up by moving it into the vreg the result is supposed to be in
         ctx.emit(Inst::Mov(Mov {
@@ -636,71 +799,120 @@ where
         }));
     }
 
-    fn visit_fneg(&mut self, data: &FloatUnaryInst, context: Ctx<'module, 'target, 'ctx, Abi>) {
+    fn visit_fneg(
+        &mut self,
+        data: &FloatUnaryInst,
+        context: Ctx<'module, 'frame, 'target, 'ctx, Abi>,
+    ) {
         todo!()
     }
 
     fn visit_fadd(
         &mut self,
         data: &CommutativeArithInst,
-        context: Ctx<'module, 'target, 'ctx, Abi>,
+        context: Ctx<'module, 'frame, 'target, 'ctx, Abi>,
     ) {
         todo!()
     }
 
-    fn visit_fsub(&mut self, data: &ArithInst, context: Ctx<'module, 'target, 'ctx, Abi>) {
+    fn visit_fsub(&mut self, data: &ArithInst, context: Ctx<'module, 'frame, 'target, 'ctx, Abi>) {
         todo!()
     }
 
     fn visit_fmul(
         &mut self,
         data: &CommutativeArithInst,
-        context: Ctx<'module, 'target, 'ctx, Abi>,
+        context: Ctx<'module, 'frame, 'target, 'ctx, Abi>,
     ) {
         todo!()
     }
 
-    fn visit_fdiv(&mut self, data: &ArithInst, context: Ctx<'module, 'target, 'ctx, Abi>) {
+    fn visit_fdiv(&mut self, data: &ArithInst, context: Ctx<'module, 'frame, 'target, 'ctx, Abi>) {
         todo!()
     }
 
-    fn visit_frem(&mut self, data: &ArithInst, context: Ctx<'module, 'target, 'ctx, Abi>) {
+    fn visit_frem(&mut self, data: &ArithInst, context: Ctx<'module, 'frame, 'target, 'ctx, Abi>) {
         todo!()
     }
 
-    fn visit_alloca(&mut self, data: &AllocaInst, context: Ctx<'module, 'target, 'ctx, Abi>) {
+    fn visit_alloca(
+        &mut self,
+        data: &AllocaInst,
+        context: Ctx<'module, 'frame, 'target, 'ctx, Abi>,
+    ) {
         todo!()
     }
 
-    fn visit_load(&mut self, data: &LoadInst, context: Ctx<'module, 'target, 'ctx, Abi>) {
+    fn visit_load(
+        &mut self,
+        data: &LoadInst,
+        (def, fr, ctx): Ctx<'module, 'frame, 'target, 'ctx, Abi>,
+    ) {
+        let class = self.val_class(self.curr_val(def), def);
+        let dest = self.curr_result_reg(class, (def, fr, ctx));
+        let rhs = self.rhs_pointer_indirect_address(data.pointer(), (def, fr, ctx));
+        let width = type_into_width(data.result_ty().unwrap(), ctx);
+
+        ctx.emit(Inst::Mov(Mov {
+            width,
+            src: RegMemImm::Mem(rhs),
+            dest: WriteableReg::from_reg(dest),
+        }))
+    }
+
+    fn visit_store(
+        &mut self,
+        data: &StoreInst,
+        (def, fr, ctx): Ctx<'module, 'frame, 'target, 'ctx, Abi>,
+    ) {
+        let src = self.rhs_operand_ri(data.stored(), (def, fr, ctx));
+        let dest = self.rhs_pointer_indirect_address(data.pointer(), (def, fr, ctx));
+        let width = type_into_width(def.dfg.ty(data.stored()), ctx);
+
+        ctx.emit(Inst::MovStore(MovStore { width, src, dest }))
+    }
+
+    fn visit_offset(
+        &mut self,
+        data: &OffsetInst,
+        context: Ctx<'module, 'frame, 'target, 'ctx, Abi>,
+    ) {
         todo!()
     }
 
-    fn visit_store(&mut self, data: &StoreInst, context: Ctx<'module, 'target, 'ctx, Abi>) {
+    fn visit_extract(
+        &mut self,
+        data: &ExtractInst,
+        context: Ctx<'module, 'frame, 'target, 'ctx, Abi>,
+    ) {
         todo!()
     }
 
-    fn visit_offset(&mut self, data: &OffsetInst, context: Ctx<'module, 'target, 'ctx, Abi>) {
+    fn visit_insert(
+        &mut self,
+        data: &InsertInst,
+        context: Ctx<'module, 'frame, 'target, 'ctx, Abi>,
+    ) {
         todo!()
     }
 
-    fn visit_extract(&mut self, data: &ExtractInst, context: Ctx<'module, 'target, 'ctx, Abi>) {
+    fn visit_elemptr(
+        &mut self,
+        data: &ElemPtrInst,
+        context: Ctx<'module, 'frame, 'target, 'ctx, Abi>,
+    ) {
         todo!()
     }
 
-    fn visit_insert(&mut self, data: &InsertInst, context: Ctx<'module, 'target, 'ctx, Abi>) {
-        todo!()
-    }
-
-    fn visit_elemptr(&mut self, data: &ElemPtrInst, context: Ctx<'module, 'target, 'ctx, Abi>) {
-        todo!()
-    }
-
-    fn visit_sext(&mut self, data: &CastInst, (def, ctx): Ctx<'module, 'target, 'ctx, Abi>) {
-        let dest = self.curr_result_reg(RegClass::Int, (def, ctx));
+    fn visit_sext(
+        &mut self,
+        data: &CastInst,
+        (def, fr, ctx): Ctx<'module, 'frame, 'target, 'ctx, Abi>,
+    ) {
+        let dest = self.curr_result_reg(RegClass::Int, (def, fr, ctx));
         let dest_width = type_into_width(data.result_ty().unwrap(), ctx);
-        let src_width = value_into_width(data.operand(), (def, ctx));
-        let src = self.rhs_operand_rmi(data.operand(), (def, ctx));
+        let src_width = value_into_width(data.operand(), (def, fr, ctx));
+        let src = self.rhs_operand_rmi(data.operand(), (def, fr, ctx));
 
         ctx.emit(Inst::Movsx(Movsx {
             widths: WidthPair::from_widths(src_width, dest_width),
@@ -709,11 +921,15 @@ where
         }));
     }
 
-    fn visit_zext(&mut self, data: &CastInst, (def, ctx): Ctx<'module, 'target, 'ctx, Abi>) {
-        let dest = self.curr_result_reg(RegClass::Int, (def, ctx));
+    fn visit_zext(
+        &mut self,
+        data: &CastInst,
+        (def, fr, ctx): Ctx<'module, 'frame, 'target, 'ctx, Abi>,
+    ) {
+        let dest = self.curr_result_reg(RegClass::Int, (def, fr, ctx));
         let dest_width = type_into_width(data.result_ty().unwrap(), ctx);
-        let src_width = value_into_width(data.operand(), (def, ctx));
-        let src = self.rhs_operand_rmi(data.operand(), (def, ctx));
+        let src_width = value_into_width(data.operand(), (def, fr, ctx));
+        let src = self.rhs_operand_rmi(data.operand(), (def, fr, ctx));
 
         ctx.emit(Inst::Movzx(Movzx {
             widths: WidthPair::from_widths(src_width, dest_width),
@@ -722,28 +938,51 @@ where
         }));
     }
 
-    fn visit_trunc(&mut self, data: &CastInst, (def, ctx): Ctx<'module, 'target, 'ctx, Abi>) {
-        let dest = self.curr_result_reg(RegClass::Int, (def, ctx));
+    fn visit_trunc(
+        &mut self,
+        data: &CastInst,
+        (def, fr, ctx): Ctx<'module, 'frame, 'target, 'ctx, Abi>,
+    ) {
+        let dest = self.curr_result_reg(RegClass::Int, (def, fr, ctx));
 
         // no-op, we just read from the lower bytes of the register later
-        self.mov(WriteableReg::from_reg(dest), data.operand(), (def, ctx));
+        self.mov(WriteableReg::from_reg(dest), data.operand(), (def, fr, ctx));
     }
 
-    fn visit_itob(&mut self, data: &CastInst, (def, ctx): Ctx<'module, 'target, 'ctx, Abi>) {
-        let dest = self.curr_result_reg(RegClass::Int, (def, ctx));
+    fn visit_itob(
+        &mut self,
+        data: &CastInst,
+        (def, fr, ctx): Ctx<'module, 'frame, 'target, 'ctx, Abi>,
+    ) {
+        let src = ctx.result_reg(data.operand(), RegClass::Int);
+        let dest = self.curr_result_reg(RegClass::Int, (def, fr, ctx));
+        let width = value_into_width(data.operand(), (def, fr, ctx));
 
-        // we don't have any requirement on true being 1, it just has to be non-zero.
-        // so we just do a mov. non-zero becomes "true" and zero becomes "false"
-        self.mov(WriteableReg::from_reg(dest), data.operand(), (def, ctx));
+        // we require that true is exactly 1, so we have to do a test-n-set.
+        ctx.emit(Inst::Test(Test {
+            lhs: src,
+            rhs: RegMemImm::Reg(src),
+            width,
+        }));
+
+        // x & x == 0 only if x == 0, so if non-zero we have true
+        ctx.emit(Inst::Set(Set {
+            condition: ConditionCode::NZ,
+            dest: WriteableReg::from_reg(dest),
+        }));
     }
 
-    fn visit_btoi(&mut self, data: &CastInst, (def, ctx): Ctx<'module, 'target, 'ctx, Abi>) {
-        let dest = self.curr_result_reg(RegClass::Int, (def, ctx));
+    fn visit_btoi(
+        &mut self,
+        data: &CastInst,
+        (def, fr, ctx): Ctx<'module, 'frame, 'target, 'ctx, Abi>,
+    ) {
+        let dest = self.curr_result_reg(RegClass::Int, (def, fr, ctx));
         let width = width_dword_minimum(type_into_width(data.result_ty().unwrap(), ctx));
 
         // we're only getting 0 or 1, no need to emit a whole zext. just set the whole register
         // to that no matter what the width is
-        self.mov(WriteableReg::from_reg(dest), data.operand(), (def, ctx));
+        self.mov(WriteableReg::from_reg(dest), data.operand(), (def, fr, ctx));
         ctx.emit(Inst::ALU(ALU {
             opc: ALUOpcode::And,
             lhs: WriteableReg::from_reg(dest),
@@ -752,53 +991,65 @@ where
         }));
     }
 
-    fn visit_sitof(&mut self, data: &CastInst, context: Ctx<'module, 'target, 'ctx, Abi>) {
+    fn visit_sitof(&mut self, data: &CastInst, context: Ctx<'module, 'frame, 'target, 'ctx, Abi>) {
         todo!()
     }
 
-    fn visit_uitof(&mut self, data: &CastInst, context: Ctx<'module, 'target, 'ctx, Abi>) {
+    fn visit_uitof(&mut self, data: &CastInst, context: Ctx<'module, 'frame, 'target, 'ctx, Abi>) {
         todo!()
     }
 
-    fn visit_ftosi(&mut self, data: &CastInst, context: Ctx<'module, 'target, 'ctx, Abi>) {
+    fn visit_ftosi(&mut self, data: &CastInst, context: Ctx<'module, 'frame, 'target, 'ctx, Abi>) {
         todo!()
     }
 
-    fn visit_ftoui(&mut self, data: &CastInst, context: Ctx<'module, 'target, 'ctx, Abi>) {
+    fn visit_ftoui(&mut self, data: &CastInst, context: Ctx<'module, 'frame, 'target, 'ctx, Abi>) {
         todo!()
     }
 
-    fn visit_fext(&mut self, data: &CastInst, context: Ctx<'module, 'target, 'ctx, Abi>) {
+    fn visit_fext(&mut self, data: &CastInst, context: Ctx<'module, 'frame, 'target, 'ctx, Abi>) {
         todo!()
     }
 
-    fn visit_ftrunc(&mut self, data: &CastInst, context: Ctx<'module, 'target, 'ctx, Abi>) {
+    fn visit_ftrunc(&mut self, data: &CastInst, context: Ctx<'module, 'frame, 'target, 'ctx, Abi>) {
         todo!()
     }
 
-    fn visit_itop(&mut self, data: &CastInst, (def, ctx): Ctx<'module, 'target, 'ctx, Abi>) {
-        let dest = self.curr_result_reg(RegClass::Int, (def, ctx));
+    fn visit_itop(
+        &mut self,
+        data: &CastInst,
+        (def, fr, ctx): Ctx<'module, 'frame, 'target, 'ctx, Abi>,
+    ) {
+        let dest = self.curr_result_reg(RegClass::Int, (def, fr, ctx));
 
         // no-op, just mov from old to new vreg
-        self.mov(WriteableReg::from_reg(dest), data.operand(), (def, ctx));
+        self.mov(WriteableReg::from_reg(dest), data.operand(), (def, fr, ctx));
     }
 
-    fn visit_ptoi(&mut self, data: &CastInst, (def, ctx): Ctx<'module, 'target, 'ctx, Abi>) {
-        let dest = self.curr_result_reg(RegClass::Int, (def, ctx));
+    fn visit_ptoi(
+        &mut self,
+        data: &CastInst,
+        (def, fr, ctx): Ctx<'module, 'frame, 'target, 'ctx, Abi>,
+    ) {
+        let dest = self.curr_result_reg(RegClass::Int, (def, fr, ctx));
 
         // no-op, just mov from old to new vreg
-        self.mov(WriteableReg::from_reg(dest), data.operand(), (def, ctx));
+        self.mov(WriteableReg::from_reg(dest), data.operand(), (def, fr, ctx));
     }
 
-    fn visit_iconst(&mut self, data: &IConstInst, (def, ctx): Ctx<'module, 'target, 'ctx, Abi>) {
+    fn visit_iconst(
+        &mut self,
+        data: &IConstInst,
+        (def, fr, ctx): Ctx<'module, 'frame, 'target, 'ctx, Abi>,
+    ) {
         let ty = data.result_ty().unwrap();
-        let dest = self.curr_result_reg(RegClass::Int, (def, ctx));
+        let dest = self.curr_result_reg(RegClass::Int, (def, fr, ctx));
         let width = type_into_width(ty, ctx);
         let val = RefCell::new(0);
 
         // do an efficient zero if we can, we use the whole register with `self.zero`
         if data.value() == 0 {
-            self.zero(WriteableReg::from_reg(dest), (def, ctx));
+            self.zero(WriteableReg::from_reg(dest), ctx);
 
             return;
         }
@@ -822,15 +1073,23 @@ where
         }));
     }
 
-    fn visit_fconst(&mut self, data: &FConstInst, context: Ctx<'module, 'target, 'ctx, Abi>) {
+    fn visit_fconst(
+        &mut self,
+        data: &FConstInst,
+        context: Ctx<'module, 'frame, 'target, 'ctx, Abi>,
+    ) {
         todo!()
     }
 
-    fn visit_bconst(&mut self, data: &BConstInst, (def, ctx): Ctx<'module, 'target, 'ctx, Abi>) {
-        let dest = self.curr_result_reg(RegClass::Int, (def, ctx));
+    fn visit_bconst(
+        &mut self,
+        data: &BConstInst,
+        (def, fr, ctx): Ctx<'module, 'frame, 'target, 'ctx, Abi>,
+    ) {
+        let dest = self.curr_result_reg(RegClass::Int, (def, fr, ctx));
 
         if data.value() {
-            self.zero(WriteableReg::from_reg(dest), (def, ctx));
+            self.zero(WriteableReg::from_reg(dest), ctx);
         } else {
             // we emit it as a `mov` for dwords so that the entire register is cleared
             ctx.emit(Inst::Mov(Mov {
@@ -841,24 +1100,46 @@ where
         }
     }
 
-    fn visit_undef(&mut self, _: &UndefConstInst, _: Ctx<'module, 'target, 'ctx, Abi>) {
-        // do nothing, we have a result register that can be referenced
+    fn visit_undef(&mut self, _: &UndefConstInst, _: Ctx<'module, 'frame, 'target, 'ctx, Abi>) {
+        // do nothing, we have a result register that can be referenced.
+        //
+        // we don't actually define it, we simply leave it as a new register with
+        // no live range (created by `result_reg`) that can be filled in with anything
+        // by the register allocator.
     }
 
-    fn visit_null(&mut self, data: &NullConstInst, (def, ctx): Ctx<'module, 'target, 'ctx, Abi>) {
-        let dest = self.curr_result_reg(RegClass::Int, (def, ctx));
+    fn visit_null(
+        &mut self,
+        data: &NullConstInst,
+        (def, fr, ctx): Ctx<'module, 'frame, 'target, 'ctx, Abi>,
+    ) {
+        let dest = self.curr_result_reg(RegClass::Int, (def, fr, ctx));
 
-        self.zero(WriteableReg::from_reg(dest), (def, ctx));
+        self.zero(WriteableReg::from_reg(dest), ctx);
     }
 
-    fn visit_stackslot(&mut self, data: &StackSlotInst, context: Ctx<'module, 'target, 'ctx, Abi>) {
-        todo!()
+    fn visit_stackslot(
+        &mut self,
+        data: &StackSlotInst,
+        (def, fr, ctx): Ctx<'module, 'frame, 'target, 'ctx, Abi>,
+    ) {
+        let dest = self.curr_result_reg(RegClass::Int, (def, fr, ctx));
+        let (reg, offset) = match fr.stack_slot(data.slot(), (def, ctx)) {
+            VariableLocation::InReg(_) => unreachable!(),
+            VariableLocation::RelativeToSP(offset) => (X86_64::RSP, offset),
+            VariableLocation::RelativeToFP(offset) => (X86_64::RBP, offset),
+        };
+
+        ctx.emit(Inst::Lea(Lea {
+            dest: WriteableReg::from_reg(dest),
+            src: IndirectAddress::RegOffset(Reg::from_preg(reg), offset),
+        }));
     }
 
     fn visit_globaladdr(
         &mut self,
         data: &GlobalAddrInst,
-        context: Ctx<'module, 'target, 'ctx, Abi>,
+        context: Ctx<'module, 'frame, 'target, 'ctx, Abi>,
     ) {
         todo!()
     }

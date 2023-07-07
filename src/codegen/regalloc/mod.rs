@@ -41,6 +41,6 @@ mod stack;
 
 pub use allocator::*;
 pub use irc::GraphColoringRegAlloc;
-pub use liveness::Liveness;
+pub use liveness::*;
 pub use lsra::LinearScanRegAlloc;
 pub use stack::StackRegAlloc;

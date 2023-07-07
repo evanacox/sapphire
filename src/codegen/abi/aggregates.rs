@@ -9,7 +9,7 @@
 //======---------------------------------------------------------------======//
 
 use crate::analysis::{ControlFlowGraph, DominatorTree};
-use crate::codegen::{Architecture, Target, ABI};
+use crate::codegen::{Architecture, MachInst, Target, ABI};
 use crate::ir::{DataFlowGraph, Func, Function, Module, TypePool, Value};
 use crate::pass::{ModuleAnalysisManager, ModuleTransformPass, PreservedAnalyses};
 use std::marker::PhantomData;
@@ -28,25 +28,27 @@ use std::marker::PhantomData;
 ///
 /// If an aggregate is defined as "too big," it is given a unique stack slot, and
 /// operations with that aggregate are transformed
-pub struct LegalizeAggregatesForABI<Arch, Abi>
+pub struct LegalizeAggregatesForABI<Arch, Abi, Inst>
 where
     Arch: Architecture,
-    Abi: ABI<Arch>,
+    Abi: ABI<Arch, Inst>,
+    Inst: MachInst<Arch>,
 {
-    target: Target<Arch, Abi>,
-    _unused: PhantomData<fn() -> (Arch, Abi)>,
+    target: Target<Arch, Abi, Inst>,
+    _unused: PhantomData<fn() -> (Arch, Abi, Inst)>,
 }
 
-impl<Arch, Abi> LegalizeAggregatesForABI<Arch, Abi>
+impl<Arch, Abi, Inst> LegalizeAggregatesForABI<Arch, Abi, Inst>
 where
     Arch: Architecture,
-    Abi: ABI<Arch>,
+    Abi: ABI<Arch, Inst>,
+    Inst: MachInst<Arch>,
 {
     /// Creates an instance of the legalizer
     ///
     /// The legalizer relies on `target` being configured for the module that will
     /// be legalized.
-    pub fn new(target: Target<Arch, Abi>) -> Self {
+    pub fn new(target: Target<Arch, Abi, Inst>) -> Self {
         Self {
             target,
             _unused: PhantomData::default(),
@@ -87,10 +89,11 @@ where
     }
 }
 
-impl<Arch, Abi> ModuleTransformPass for LegalizeAggregatesForABI<Arch, Abi>
+impl<Arch, Abi, Inst> ModuleTransformPass for LegalizeAggregatesForABI<Arch, Abi, Inst>
 where
     Arch: Architecture,
-    Abi: ABI<Arch>,
+    Abi: ABI<Arch, Inst>,
+    Inst: MachInst<Arch>,
 {
     fn run(&mut self, module: &mut Module, am: &mut ModuleAnalysisManager) -> PreservedAnalyses {
         todo!()
