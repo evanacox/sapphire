@@ -13,6 +13,7 @@ use crate::codegen::x86_64::*;
 use crate::codegen::{Emitter, Extern, MIRBlock, MIRFunction, MIRModule, Reg, RegClass};
 use crate::ir::{FloatFormat, UType};
 use crate::utility::StringPool;
+use std::str::FromStr;
 
 /// Different assembly formats for x86-64
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Debug, Hash)]
@@ -27,6 +28,22 @@ pub enum X86_64Assembly {
     MASM,
 }
 
+impl FromStr for X86_64Assembly {
+    type Err = &'static str;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "gnu" => Ok(Self::GNU),
+            "gnu-intel" => Ok(Self::GNUIntel),
+            "nasm" => Ok(Self::NASM),
+            "masm" => Ok(Self::MASM),
+            _ => Err(
+                "only available x86-64 assembly formats are `gnu`, `gnu-intel`, `nasm` and `masm`",
+            ),
+        }
+    }
+}
+
 /// Different object file formats for x86-64
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Debug, Hash)]
 pub enum X86_64ObjectFile {
@@ -34,6 +51,21 @@ pub enum X86_64ObjectFile {
     ELF,
     /// The Mach-O object format
     MachO,
+    /// The PE object format
+    PE,
+}
+
+impl FromStr for X86_64ObjectFile {
+    type Err = &'static str;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "elf" => Ok(Self::ELF),
+            "macho" => Ok(Self::GNUIntel),
+            "pe" => Ok(Self::NASM),
+            _ => Err("only available x86-64 assembly formats are `elf`, `macho`, and `pe`"),
+        }
+    }
 }
 
 /// The x86-64 emitter. This delegates to more specialized (and internal) mechanisms

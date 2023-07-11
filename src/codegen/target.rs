@@ -10,11 +10,12 @@
 
 use crate::arena::ArenaKey;
 use crate::codegen::x86_64::{LinuxX86_64, MacOSX86_64, WindowsX86_64, X86_64};
-use crate::codegen::{CallingConv, MachInst, StackFrame};
+use crate::codegen::{CallingConv, CodegenOptions, MachInst, StackFrame};
 use crate::ir::{FloatFormat, Function, Module, Type, TypePool, UType};
 use crate::utility::SaHashMap;
 use std::fmt::Debug;
 use std::marker::PhantomData;
+use std::str::FromStr;
 
 /// Models the specific CPU architecture that is being targeted.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Hash)]
@@ -34,13 +35,31 @@ pub enum TargetPair {
     /// 64-bit x86 macOS
     X86_64macOS,
     /// 64-bit x86 Windows
-    X64Windows,
+    X86_64Windows,
     /// 64-bit arm Linux
     Aarch64Linux,
     /// 64-bit arm macOS
     Arm64macOS,
     /// 64-bit arm Windows
     Arm64Windows,
+}
+
+impl FromStr for TargetPair {
+    type Err = &'static str;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "x86_64-linux" => Ok(TargetPair::X86_64Linux),
+            "x86_64-mac" => Ok(TargetPair::X86_64macOS),
+            "x86_64-win" => Ok(TargetPair::X86_64Windows),
+            "aarch64-linux" => Ok(TargetPair::Aarch64Linux),
+            "arm64-mac" => Ok(TargetPair::Arm64macOS),
+            "arm64-win" => Ok(TargetPair::Arm64Windows),
+            _ => {
+                Err("the available targets are `x86_64-linux`, `x86_64-mac`, `x86_64-win`, `aarch64-linux`, `arm64-mac`, `arm64-win`")
+            }
+        }
+    }
 }
 
 /// Models the layout of a given type. This is the size and alignment requirements
@@ -345,7 +364,11 @@ pub trait Platform<Arch: Architecture>: Debug {
 
     /// Creates an instance of the default stack frame object for the platform,
     /// preconfiguring it for `func`.
-    fn default_stack_frame(&self, func: &Function) -> Box<dyn StackFrame<Arch>>;
+    fn default_stack_frame(
+        &self,
+        func: &Function,
+        target: &Target<Arch>,
+    ) -> Box<dyn StackFrame<Arch>>;
 }
 
 /// Models the data-layout, calling conventions and other details necessary
@@ -354,6 +377,7 @@ pub trait Platform<Arch: Architecture>: Debug {
 pub struct Target<Arch: Architecture> {
     platform: Box<dyn Platform<Arch>>,
     aggregate_type_layouts: SaHashMap<Type, TypeLayout>,
+    options: CodegenOptions,
     _unused: PhantomData<fn() -> Arch>,
 }
 
@@ -380,7 +404,7 @@ impl<Arch: Architecture> Target<Arch> {
     /// Gets a new stack frame for a given function
     #[inline]
     pub fn new_frame(&self, func: &Function) -> Box<dyn StackFrame<Arch>> {
-        self.platform.default_stack_frame(func)
+        self.platform.default_stack_frame(func, self)
     }
 
     /// Gets a new calling convention for a given function
@@ -405,6 +429,12 @@ impl<Arch: Architecture> Target<Arch> {
     #[inline]
     pub fn instruction_pointer(&self) -> PReg {
         Arch::instruction_pointer()
+    }
+
+    /// Gets the [`CodegenOptions`] that the code is being generated according to.
+    #[inline]
+    pub fn options(&self) -> CodegenOptions {
+        self.options
     }
 
     fn maybe_layout_of(&self, ty: Type) -> Option<TypeLayout> {
@@ -456,8 +486,9 @@ impl PresetTargets {
     /// Returns a [`Target`] that is configured for the x86-64 System V ABI
     /// on Linux-based operating systems.
     #[inline]
-    pub fn linux_x86_64() -> Target<X86_64> {
+    pub fn linux_x86_64(options: CodegenOptions) -> Target<X86_64> {
         Target {
+            options,
             platform: Box::new(LinuxX86_64),
             aggregate_type_layouts: SaHashMap::default(),
             _unused: PhantomData::default(),
@@ -467,8 +498,9 @@ impl PresetTargets {
     /// Returns a [`Target`] that is configured for the x86-64 System V ABI
     /// on x86-64 macOS.
     #[inline]
-    pub fn mac_os_x86_64() -> Target<X86_64> {
+    pub fn mac_os_x86_64(options: CodegenOptions) -> Target<X86_64> {
         Target {
+            options,
             platform: Box::new(MacOSX86_64),
             aggregate_type_layouts: SaHashMap::default(),
             _unused: PhantomData::default(),
@@ -478,8 +510,9 @@ impl PresetTargets {
     /// Returns a [`Target`] that is configured for the x86-64 Windows ABI
     /// and is targeting x86-64 Windows.
     #[inline]
-    pub fn windows_x86_64() -> Target<X86_64> {
+    pub fn windows_x86_64(options: CodegenOptions) -> Target<X86_64> {
         Target {
+            options,
             platform: Box::new(WindowsX86_64),
             aggregate_type_layouts: SaHashMap::default(),
             _unused: PhantomData::default(),

@@ -9,7 +9,9 @@
 //======---------------------------------------------------------------======//
 
 use crate::codegen::x86_64::X86_64;
-use crate::codegen::{MIRBlock, MachInst, Move, Reg, RegCollector, StackFrame, WriteableReg};
+use crate::codegen::{
+    MIRBlock, MachInst, Move, PReg, Reg, RegCollector, StackFrame, VariableLocation, WriteableReg,
+};
 use crate::ir;
 use crate::utility::Str;
 use static_assertions::assert_eq_size;
@@ -747,9 +749,9 @@ pub enum Inst {
 assert_eq_size!(Inst, [u64; 4]);
 
 macro_rules! push_if_reg {
-    (RegMemImm, $e:expr, $collector:expr) => {
+    (RegMemImm, $e:expr, $width:expr, $collector:expr) => {
         match $e {
-            RegMemImm::Reg(r) => $collector.push(r),
+            RegMemImm::Reg(r) => $collector.push((r, $width.into_bytes() as u32)),
             RegMemImm::Mem(loc) => {
                 push_if_reg!(IndirectAddress, loc, $collector);
             }
@@ -759,41 +761,112 @@ macro_rules! push_if_reg {
 
     (IndirectAddress, $e:expr, $collector:expr) => {
         match $e {
-            IndirectAddress::Reg(r) | IndirectAddress::RegOffset(r, _) => $collector.push(r),
+            IndirectAddress::Reg(r) | IndirectAddress::RegOffset(r, _) => $collector.push((r, 8)),
             IndirectAddress::RegReg(r1, r2) => {
-                $collector.push(r1);
-                $collector.push(r2);
+                $collector.push((r1, 8));
+                $collector.push((r2, 8));
             }
             IndirectAddress::ScaledReg(reg, _) => {
-                $collector.push(reg);
+                $collector.push((reg, 8));
             }
             IndirectAddress::RegScaledReg(r1, r2, _) => {
-                $collector.push(r1);
-                $collector.push(r2);
+                $collector.push((r1, 8));
+                $collector.push((r2, 8));
             }
             IndirectAddress::RegScaledRegIndex(r1, r2, _) => {
-                $collector.push(r1);
-                $collector.push(r2);
+                $collector.push((r1, 8));
+                $collector.push((r2, 8));
             }
             IndirectAddress::RipGlobal(_) => {}
         }
     };
 
-    (RegMem, $e:expr, $collector:expr) => {
+    (RegMem, $e:expr, $width:expr, $collector:expr) => {
         match $e {
-            RegMem::Reg(r) => $collector.push(r),
+            RegMem::Reg(r) => $collector.push((r, $width.into_bytes() as u32)),
             RegMem::Mem(loc) => {
                 push_if_reg!(IndirectAddress, loc, $collector);
             }
         }
     };
 
-    (RegImm, $e:expr, $collector:expr) => {
+    (RegImm, $e:expr, $width:expr, $collector:expr) => {
         match $e {
-            RegImm::Reg(r) => $collector.push(r),
+            RegImm::Reg(r) => $collector.push((r, $width.into_bytes() as u32)),
             RegImm::Imm(_) => {}
         }
     };
+}
+
+macro_rules! rewrite_for {
+    ($reg:expr, $rewrites:expr) => {{
+        let mut result = X86_64::RIP;
+
+        for &(reg, preg) in $rewrites {
+            if reg == $reg {
+                result = preg;
+            }
+        }
+
+        debug_assert_ne!(result, X86_64::RIP);
+
+        Reg::from_preg(result)
+    }};
+
+    (rmi, $rmi:expr, $rewrites:expr) => {{
+        match $rmi {
+            RegMemImm::Reg(r) => RegMemImm::Reg(rewrite_for!(r, $rewrites)),
+            RegMemImm::Mem(m) => RegMemImm::Mem(rewrite_for!(mem, m, $rewrites)),
+            RegMemImm::Imm(i) => RegMemImm::Imm(i),
+        }
+    }};
+
+    (rm, $rm:expr, $rewrites:expr) => {{
+        match $rm {
+            RegMem::Reg(r) => RegMem::Reg(rewrite_for!(r, $rewrites)),
+            RegMem::Mem(m) => RegMem::Mem(rewrite_for!(mem, m, $rewrites)),
+        }
+    }};
+
+    (ri, $ri:expr, $rewrites:expr) => {{
+        match $ri {
+            RegImm::Reg(r) => RegImm::Reg(rewrite_for!(r, $rewrites)),
+            RegImm::Imm(i) => RegImm::Imm(i),
+        }
+    }};
+
+    (mem, $mem:expr, $rewrites:expr) => {{
+        match $mem {
+            IndirectAddress::Reg(r) => IndirectAddress::Reg(rewrite_for!(r, $rewrites)),
+            IndirectAddress::RegReg(r1, r2) => {
+                IndirectAddress::RegReg(rewrite_for!(r1, $rewrites), rewrite_for!(r2, $rewrites))
+            }
+            IndirectAddress::RegOffset(r, imm) => {
+                IndirectAddress::RegOffset(rewrite_for!(r, $rewrites), imm)
+            }
+            IndirectAddress::ScaledReg(r, scale) => {
+                IndirectAddress::ScaledReg(rewrite_for!(r, $rewrites), scale)
+            }
+            IndirectAddress::RegScaledReg(r1, r2, scale) => IndirectAddress::RegScaledReg(
+                rewrite_for!(r1, $rewrites),
+                rewrite_for!(r2, $rewrites),
+                scale,
+            ),
+            IndirectAddress::RegScaledRegIndex(r1, r2, scale_index) => {
+                IndirectAddress::RegScaledRegIndex(
+                    rewrite_for!(r1, $rewrites),
+                    rewrite_for!(r2, $rewrites),
+                    scale_index,
+                )
+            }
+            IndirectAddress::RipGlobal(s) => IndirectAddress::RipGlobal(s),
+        }
+    }};
+}
+
+#[inline(always)]
+fn into_pair(reg: Reg, width: Width) -> (Reg, u32) {
+    (reg, width.into_bytes() as u32)
 }
 
 impl MachInst for Inst {
@@ -807,73 +880,81 @@ impl MachInst for Inst {
         match self {
             Inst::Nop(_) => {}
             Inst::Mov(mov) => {
-                push_if_reg!(RegMemImm, mov.src, collector);
+                push_if_reg!(RegMemImm, mov.src, mov.width, collector);
             }
             Inst::Movzx(movzx) => {
-                push_if_reg!(RegMemImm, movzx.src, collector);
+                push_if_reg!(RegMemImm, movzx.src, movzx.widths.src_width(), collector);
             }
             Inst::Movsx(movsx) => {
-                push_if_reg!(RegMemImm, movsx.src, collector);
+                push_if_reg!(RegMemImm, movsx.src, movsx.widths.src_width(), collector);
             }
             Inst::MovStore(mov) => {
-                push_if_reg!(RegImm, mov.src, collector);
+                push_if_reg!(RegImm, mov.src, mov.width, collector);
                 push_if_reg!(IndirectAddress, mov.dest, collector);
             }
             Inst::Lea(lea) => {
                 push_if_reg!(IndirectAddress, lea.src, collector);
             }
             Inst::ALU(alu) => {
-                push_if_reg!(RegMemImm, alu.rhs, collector);
-                collector.push(alu.lhs.to_reg());
+                push_if_reg!(RegMemImm, alu.rhs, alu.width, collector);
+                collector.push(into_pair(alu.lhs.to_reg(), alu.width));
             }
             Inst::Not(not) => {
-                collector.push(not.reg.to_reg());
+                collector.push(into_pair(not.reg.to_reg(), not.width));
             }
             Inst::Neg(neg) => {
-                collector.push(neg.reg.to_reg());
+                collector.push(into_pair(neg.reg.to_reg(), neg.width));
             }
             Inst::IMul(mul) => {
-                push_if_reg!(RegMemImm, mul.rhs, collector);
-                collector.push(mul.lhs.to_reg());
+                push_if_reg!(RegMemImm, mul.rhs, mul.width, collector);
+                collector.push(into_pair(mul.lhs.to_reg(), mul.width));
             }
             Inst::Cmp(cmp) => {
-                push_if_reg!(RegMemImm, cmp.rhs, collector);
-                collector.push(cmp.lhs);
+                push_if_reg!(RegMemImm, cmp.rhs, cmp.width, collector);
+                collector.push(into_pair(cmp.lhs, cmp.width));
             }
             Inst::Test(test) => {
-                push_if_reg!(RegMemImm, test.rhs, collector);
-                collector.push(test.lhs);
+                push_if_reg!(RegMemImm, test.rhs, test.width, collector);
+                collector.push(into_pair(test.lhs, test.width));
             }
             Inst::Set(_) => {}
             Inst::Push(push) => {
-                collector.push(push.value);
+                collector.push(into_pair(push.value, push.width));
             }
             Inst::Pop(_) => {}
             Inst::Movabs(_) => {}
             Inst::Cwd(cwd) => {
-                collector.push(Cwd::SRC);
+                collector.push(into_pair(Cwd::SRC, Width::Word));
             }
             Inst::Cdq(cdq) => {
-                collector.push(Cdq::SRC);
+                collector.push(into_pair(Cdq::SRC, Width::Dword));
             }
             Inst::Cqo(cqo) => {
-                collector.push(Cqo::SRC);
+                collector.push(into_pair(Cqo::SRC, Width::Qword));
             }
             Inst::Div(div) => {
-                push_if_reg!(RegMem, div.divisor, collector);
-                collector.push(Div::DIVIDEND_LO);
-                collector.push(Div::DIVIDEND_HI);
+                push_if_reg!(RegMem, div.divisor, div.width, collector);
+                collector.push(into_pair(Div::DIVIDEND_LO, div.width));
+                collector.push(into_pair(Div::DIVIDEND_HI, div.width));
             }
             Inst::IDiv(idiv) => {
-                push_if_reg!(RegMem, idiv.divisor, collector);
-                collector.push(IDiv::DIVIDEND_LO);
-                collector.push(IDiv::DIVIDEND_HI);
+                push_if_reg!(RegMem, idiv.divisor, idiv.width, collector);
+                collector.push(into_pair(IDiv::DIVIDEND_LO, idiv.width));
+                collector.push(into_pair(IDiv::DIVIDEND_HI, idiv.width));
             }
             Inst::Call(call) => {
-                todo!()
+                for &reg in frame.call_use_defs(*self).0 {
+                    // we can't assume width, and they're extended to 8 anyway
+                    collector.push(into_pair(reg, Width::Qword));
+                }
             }
             Inst::IndirectCall(call) => {
-                push_if_reg!(RegMemImm, call.func, collector);
+                push_if_reg!(RegMemImm, call.func, Width::Qword, collector);
+
+                for &reg in frame.call_use_defs(*self).0 {
+                    // we can't assume width, and they're extended to 8 anyway
+                    collector.push(into_pair(reg, Width::Qword));
+                }
             }
             Inst::Jump(_) => {}
             Inst::Ret(_) => {}
@@ -889,63 +970,69 @@ impl MachInst for Inst {
         match self {
             Inst::Nop(_) => {}
             Inst::Mov(mov) => {
-                collector.push(mov.dest.to_reg());
+                collector.push(into_pair(mov.dest.to_reg(), mov.width));
             }
             Inst::Movzx(movzx) => {
-                collector.push(movzx.dest.to_reg());
+                collector.push(into_pair(movzx.dest.to_reg(), movzx.widths.dest_width()));
             }
             Inst::Movsx(movsx) => {
-                collector.push(movsx.dest.to_reg());
+                collector.push(into_pair(movsx.dest.to_reg(), movsx.widths.dest_width()));
             }
             Inst::MovStore(_) => {}
             Inst::Lea(lea) => {
-                collector.push(lea.dest.to_reg());
+                collector.push(into_pair(lea.dest.to_reg(), Width::Qword));
             }
             Inst::ALU(alu) => {
-                collector.push(alu.lhs.to_reg());
+                collector.push(into_pair(alu.lhs.to_reg(), alu.width));
             }
             Inst::Not(not) => {
-                collector.push(not.reg.to_reg());
+                collector.push(into_pair(not.reg.to_reg(), not.width));
             }
             Inst::Neg(neg) => {
-                collector.push(neg.reg.to_reg());
+                collector.push(into_pair(neg.reg.to_reg(), neg.width));
             }
             Inst::IMul(mul) => {
-                collector.push(mul.lhs.to_reg());
+                collector.push(into_pair(mul.lhs.to_reg(), mul.width));
             }
             Inst::Cmp(_) => {}
             Inst::Test(_) => {}
             Inst::Set(set) => {
-                collector.push(set.dest.to_reg());
+                collector.push(into_pair(set.dest.to_reg(), Width::Byte));
             }
             Inst::Push(_) => {}
             Inst::Pop(pop) => {
-                collector.push(pop.dest.to_reg());
+                collector.push(into_pair(pop.dest.to_reg(), pop.width));
             }
             Inst::Movabs(movabs) => {
-                collector.push(movabs.dest.to_reg());
+                collector.push(into_pair(movabs.dest.to_reg(), Width::Qword));
             }
             Inst::Cwd(cwd) => {
-                collector.push(Cwd::DEST);
+                collector.push(into_pair(Cwd::DEST, Width::Word));
             }
             Inst::Cdq(cdq) => {
-                collector.push(Cdq::DEST);
+                collector.push(into_pair(Cdq::DEST, Width::Dword));
             }
             Inst::Cqo(cqo) => {
-                collector.push(Cqo::DEST);
+                collector.push(into_pair(Cqo::DEST, Width::Qword));
             }
             Inst::Div(div) => {
-                collector.push(Div::QUOTIENT);
-                collector.push(Div::REMAINDER);
+                collector.push(into_pair(Div::QUOTIENT, div.width));
+                collector.push(into_pair(Div::REMAINDER, div.width));
             }
             Inst::IDiv(idiv) => {
-                collector.push(IDiv::QUOTIENT);
-                collector.push(IDiv::REMAINDER);
+                collector.push(into_pair(IDiv::QUOTIENT, idiv.width));
+                collector.push(into_pair(IDiv::REMAINDER, idiv.width));
             }
             Inst::Call(call) => {
-                todo!()
+                for &reg in frame.call_use_defs(*self).1 {
+                    collector.push(into_pair(reg, Width::Qword));
+                }
             }
-            Inst::IndirectCall(_) => {}
+            Inst::IndirectCall(_) => {
+                for &reg in frame.call_use_defs(*self).1 {
+                    collector.push(into_pair(reg, Width::Qword));
+                }
+            }
             Inst::Jump(_) => {}
             Inst::Ret(_) => {}
             Inst::Ud2(_) => {}
@@ -973,12 +1060,220 @@ impl MachInst for Inst {
         }
     }
 
+    fn is_ret(&self) -> bool {
+        matches!(self, Self::Ret(_))
+    }
+
     fn mov(width: usize, src: Reg, dest: WriteableReg) -> Self {
         Self::Mov(Mov {
             width: Width::from_bytes(width),
             src: RegMemImm::Reg(src),
             dest,
         })
+    }
+
+    fn load(width: usize, from: VariableLocation, to: PReg) -> Self {
+        Self::Mov(Mov {
+            width: Width::from_bytes(width),
+            dest: WriteableReg::from_reg(Reg::from_preg(to)),
+            src: match from {
+                VariableLocation::InReg(r) => RegMemImm::Reg(r),
+                VariableLocation::RelativeToSP(offset) => RegMemImm::Mem(
+                    IndirectAddress::RegOffset(Reg::from_preg(X86_64::RSP), offset),
+                ),
+                VariableLocation::RelativeToFP(offset) => RegMemImm::Mem(
+                    IndirectAddress::RegOffset(Reg::from_preg(X86_64::RBP), offset),
+                ),
+            },
+        })
+    }
+
+    fn store(width: usize, from: PReg, to: VariableLocation) -> Self {
+        Self::MovStore(MovStore {
+            width: Width::from_bytes(width),
+            src: RegImm::Reg(Reg::from_preg(from)),
+            dest: match to {
+                VariableLocation::InReg(r) => unreachable!(),
+                VariableLocation::RelativeToSP(offset) => {
+                    IndirectAddress::RegOffset(Reg::from_preg(X86_64::RSP), offset)
+                }
+                VariableLocation::RelativeToFP(offset) => {
+                    IndirectAddress::RegOffset(Reg::from_preg(X86_64::RBP), offset)
+                }
+            },
+        })
+    }
+
+    fn rewrite(self, rewrites: &[(Reg, PReg)]) -> Self {
+        match self {
+            Inst::Nop(_) => self,
+            Inst::Mov(mov) => {
+                let src = rewrite_for!(rmi, mov.src, rewrites);
+                let dest = WriteableReg::from_reg(rewrite_for!(mov.dest.to_reg(), rewrites));
+
+                Inst::Mov(Mov {
+                    src,
+                    dest,
+                    width: mov.width,
+                })
+            }
+            Inst::Movzx(movzx) => {
+                let src = rewrite_for!(rmi, movzx.src, rewrites);
+                let dest = WriteableReg::from_reg(rewrite_for!(movzx.dest.to_reg(), rewrites));
+
+                Inst::Movzx(Movzx {
+                    src,
+                    dest,
+                    widths: movzx.widths,
+                })
+            }
+            Inst::Movsx(movsx) => {
+                let src = rewrite_for!(rmi, movsx.src, rewrites);
+                let dest = WriteableReg::from_reg(rewrite_for!(movsx.dest.to_reg(), rewrites));
+
+                Inst::Movsx(Movsx {
+                    src,
+                    dest,
+                    widths: movsx.widths,
+                })
+            }
+            Inst::MovStore(mov) => {
+                let src = rewrite_for!(ri, mov.src, rewrites);
+                let dest = rewrite_for!(mem, mov.dest, rewrites);
+
+                Inst::MovStore(MovStore {
+                    src,
+                    dest,
+                    width: mov.width,
+                })
+            }
+            Inst::Movabs(movabs) => {
+                let dest = rewrite_for!(movabs.dest.to_reg(), rewrites);
+
+                Inst::Movabs(Movabs {
+                    value: movabs.value,
+                    dest: WriteableReg::from_reg(dest),
+                })
+            }
+            Inst::Lea(lea) => {
+                let src = rewrite_for!(mem, lea.src, rewrites);
+                let dest = rewrite_for!(lea.dest.to_reg(), rewrites);
+
+                Inst::Lea(Lea {
+                    src,
+                    dest: WriteableReg::from_reg(dest),
+                })
+            }
+            Inst::ALU(alu) => {
+                let lhs = rewrite_for!(alu.lhs.to_reg(), rewrites);
+                let rhs = rewrite_for!(rmi, alu.rhs, rewrites);
+
+                Inst::ALU(ALU {
+                    opc: alu.opc,
+                    width: alu.width,
+                    lhs: WriteableReg::from_reg(lhs),
+                    rhs,
+                })
+            }
+            Inst::Not(not) => {
+                let reg = rewrite_for!(not.reg.to_reg(), rewrites);
+
+                Inst::Not(Not {
+                    width: not.width,
+                    reg: WriteableReg::from_reg(reg),
+                })
+            }
+            Inst::Neg(neg) => {
+                let reg = rewrite_for!(neg.reg.to_reg(), rewrites);
+
+                Inst::Neg(Neg {
+                    width: neg.width,
+                    reg: WriteableReg::from_reg(reg),
+                })
+            }
+            Inst::IMul(imul) => {
+                let lhs = rewrite_for!(imul.lhs.to_reg(), rewrites);
+                let rhs = rewrite_for!(rmi, imul.rhs, rewrites);
+
+                Inst::IMul(IMul {
+                    width: imul.width,
+                    lhs: WriteableReg::from_reg(lhs),
+                    rhs,
+                })
+            }
+            Inst::Cwd(_) => self,
+            Inst::Cdq(_) => self,
+            Inst::Cqo(_) => self,
+            Inst::Div(div) => {
+                let divisor = rewrite_for!(rm, div.divisor, rewrites);
+
+                Inst::Div(Div {
+                    width: div.width,
+                    divisor,
+                })
+            }
+            Inst::IDiv(idiv) => {
+                let divisor = rewrite_for!(rm, idiv.divisor, rewrites);
+
+                Inst::IDiv(IDiv {
+                    width: idiv.width,
+                    divisor,
+                })
+            }
+            Inst::Cmp(cmp) => {
+                let lhs = rewrite_for!(cmp.lhs, rewrites);
+                let rhs = rewrite_for!(rmi, cmp.rhs, rewrites);
+
+                Inst::Cmp(Cmp {
+                    width: cmp.width,
+                    lhs,
+                    rhs,
+                })
+            }
+            Inst::Test(test) => {
+                let lhs = rewrite_for!(test.lhs, rewrites);
+                let rhs = rewrite_for!(rmi, test.rhs, rewrites);
+
+                Inst::Test(Test {
+                    width: test.width,
+                    lhs,
+                    rhs,
+                })
+            }
+            Inst::Set(set) => {
+                let dest = rewrite_for!(set.dest.to_reg(), rewrites);
+
+                Inst::Set(Set {
+                    condition: set.condition,
+                    dest: WriteableReg::from_reg(dest),
+                })
+            }
+            Inst::Push(push) => {
+                let reg = rewrite_for!(push.value, rewrites);
+
+                Inst::Push(Push {
+                    width: push.width,
+                    value: reg,
+                })
+            }
+            Inst::Pop(pop) => {
+                let reg = rewrite_for!(pop.dest.to_reg(), rewrites);
+
+                Inst::Pop(Pop {
+                    width: pop.width,
+                    dest: WriteableReg::from_reg(reg),
+                })
+            }
+            Inst::Jump(_) => self,
+            Inst::Call(_) => self,
+            Inst::IndirectCall(indirectcall) => {
+                let func = rewrite_for!(rmi, indirectcall.func, rewrites);
+
+                Inst::IndirectCall(IndirectCall { func })
+            }
+            Inst::Ret(_) => self,
+            Inst::Ud2(_) => self,
+        }
     }
 }
 

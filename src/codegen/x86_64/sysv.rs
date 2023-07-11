@@ -9,10 +9,13 @@
 //======---------------------------------------------------------------======//
 
 use crate::arena::SecondaryMap;
-use crate::codegen::x86_64::{greedy_isel, IndirectAddress, Inst, Lea, RegMemImm, Ret, X86_64};
+use crate::codegen::x86_64::{
+    greedy_isel, ALUOpcode, IndirectAddress, Inst, Lea, Mov, Pop, Push, RegMemImm, Ret, Width, ALU,
+    X86_64,
+};
 use crate::codegen::{
-    CallingConv, CodegenOptions, Ctx, FramelessCtx, LoweringContext, PReg, Reg, StackFrame,
-    TypeLayout, VariableLocation, WriteableReg,
+    AvailableRegisters, CallingConv, CodegenOptions, Ctx, FramelessCtx, LoweringContext, PReg, Reg,
+    StackFrame, Target, TypeLayout, VariableLocation, WriteableReg,
 };
 use crate::ir;
 use crate::ir::{Cursor, FuncView, Function, FunctionMetadata, Signature, StackSlot, UType, Value};
@@ -129,19 +132,20 @@ pub struct SystemVStackFrame {
     is_leaf: bool,
     stack_size: usize,
     additional: usize,
+    options: CodegenOptions,
     slot_distance_from_rbp: SecondaryMap<StackSlot, usize>,
+    preserved_regs_used: SmallVec<[PReg; 8]>,
     signature_abi: SignatureABI,
 }
 
 impl SystemVStackFrame {
     #[inline]
-    fn will_omit_fp(&self, ctx: &LoweringContext<'_, '_, X86_64>) -> bool {
-        self.able_to_omit && ctx.options.omit_frame_pointer
+    fn will_omit_fp(&self) -> bool {
+        self.able_to_omit && self.options.omit_frame_pointer
     }
 
     #[inline]
-    fn align_stack_for(&mut self, layout: TypeLayout) {
-        let align = layout.align() as usize;
+    fn align_stack_for(&mut self, align: usize) {
         debug_assert!(align.is_power_of_two());
 
         // if we haven't allocated anything then stack isn't properly aligned,
@@ -155,7 +159,7 @@ impl SystemVStackFrame {
 
             // almost every type only has <= 16-byte alignment here, once we've added
             // to get us back to 16 byte alignment we're good to go
-            if layout.align() <= 16 {
+            if align <= 16 {
                 return;
             }
         }
@@ -170,7 +174,7 @@ impl SystemVStackFrame {
         offset: i32,
         ctx: &mut LoweringContext<'_, '_, X86_64>,
     ) -> IndirectAddress {
-        if self.will_omit_fp(ctx) {
+        if self.will_omit_fp() {
             // if we omit the frame pointer, offsets are reduced by 8 because they no longer include the pushed `%rbp`.
             // we also need to include the stack size since `RSP` has been mutated
             let including_stack_size = offset + (self.stack_size as i32);
@@ -180,59 +184,10 @@ impl SystemVStackFrame {
             IndirectAddress::RegOffset(Reg::from_preg(X86_64::RBP), offset)
         }
     }
-}
 
-impl SystemVStackFrame {
-    pub(in crate::codegen::x86_64) fn new(
-        sig: &Signature,
-        function_params: &[Value],
-        metadata: FunctionMetadata,
-    ) -> Self {
-        Self {
-            able_to_omit: !metadata.has_alloca,
-            is_leaf: metadata.is_leaf,
-            stack_size: 0,
-            additional: 0,
-            slot_distance_from_rbp: SecondaryMap::default(),
-            signature_abi: SignatureABI::classify(sig, function_params),
-        }
-    }
-}
-
-impl StackFrame<X86_64> for SystemVStackFrame {
-    fn compute_stack_layout(&mut self, func: &Function, ctx: &mut LoweringContext<'_, '_, X86_64>) {
-        let view = FuncView::over(func);
-
-        for slot in view.dfg().stack_slots() {
-            let data = view.dfg().stack_slot(slot);
-            let layout = ctx.target.layout_of(data.ty());
-            let sz = layout.size() as usize;
-
-            self.align_stack_for(layout);
-
-            // we add `layout.size()` because we're getting the address of the FIRST
-            // byte, and the stack grows downwards.
-            //
-            // ex: 8 byte object, 0 byte stack so far.
-            //     we want to start at `[rbp - 8]` not `[rbp]`, because the latter
-            //     would load the return address
-            //
-            self.stack_size += sz;
-            self.slot_distance_from_rbp.insert(slot, self.stack_size);
-        }
-
-        // keep stack aligned to 8-byte boundaries at all times
-        self.stack_size += self.stack_size % 8;
-    }
-
-    fn stack_slot(
-        &mut self,
-        stack: StackSlot,
-        (def, ctx): FramelessCtx<'_, '_, '_, X86_64>,
-    ) -> VariableLocation {
-        let distance = self.slot_distance_from_rbp[stack];
-
-        if self.will_omit_fp(ctx) {
+    #[inline]
+    fn distance_from_bp_into_location(&self, distance: usize) -> VariableLocation {
+        if self.will_omit_fp() {
             // if relative to rsp we need to add since the stack grows upwards
             VariableLocation::RelativeToSP(
                 i32::try_from(self.stack_size - distance).expect("stack offset exceeds i32 limit"),
@@ -243,6 +198,74 @@ impl StackFrame<X86_64> for SystemVStackFrame {
                 -i32::try_from(distance).expect("stack offset exceeds i32 limit"),
             )
         }
+    }
+}
+
+macro_rules! manipulate_rsp {
+    ($self:expr, $out:expr, $opc:expr) => {{
+        $out.push(Inst::ALU(ALU {
+            opc: $opc,
+            width: Width::Qword,
+            lhs: WriteableReg::from_reg(Reg::from_preg(X86_64::RSP)),
+            rhs: RegMemImm::Imm($self.stack_size as i32),
+        }));
+    }};
+}
+
+impl SystemVStackFrame {
+    pub(in crate::codegen::x86_64) fn new(func: &Function, target: &Target<X86_64>) -> Self {
+        let metadata = func.compute_metadata().unwrap();
+        let view = FuncView::over(func);
+        let function_params = view.block_params(view.entry_block().unwrap());
+        let sig = func.signature();
+
+        let mut obj = Self {
+            able_to_omit: !metadata.has_alloca,
+            is_leaf: metadata.is_leaf,
+            stack_size: 0,
+            additional: 0,
+            options: target.options(),
+            slot_distance_from_rbp: SecondaryMap::default(),
+            preserved_regs_used: SmallVec::default(),
+            signature_abi: SignatureABI::classify(sig, function_params),
+        };
+
+        let view = FuncView::over(func);
+
+        for slot in view.dfg().stack_slots() {
+            let data = view.dfg().stack_slot(slot);
+            let layout = target.layout_of(data.ty());
+            let sz = layout.size() as usize;
+
+            obj.align_stack_for(layout.align() as usize);
+
+            // we add `layout.size()` because we're getting the address of the FIRST
+            // byte, and the stack grows downwards.
+            //
+            // ex: 8 byte object, 0 byte stack so far.
+            //     we want to start at `[rbp - 8]` not `[rbp]`, because the latter
+            //     would load the return address
+            //
+            obj.stack_size += sz;
+            obj.slot_distance_from_rbp.insert(slot, obj.stack_size);
+        }
+
+        // keep stack aligned to 8-byte boundaries at all times
+        obj.stack_size += obj.stack_size % 8;
+
+        obj
+    }
+}
+
+impl StackFrame<X86_64> for SystemVStackFrame {
+    fn stack_slot(
+        &mut self,
+        stack: StackSlot,
+        (def, ctx): FramelessCtx<'_, '_, '_, X86_64>,
+    ) -> VariableLocation {
+        let distance = self.slot_distance_from_rbp[stack];
+
+        self.distance_from_bp_into_location(distance)
     }
 
     fn lower_parameter(
@@ -300,16 +323,122 @@ impl StackFrame<X86_64> for SystemVStackFrame {
         ctx.emit(Inst::Ret(Ret {}));
     }
 
-    fn spill(&mut self, reg: Reg, options: CodegenOptions) -> VariableLocation {
+    fn spill_slot(&mut self, bytes: usize) -> VariableLocation {
+        self.align_stack_for(bytes);
+        self.stack_size += bytes;
+
+        // we give the register allocator spill locations near the bottom of the stack
+        // if we omit the frame pointer, this way we make it so that the old stack offsets
+        // are actually still valid.
+        self.distance_from_bp_into_location(self.stack_size)
+    }
+
+    fn preserved_reg_used(&mut self, reg: PReg) {
+        if !self.preserved_regs_used.contains(&reg) {
+            self.preserved_regs_used.push(reg);
+        }
+    }
+
+    fn register_use_def_call(&mut self, call: Inst, uses: &[Reg], defs: &[Reg]) {
         todo!()
     }
 
-    fn generate_prologue(&self, out: &mut Vec<Inst>, options: CodegenOptions) {
+    fn call_use_defs(&self, call: Inst) -> (&[Reg], &[Reg]) {
         todo!()
     }
 
-    fn generate_epilogue(&self, out: &mut Vec<Inst>, options: CodegenOptions) {
-        todo!()
+    fn generate_prologue(&self, out: &mut Vec<Inst>) {
+        // push any preserved registers if needed
+        for &reg in self.preserved_regs_used.iter() {
+            out.push(Inst::Push(Push {
+                value: Reg::from_preg(reg),
+                width: Width::Qword,
+            }));
+        }
+
+        if !self.will_omit_fp() {
+            // push rbp
+            out.push(Inst::Push(Push {
+                value: Reg::from_preg(X86_64::RBP),
+                width: Width::Qword,
+            }));
+
+            // mov rbp, rsp
+            out.push(Inst::Mov(Mov {
+                src: RegMemImm::Reg(Reg::from_preg(X86_64::RSP)),
+                dest: WriteableReg::from_reg(Reg::from_preg(X86_64::RBP)),
+                width: Width::Qword,
+            }));
+        }
+
+        // sub rsp, stack_size
+        manipulate_rsp!(self, out, ALUOpcode::Sub);
+    }
+
+    fn generate_epilogue(&self, out: &mut Vec<Inst>) {
+        // add rsp, stack_size
+        manipulate_rsp!(self, out, ALUOpcode::Add);
+
+        if !self.will_omit_fp() {
+            // pop rbp
+            out.push(Inst::Pop(Pop {
+                dest: WriteableReg::from_reg(Reg::from_preg(X86_64::RBP)),
+                width: Width::Qword,
+            }));
+        }
+
+        // pop any preserved registers if needed
+        for &reg in self.preserved_regs_used.iter().rev() {
+            out.push(Inst::Pop(Pop {
+                dest: WriteableReg::from_reg(Reg::from_preg(reg)),
+                width: Width::Qword,
+            }));
+        }
+    }
+
+    fn register_priority(&self) -> AvailableRegisters {
+        use crate::codegen::x86_64::X86_64;
+
+        // rbp isn't available to allocate at all unless we're omitting the frame pointer
+        let callee_preserved: &'static [PReg] = if self.will_omit_fp() {
+            const CALLEE_PRESERVED_OMIT_FP: [PReg; 6] = [
+                X86_64::RBP,
+                X86_64::RBX,
+                X86_64::R12,
+                X86_64::R13,
+                X86_64::R14,
+                X86_64::R15,
+            ];
+
+            &CALLEE_PRESERVED_OMIT_FP
+        } else {
+            const CALLEE_PRESERVED_WITH_FP: [PReg; 5] = [
+                X86_64::RBX,
+                X86_64::R12,
+                X86_64::R13,
+                X86_64::R14,
+                X86_64::R15,
+            ];
+
+            &CALLEE_PRESERVED_WITH_FP
+        };
+
+        const CALLER_PRESERVED: [PReg; 9] = [
+            X86_64::RAX,
+            X86_64::RCX,
+            X86_64::RDX,
+            X86_64::RDI,
+            X86_64::RSI,
+            X86_64::R8,
+            X86_64::R9,
+            X86_64::R10,
+            X86_64::R11,
+        ];
+
+        AvailableRegisters {
+            preserved: callee_preserved,
+            clobbered: &CALLER_PRESERVED,
+        }
     }
 }
 

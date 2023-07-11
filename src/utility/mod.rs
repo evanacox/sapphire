@@ -19,6 +19,7 @@ mod iter;
 mod packed_option;
 mod spinlock;
 mod string_pool;
+mod thread_pool;
 mod tiny;
 mod trees;
 
@@ -27,5 +28,6 @@ pub use iter::*;
 pub use packed_option::{Packable, PackedOption};
 pub use spinlock::*;
 pub use string_pool::*;
+pub use thread_pool::*;
 pub use tiny::*;
 pub use trees::*;

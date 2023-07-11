@@ -732,13 +732,13 @@ mod tests {
         b.append().ret_val(v3, DebugInfo::fake());
         let main = b.define();
 
-        let mut target = PresetTargets::linux_x86_64();
+        let options = CodegenOptions::default();
+        let mut target = PresetTargets::linux_x86_64(options);
 
         let function = module.function(main);
         let def = function.definition().unwrap();
         let v2inst = def.dfg.value_to_inst(v2).unwrap();
         let v3inst = def.dfg.value_to_inst(v3).unwrap();
-        let options = CodegenOptions::default();
 
         // two-step base
         {
@@ -817,14 +817,14 @@ mod tests {
         b.append().ret_val(v3, DebugInfo::fake());
         let main = b.define();
 
-        let mut target = PresetTargets::linux_x86_64();
+        let options = CodegenOptions::default();
+        let mut target = PresetTargets::linux_x86_64(options);
 
         let function = module.function(main);
         let def = function.definition().unwrap();
         let v2inst = def.dfg.value_to_inst(v2).unwrap();
         let v3inst = def.dfg.value_to_inst(v3).unwrap();
 
-        let options = CodegenOptions::default();
         let mut ctx = LoweringContext::new_for(&mut target, &module, options);
         ctx.prepare_for_func(function);
 
@@ -885,11 +885,11 @@ mod tests {
         b.append().ret_void(DebugInfo::fake());
         let main = b.define();
 
-        let mut target = PresetTargets::linux_x86_64();
+        let options = CodegenOptions::default();
+        let mut target = PresetTargets::linux_x86_64(options);
 
         let function = module.function(main);
         let def = function.definition().unwrap();
-        let options = CodegenOptions::default();
 
         for val in [v0_yes, v1_yes, v2_yes, v3_yes, v4_yes] {
             let mut ctx = LoweringContext::new_for(&mut target, &module, options);
@@ -949,11 +949,11 @@ mod tests {
         b.append().ret_void(DebugInfo::fake());
         let main = b.define();
 
-        let mut target = PresetTargets::linux_x86_64();
+        let options = CodegenOptions::default();
+        let mut target = PresetTargets::linux_x86_64(options);
 
         let function = module.function(main);
         let def = function.definition().unwrap();
-        let options = CodegenOptions::default();
 
         for val in [v0, v1, v2, v3, v4] {
             let mut ctx = LoweringContext::new_for(&mut target, &module, options);
@@ -1030,11 +1030,11 @@ mod tests {
         b.append().ret_void(DebugInfo::fake());
         let main = b.define();
 
-        let mut target = PresetTargets::linux_x86_64();
+        let options = CodegenOptions::default();
+        let mut target = PresetTargets::linux_x86_64(options);
 
         let function = module.function(main);
         let def = function.definition().unwrap();
-        let options = CodegenOptions::default();
 
         for val in [v0, v1, v2, v3] {
             let mut ctx = LoweringContext::new_for(&mut target, &module, options);

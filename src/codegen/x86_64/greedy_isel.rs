@@ -387,6 +387,18 @@ impl<'module, 'target> InstructionSelector<'module, 'target, X86_64> for GreedyI
         }
     }
 
+    fn frame_for_func(
+        func: &'module Function,
+        target: &Target<X86_64>,
+    ) -> Box<dyn StackFrame<X86_64>> {
+        // system-v is identical on linux vs macOS
+        match func.signature().calling_conv() {
+            CallConv::C => target.new_frame(func),
+            CallConv::SysV => LinuxX86_64.default_stack_frame(func, target),
+            CallConv::Win64 => WindowsX86_64.default_stack_frame(func, target),
+        }
+    }
+
     fn lower(
         &mut self,
         inst: ir::Inst,

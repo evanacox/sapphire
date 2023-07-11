@@ -49,6 +49,7 @@ pub trait ABI<Arch: Architecture>: Sized {
 /// The location of a single "variable." This denotes something at the ABI level,
 /// e.g. `stackslot`s, parameters and the like. This identifies where they are
 /// in a way that the code generator can understand.
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub enum VariableLocation {
     /// Says that a variable is located in a register
     InReg(Reg),

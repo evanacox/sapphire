@@ -8,11 +8,6 @@
 //                                                                           //
 //======---------------------------------------------------------------======//
 
-mod driver;
-mod options;
+use std::thread::Thread;
 
-use crate::options::parse_options;
-
-fn main() {
-    let options = parse_options();
-}
+pub struct ThreadPool {}

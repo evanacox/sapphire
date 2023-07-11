@@ -9,7 +9,8 @@
 //======---------------------------------------------------------------======//
 
 use crate::arena::SecondaryMap;
-use crate::codegen::{MIRBlock, MIRFunction, MachInst, Reg};
+use crate::codegen::regalloc::allocator::{defs, uses};
+use crate::codegen::{MIRBlock, MIRFunction, MachInst, Reg, StackFrame};
 use smallvec::SmallVec;
 
 /// Models the live range information necessary for the register allocators.
@@ -61,14 +62,27 @@ pub struct LiveIntervals {
 
 impl LiveIntervals {
     /// Computes a conservative set of live intervals for each v-reg (and p-reg).
-    pub fn compute<Inst: MachInst>(mir: &MIRFunction<Inst>) -> Self {
-        let intervals = SecondaryMap::default();
+    pub fn compute<Inst: MachInst>(
+        mir: &MIRFunction<Inst>,
+        frame: &dyn StackFrame<Inst::Arch>,
+    ) -> Self {
+        // let mut intervals = SecondaryMap::default();
 
         for (i, &inst) in mir.all_instructions().iter().enumerate() {
-            //
+            let uses = uses!(inst, frame);
+            let defs = defs!(inst, frame);
+
+            /*for reg in uses {
+                // if we already have an interval, extend it to this instruction.
+                // if we don't already have an interval, we don't screw with it
+                // since it's either an undef thing or some ABI constraint
+                if let Some(interval) = intervals.get_mut(reg) {
+                    *interval = LiveInterval((interval.first_defined_after(), i as u32));
+                }
+            }*/
         }
 
-        Self { intervals }
+        todo!()
     }
 
     /// Gets the live intervals for each register. These are not sorted in any way,

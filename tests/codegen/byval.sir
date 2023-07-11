@@ -1,0 +1,5 @@
+; STANDARD
+fn noalias nonnull ptr @malloc(byval(16) nonnull ptr) {
+entry(ptr %0):
+    ret ptr %0
+}

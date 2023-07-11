@@ -1,0 +1,8 @@
+; STANDARD
+fn i32 @funny(i32, i32) {
+entry(i32 %0, i32 %1):
+  %2 = iconst i32 5
+  %3 = iadd i32 %0, %1
+  %4 = imul i32 %3, %2
+  ret i32 %4
+}

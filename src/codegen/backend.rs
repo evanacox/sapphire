@@ -9,7 +9,9 @@
 //======---------------------------------------------------------------======//
 
 use crate::codegen::x86_64::{GreedyISel, X86_64};
-use crate::codegen::{x86_64, CodegenOptions, GenericISel, Target};
+use crate::codegen::{
+    x86_64, CodegenOptions, GenericISel, RegisterAllocator, Rewriter, StackRegAlloc, Target,
+};
 use crate::codegen::{Architecture, Emitter, MIRModule};
 use crate::ir::Module;
 use crate::pass::*;
@@ -33,6 +35,14 @@ where
     Arch: Architecture,
     Emit: Emitter<Arch>,
 {
+    /// Creates a [`Backend`] from a MIR module.
+    pub fn from_mir(mir: MIRModule<Arch::Inst>) -> Self {
+        Backend {
+            mir,
+            _unused: PhantomData::default(),
+        }
+    }
+
     /// Emits assembly in a format specified by the emitter, returning
     /// a string that can be written to a file
     pub fn assembly(&self, format: Emit::AssemblyFormat) -> String {
@@ -102,8 +112,18 @@ impl PresetBackends {
         mpm.add_pass(FunctionToModulePassAdapter::adapt(fpm));
         mpm.run(&mut module, &mut mam);
 
+        let mut mir = GenericISel::<X86_64, GreedyISel>::lower(&mut target, &module, options);
+
+        for (func, frame) in mir.functions_mut() {
+            let mut alloc = StackRegAlloc::default();
+            let allocation = alloc.allocate(func, frame.as_mut());
+            let rewriter = Rewriter::with_allocation(allocation);
+
+            rewriter.rewrite(func, frame.as_ref());
+        }
+
         Backend {
-            mir: GenericISel::<X86_64, GreedyISel>::lower(&mut target, &module, options),
+            mir,
             _unused: PhantomData::default(),
         }
     }

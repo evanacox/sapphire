@@ -10,8 +10,8 @@
 
 use crate::codegen::x86_64::{Inst, X86_64};
 use crate::codegen::{
-    CallingConv, CodegenOptions, Ctx, FramelessCtx, LoweringContext, Reg, StackFrame,
-    VariableLocation, WriteableReg,
+    AvailableRegisters, CallingConv, CodegenOptions, Ctx, FramelessCtx, LoweringContext, PReg, Reg,
+    StackFrame, VariableLocation, WriteableReg,
 };
 use crate::ir;
 use crate::ir::{Function, FunctionMetadata, Signature, StackSlot, Value};
@@ -37,10 +37,6 @@ impl WindowsX64CallingConv {
 }
 
 impl StackFrame<X86_64> for WindowsX64StackFrame {
-    fn compute_stack_layout(&mut self, func: &Function, ctx: &mut LoweringContext<'_, '_, X86_64>) {
-        todo!()
-    }
-
     fn stack_slot(
         &mut self,
         stack: StackSlot,
@@ -62,15 +58,31 @@ impl StackFrame<X86_64> for WindowsX64StackFrame {
         todo!()
     }
 
-    fn spill(&mut self, reg: Reg, options: CodegenOptions) -> VariableLocation {
+    fn spill_slot(&mut self, size: usize) -> VariableLocation {
         todo!()
     }
 
-    fn generate_prologue(&self, out: &mut Vec<Inst>, options: CodegenOptions) {
+    fn preserved_reg_used(&mut self, reg: PReg) {
         todo!()
     }
 
-    fn generate_epilogue(&self, out: &mut Vec<Inst>, options: CodegenOptions) {
+    fn register_use_def_call(&mut self, call: Inst, uses: &[Reg], defs: &[Reg]) {
+        todo!()
+    }
+
+    fn call_use_defs(&self, call: Inst) -> (&[Reg], &[Reg]) {
+        todo!()
+    }
+
+    fn generate_prologue(&self, out: &mut Vec<Inst>) {
+        todo!()
+    }
+
+    fn generate_epilogue(&self, out: &mut Vec<Inst>) {
+        todo!()
+    }
+
+    fn register_priority(&self) -> AvailableRegisters {
         todo!()
     }
 }

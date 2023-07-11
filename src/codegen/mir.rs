@@ -8,13 +8,14 @@
 //                                                                           //
 //======---------------------------------------------------------------======//
 
-use crate::arena::ArenaMap;
-use crate::codegen::{Architecture, Reg, StackFrame, WriteableReg};
+use crate::arena::{ArenaMap, SecondaryMap};
+use crate::codegen::{Architecture, PReg, Reg, StackFrame, VariableLocation, WriteableReg};
 use crate::dense_arena_key;
 use crate::ir::Type;
 use crate::utility::{Packable, Str, StringPool};
 use smallvec::SmallVec;
 use std::fmt::Debug;
+use std::hash::Hash;
 use std::ops::Range;
 
 /// An abstract representation of a `mov` between two registers
@@ -29,7 +30,10 @@ pub struct Move {
 }
 
 /// A collector that can have registers added to it.
-pub type RegCollector<const N: usize> = SmallVec<[Reg; N]>;
+///
+/// Each register has an associated size (in bytes) that are being used
+/// out of it, this is to minimize stack usage
+pub type RegCollector<const N: usize> = SmallVec<[(Reg, u32); N]>;
 
 /// Defines the API for a machine instruction.
 ///
@@ -38,7 +42,7 @@ pub type RegCollector<const N: usize> = SmallVec<[Reg; N]>;
 /// that target), but they all provide the same basic operations. This enables
 /// cross-target code sharing for things like instruction scheduling and
 /// register allocation.
-pub trait MachInst: Copy + Debug + Sized {
+pub trait MachInst: Copy + Debug + Hash + Sized {
     /// The related architecture type that defines the architecture
     /// this specific MIR type targets
     type Arch: Architecture;
@@ -76,6 +80,18 @@ pub trait MachInst: Copy + Debug + Sized {
     ///
     /// This must return an object where [`Self::is_move`] returns `true`.
     fn mov(width: usize, src: Reg, dest: WriteableReg) -> Self;
+
+    /// Creates an instruction that loads `from` into `to`.
+    fn load(width: usize, from: VariableLocation, to: PReg) -> Self;
+
+    /// Creates an instruction that stores `from` into `to`.
+    fn store(width: usize, from: PReg, to: VariableLocation) -> Self;
+
+    /// Checks if the instruction is a return instruction
+    fn is_ret(&self) -> bool;
+
+    /// Rewrites an instruction to change all `Reg` references into `PReg`s.
+    fn rewrite(self, rewrites: &[(Reg, PReg)]) -> Self;
 }
 
 dense_arena_key! {
@@ -268,5 +284,18 @@ impl<Inst: MachInst> MIRFunction<Inst> {
     #[inline]
     pub fn name(&self) -> Str {
         self.name
+    }
+
+    /// Rewrites the function with a new list of instructions (and new intervals defining the blocks).
+    pub fn rewrite_with(
+        &mut self,
+        new_insts: Vec<Inst>,
+        new_intervals: SecondaryMap<MIRBlock, MIRBlockInterval>,
+    ) {
+        for (block, interval) in new_intervals {
+            self.blocks[block] = interval;
+        }
+
+        self.insts = new_insts;
     }
 }

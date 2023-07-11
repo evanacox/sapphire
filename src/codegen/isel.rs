@@ -10,7 +10,7 @@
 
 use crate::arena::{ArenaMap, SecondaryMap, SecondarySet};
 use crate::codegen::*;
-use crate::ir::{Block, Cursor, FuncView, Function, FunctionDefinition, Module, Value};
+use crate::ir::{Block, CallConv, Cursor, FuncView, Function, FunctionDefinition, Module, Value};
 use crate::transforms::common::has_side_effect;
 use crate::utility::{Packable, Str, StringPool};
 use crate::{analysis, ir};
@@ -27,6 +27,9 @@ use std::marker::PhantomData;
 pub trait InstructionSelector<'module, 'target, Arch: Architecture>: Sized {
     /// Creates an instance of the selector with itself configured correctly.
     fn new() -> Self;
+
+    /// If `func`s calling convention is supported, returns a stack frame for that calling convention.
+    fn frame_for_func(func: &'module Function, target: &Target<Arch>) -> Box<dyn StackFrame<Arch>>;
 
     /// Lowers a single SIR instruction into [`MachInst`]s for the specified
     /// architecture.
@@ -129,8 +132,6 @@ where
         let mut block_length = SecondaryMap::<_, u32>::with_primary(blocks);
         let mut order = VecDeque::default();
 
-        frame.compute_stack_layout(func, context);
-
         // we go backwards over the instructions, codegen-ing single instructions as needed
         // to determine which instructions are folded into others and which actually need to be generated
         //
@@ -197,7 +198,7 @@ where
         func: &'module Function,
         context: &mut LoweringContext<'module, 'target, Arch>,
     ) -> (MIRFunction<Arch::Inst>, Box<dyn StackFrame<Arch>>) {
-        let mut frame = context.target.new_frame(func);
+        let mut frame = Selector::frame_for_func(func, context.target);
         let (name, mut blocks) = context.prepare_for_func(func);
         let (order, block_length) = self.perform_isel(func, frame.as_mut(), context, &blocks);
 

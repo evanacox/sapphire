@@ -34,13 +34,15 @@
 //! irrelevant.
 
 mod allocator;
-mod irc;
+mod graph;
 mod liveness;
 mod lsra;
 mod stack;
 
-pub use allocator::*;
-pub use irc::GraphColoringRegAlloc;
+pub use allocator::{
+    Allocation, ProgramPoint, ProgramPointsIterator, RegisterAllocator, SpillReload,
+};
+pub use graph::GraphColoringRegAlloc;
 pub use liveness::*;
 pub use lsra::LinearScanRegAlloc;
 pub use stack::StackRegAlloc;
