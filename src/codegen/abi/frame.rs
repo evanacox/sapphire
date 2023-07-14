@@ -8,12 +8,24 @@
 //                                                                           //
 //======---------------------------------------------------------------======//
 
-use crate::codegen::{
-    Architecture, CodegenOptions, FramelessCtx, LoweringContext, PReg, Reg, VariableLocation,
-    WriteableReg,
-};
+use crate::codegen::{Architecture, FramelessCtx, PReg, Reg, WriteableReg};
 use crate::ir;
-use crate::ir::{Function, StackSlot, Value};
+use crate::ir::{StackSlot, Value};
+
+/// The location of a single "variable." This denotes something at the ABI level,
+/// e.g. `stackslot`s, parameters and the like. This identifies where they are
+/// in a way that the code generator can understand.
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+pub enum VariableLocation {
+    /// Says that a variable is located in a register
+    InReg(Reg),
+    /// Says that a variable is located at an offset relative to the frame pointer after
+    /// the canonical prologue has executed.
+    RelativeToFP(i32),
+    /// Says that a variable is located at an offset relative to the stack pointer after
+    /// the canonical prologue has executed.
+    RelativeToSP(i32),
+}
 
 /// A representation of the specific available registers on a particular ABI.
 pub struct AvailableRegisters {

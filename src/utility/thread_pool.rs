@@ -8,6 +8,5 @@
 //                                                                           //
 //======---------------------------------------------------------------======//
 
-use std::thread::Thread;
-
+/// A simple thread pool implementation.
 pub struct ThreadPool {}

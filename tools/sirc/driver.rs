@@ -8,11 +8,12 @@
 //                                                                           //
 //======---------------------------------------------------------------======//
 
-use crate::options::Options;
+use crate::options::{Options, RegAlloc};
 use sapphire::analysis::*;
-use sapphire::codegen::x86_64::{GreedyISel, X86_64};
+use sapphire::codegen::x86_64::{GreedyISel, X86_64Assembly, X86_64};
 use sapphire::codegen::{
-    x86_64, Backend, CodegenOptions, GenericISel, PresetBackends, PresetTargets, TargetPair,
+    x86_64, Backend, GenericISel, PresetTargets, RegisterAllocator, Rewriter, StackRegAlloc,
+    TargetPair,
 };
 use sapphire::ir::Module;
 use sapphire::pass::*;
@@ -20,44 +21,36 @@ use sapphire::transforms::*;
 use std::fs;
 use std::io;
 use std::io::ErrorKind;
-use std::path::{Path, PathBuf};
 
 /// Drives compilation given a list of options
 pub fn driver(options: Options) -> io::Result<()> {
-    for input in options.base.inputs {
+    for input in options.base.inputs.iter() {
         // for now, non-utf8 path names aren't real
-        let source = fs::read_to_string(&input).expect("file did not exist");
-        let path = input.into_os_string().into_string().unwrap();
-        let real_name = input
-            .file_name()
-            .expect("file somehow doesn't have a name")
-            .into_os_string()
-            .into_string()
-            .unwrap();
+        let source = fs::read_to_string(input).expect("file did not exist");
+        let path = input.as_os_str().to_owned().into_string().unwrap();
 
-        match compile_single_file(&source, &path, &real_name, &options) {
-            Ok(_) => {}
-            Err(_) => {
-                return Err(io::Error::new(
-                    ErrorKind::InvalidInput,
-                    "failed to build file",
-                ))
-            }
+        if let Err(()) = compile_single_file(&source, &path, &options) {
+            return Err(io::Error::new(
+                ErrorKind::InvalidInput,
+                "failed to build file",
+            ));
         }
     }
 
     Ok(())
 }
 
-fn compile_single_file(source: &str, path: &str, name: &str, options: &Options) -> Result<(), ()> {
-    match sapphire::parse_sir(path_string, &source) {
+fn compile_single_file(source: &str, path: &str, options: &Options) -> Result<(), ()> {
+    match sapphire::parse_sir(path, source) {
         Ok(module) => {
             match options.target {
                 TargetPair::X86_64Linux | TargetPair::X86_64macOS | TargetPair::X86_64Windows => {
                     compile_x86_64(module, options.target, options);
                 }
                 TargetPair::Aarch64Linux | TargetPair::Arm64macOS | TargetPair::Arm64Windows => {
-                    unimplemented!()
+                    panic!(
+                        "native arm codegen is not implemented, specify `--target=x86_64-{{os}}`"
+                    )
                 }
             }
 
@@ -83,7 +76,12 @@ fn run_passes(module: &mut Module, options: &Options, extra: &[&'static str]) {
 
     let mut fpm = FunctionPassManager::new();
 
-    for pass in options.passes.iter().chain(extra.iter()) {
+    for pass in options
+        .passes
+        .iter()
+        .cloned()
+        .chain(extra.iter().map(|s| s.to_string()))
+    {
         match pass.as_str() {
             "mem2reg" => fpm.add_pass(Mem2RegPass),
             "dce" => fpm.add_pass(DeadCodeEliminationPass),
@@ -123,8 +121,34 @@ fn compile_x86_64(mut module: Module, pair: TargetPair, options: &Options) {
         _ => unreachable!(),
     };
 
-    let mir = GenericISel::<X86_64, GreedyISel>::lower(&mut target, &module, options.codegen);
+    let mut mir = GenericISel::<X86_64, GreedyISel>::lower(&mut target, &module, options.codegen);
+
+    if options.reg_alloc != RegAlloc::None {
+        for (func, frame) in mir.functions_mut() {
+            let allocation = match options.reg_alloc {
+                RegAlloc::Stack => StackRegAlloc::default().allocate(func, frame.as_mut()),
+                _ => todo!(),
+            };
+
+            Rewriter::with_allocation(allocation).rewrite(func, frame.as_mut());
+        }
+    }
+
     let backend = Backend::<X86_64, x86_64::Emit>::from_mir(mir);
 
-    println!("{}", backend.assembly(X86_64Assembly::GNUIntel));
+    let output = match options.x86_64_asm {
+        Some(asm) => asm,
+        None => match pair {
+            TargetPair::X86_64Linux => X86_64Assembly::GNU,
+            TargetPair::X86_64macOS => X86_64Assembly::GNUIntel,
+            TargetPair::X86_64Windows => X86_64Assembly::MASM,
+            _ => unreachable!(),
+        },
+    };
+
+    if options.print {
+        println!("{}", backend.assembly(output, pair));
+    } else {
+        unimplemented!()
+    }
 }

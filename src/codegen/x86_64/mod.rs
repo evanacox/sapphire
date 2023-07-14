@@ -13,7 +13,6 @@
 //! This is the main module for code specific to the generic "x86-64 backend,"
 //! with code for general x86-64 codegen and code for specific ABIs on x86-64.
 
-mod abi;
 mod emit;
 mod greedy_isel;
 mod mir;
@@ -22,9 +21,10 @@ mod sysv;
 mod target;
 mod win64;
 
-pub use abi::*;
 pub use emit::*;
 pub use greedy_isel::*;
 pub use mir::*;
 pub use platforms::*;
+pub use sysv::*;
 pub use target::*;
+pub use win64::*;

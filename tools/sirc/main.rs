@@ -11,8 +11,9 @@
 mod driver;
 mod options;
 
+use crate::driver::driver;
 use crate::options::parse_options;
 
-fn main() {
-    let options = parse_options();
+fn main() -> std::io::Result<()> {
+    driver(parse_options())
 }

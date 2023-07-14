@@ -8,15 +8,12 @@
 //                                                                           //
 //======---------------------------------------------------------------======//
 
-use bpaf;
 use bpaf::Parser;
-use sapphire::cli::{FramePointer, MachineFormat};
+use sapphire::cli::{emit_machine_format, frame_pointer, passes, FramePointer, MachineFormat};
 use sapphire::codegen::x86_64::{X86_64Assembly, X86_64ObjectFile};
 use sapphire::codegen::{CodegenOptions, TargetPair};
 use sapphire::{cli, cli::BaseOptions};
-use std::arch;
 use std::str::FromStr;
-use windows_sys::Win32::System::Threading::IsWow64Process;
 
 /// The options given by the user, both inferred and explicit.
 pub struct Options {
@@ -34,6 +31,8 @@ pub struct Options {
     pub opt: OptLevel,
     /// Whether or not to verify the IR
     pub verify: bool,
+    /// Whether to print the output to stdout
+    pub print: bool,
     /// Passes to run over the IR
     pub passes: Vec<String>,
     /// If we're targeting an x86-64 platform and emitting assembly,
@@ -49,26 +48,27 @@ pub struct Options {
 /// Some options are automatically inferred from the environment if they
 /// aren't explicit (e.g. target platform/format).
 pub fn parse_options() -> Options {
-    let ((format, passes, omit_fp, x86_asm, x86_obj, target, regalloc, opt, verify), base) =
+    let ((format, passes, omit_fp, x86_asm, x86_obj, target, regalloc, opt, verify, print), base) =
         cli::tool_with(
             "static compiler for Sapphire IR",
             "Usage: sirc [options] <input ir>",
             bpaf::construct!(
-                cli::emit_machine_format(),
-                cli::passes(),
-                cli::omit_frame_pointer(),
+                emit_machine_format(),
+                passes(),
+                frame_pointer(),
                 x86_64_asm_format(),
-                x86_64_obj_format(),
-                target(),
+                x86_64_object_format(),
+                target_pair(),
                 reg_alloc(),
                 opt_level(),
-                verify()
+                verify(),
+                print()
             ),
         )
         .run();
 
     // first: do we have a target?
-    let real_target = determine_target(target);
+    let target = determine_target(target);
     let reg_alloc = match regalloc {
         Some(r) => r,
         None => match opt {
@@ -96,6 +96,7 @@ pub fn parse_options() -> Options {
         format,
         opt,
         verify,
+        print,
         passes,
         x86_64_asm: x86_asm,
         x86_64_obj: x86_obj,
@@ -145,28 +146,32 @@ fn determine_target(target: Option<TargetPair>) -> TargetPair {
 
     #[cfg(target_family = "unix")]
     {
-        use libc;
         use std::ffi::CStr;
         use std::mem::MaybeUninit;
 
-        let uname = {
+        let (arch, os) = unsafe {
             let mut data = MaybeUninit::uninit();
-
-            unsafe {
+            let uname = {
                 assert_eq!(
                     libc::uname(data.as_mut_ptr()),
                     0,
                     "unknown host config, please use `--target=` explicitly"
                 );
 
+                // libc::uname initialized the data
                 data.assume_init()
-            }
+            };
+
+            // this is guaranteed to be populated by `libc::uname`,
+            // POSIX guarantees a null terminator
+            (
+                CStr::from_ptr(uname.machine.as_ptr()),
+                CStr::from_ptr(uname.sysname.as_ptr()),
+            )
         };
 
-        let arch = CStr::from_bytes_until_nul(&uname.machine).expect("invalid machine string");
-        let os = CStr::from_bytes_until_nul(&uname.sysname).expect("invalid os string");
-        let arch_str = arch.as_str().expect("machine string is not utf-8");
-        let os_str = arch.as_str().expect("os string is not utf-8");
+        let arch_str = arch.to_str().expect("machine string is not utf-8");
+        let os_str = os.to_str().expect("os string is not utf-8");
 
         match (arch_str, os_str) {
             ("arm64", "Darwin") => TargetPair::Arm64macOS,
@@ -181,11 +186,12 @@ fn determine_target(target: Option<TargetPair>) -> TargetPair {
 fn target_pair() -> impl Parser<Option<TargetPair>> {
     bpaf::long("target")
         .help("the target to generate code for (affects default emit format)")
-        .argument::<RegAlloc>("TARGET")
+        .argument::<TargetPair>("TARGET")
         .optional()
 }
 
 /// Which register allocator to use
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum RegAlloc {
     /// The naive stack allocator (spills every value on def and reloads on every use)
     Stack,
@@ -195,6 +201,8 @@ pub enum RegAlloc {
     /// A graph-coloring allocator, much slower than [`Self::Linear`] but generates
     /// the best code out of the three.
     Graph,
+    /// Only used for debug reasons, does not perform register allocation
+    None,
 }
 
 impl FromStr for RegAlloc {
@@ -205,13 +213,14 @@ impl FromStr for RegAlloc {
             "stack" => Ok(RegAlloc::Stack),
             "linear" => Ok(RegAlloc::Linear),
             "graph" => Ok(RegAlloc::Graph),
+            "none" => Ok(RegAlloc::None),
             _ => Err("the only available allocators are `stack`, `linear`, and `graph`"),
         }
     }
 }
 
 fn reg_alloc() -> impl Parser<Option<RegAlloc>> {
-    bpaf::long("reg-alloc")
+    bpaf::long("regalloc")
         .help("which register allocator to use (default dependent on opt level)")
         .argument::<RegAlloc>("ALLOC")
         .optional()
@@ -221,6 +230,7 @@ fn reg_alloc() -> impl Parser<Option<RegAlloc>> {
 ///
 /// This is currently very coarse-grained, either "generate naive code
 /// quickly" or "generate decent code slowly."
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum OptLevel {
     /// Almost all optimizations disabled, codegen is fairly quick
     Debug,
@@ -238,14 +248,14 @@ fn opt_level() -> impl Parser<OptLevel> {
 fn x86_64_asm_format() -> impl Parser<Option<X86_64Assembly>> {
     bpaf::long("x86-64-asm-format")
         .help("the specific dialect of x86-64 assembly to generate")
-        .argument::<RegAlloc>("FORMAT")
+        .argument::<X86_64Assembly>("FORMAT")
         .optional()
 }
 
 fn x86_64_object_format() -> impl Parser<Option<X86_64ObjectFile>> {
     bpaf::long("x86-64-obj-format")
         .help("the specific type of file to generate for x86-64 binaries")
-        .argument::<RegAlloc>("FORMAT")
+        .argument::<X86_64ObjectFile>("FORMAT")
         .optional()
 }
 

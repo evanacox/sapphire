@@ -15,12 +15,29 @@ use crate::codegen::x86_64::{
 };
 use crate::codegen::{
     AvailableRegisters, CallingConv, CodegenOptions, Ctx, FramelessCtx, LoweringContext, PReg, Reg,
-    StackFrame, Target, TypeLayout, VariableLocation, WriteableReg,
+    StackFrame, Target, VariableLocation, WriteableReg,
 };
 use crate::ir;
-use crate::ir::{Cursor, FuncView, Function, FunctionMetadata, Signature, StackSlot, UType, Value};
+use crate::ir::{
+    Array, Cursor, FuncView, Function, Signature, StackSlot, Struct, Type, TypePool, UType, Value,
+};
 use crate::utility::SaHashMap;
 use smallvec::SmallVec;
+use std::iter;
+
+#[allow(clippy::upper_case_acronyms)]
+#[repr(u8)]
+#[derive(Copy, Clone)]
+enum SystemVTypeClass {
+    Integer,
+    SSE,
+    SSEUp,
+    X87,
+    X87Up,
+    ComplexX87,
+    Memory,
+    NoClass,
+}
 
 #[derive(Copy, Clone)]
 enum ParamLocation {
@@ -138,7 +155,61 @@ pub struct SystemVStackFrame {
     signature_abi: SignatureABI,
 }
 
+macro_rules! manipulate_rsp {
+    ($self:expr, $out:expr, $opc:expr) => {{
+        $out.push(Inst::ALU(ALU {
+            opc: $opc,
+            width: Width::Qword,
+            lhs: WriteableReg::from_reg(Reg::from_preg(X86_64::RSP)),
+            rhs: RegMemImm::Imm($self.stack_size as i32),
+        }));
+    }};
+}
+
 impl SystemVStackFrame {
+    pub(in crate::codegen::x86_64) fn new(func: &Function, target: &Target<X86_64>) -> Self {
+        let metadata = func.compute_metadata().unwrap();
+        let view = FuncView::over(func);
+        let function_params = view.block_params(view.entry_block().unwrap());
+        let sig = func.signature();
+
+        let mut obj = Self {
+            able_to_omit: !metadata.has_alloca,
+            is_leaf: metadata.is_leaf,
+            stack_size: 0,
+            additional: 0,
+            options: target.options(),
+            slot_distance_from_rbp: SecondaryMap::default(),
+            preserved_regs_used: SmallVec::default(),
+            signature_abi: SignatureABI::classify(sig, function_params),
+        };
+
+        let view = FuncView::over(func);
+
+        for slot in view.dfg().stack_slots() {
+            let data = view.dfg().stack_slot(slot);
+            let layout = target.layout_of(data.ty());
+            let sz = layout.size() as usize;
+
+            obj.align_stack_for(layout.align() as usize);
+
+            // we add `layout.size()` because we're getting the address of the FIRST
+            // byte, and the stack grows downwards.
+            //
+            // ex: 8 byte object, 0 byte stack so far.
+            //     we want to start at `[rbp - 8]` not `[rbp]`, because the latter
+            //     would load the return address
+            //
+            obj.stack_size += sz;
+            obj.slot_distance_from_rbp.insert(slot, obj.stack_size);
+        }
+
+        // keep stack aligned to 8-byte boundaries at all times
+        obj.stack_size += obj.stack_size % 8;
+
+        obj
+    }
+
     #[inline]
     fn will_omit_fp(&self) -> bool {
         self.able_to_omit && self.options.omit_frame_pointer
@@ -199,61 +270,61 @@ impl SystemVStackFrame {
             )
         }
     }
-}
 
-macro_rules! manipulate_rsp {
-    ($self:expr, $out:expr, $opc:expr) => {{
-        $out.push(Inst::ALU(ALU {
-            opc: $opc,
-            width: Width::Qword,
-            lhs: WriteableReg::from_reg(Reg::from_preg(X86_64::RSP)),
-            rhs: RegMemImm::Imm($self.stack_size as i32),
-        }));
-    }};
-}
+    fn classify_type(pool: &TypePool, ty: Type, target: &Target<X86_64>) -> SystemVTypeClass {
+        match ty.unpack() {
+            UType::Int(_) | UType::Bool(_) | UType::Ptr(_) => SystemVTypeClass::Integer,
+            UType::Float(_) => SystemVTypeClass::SSE,
+            UType::Struct(structure) => Self::classify_struct(pool, ty, structure, target),
+            UType::Array(array) => Self::classify_array(pool, ty, array, target),
+        }
+    }
 
-impl SystemVStackFrame {
-    pub(in crate::codegen::x86_64) fn new(func: &Function, target: &Target<X86_64>) -> Self {
-        let metadata = func.compute_metadata().unwrap();
-        let view = FuncView::over(func);
-        let function_params = view.block_params(view.entry_block().unwrap());
-        let sig = func.signature();
+    fn classify_array(
+        pool: &TypePool,
+        ty: Type,
+        array: Array,
+        target: &Target<X86_64>,
+    ) -> SystemVTypeClass {
+        let layout = target.layout_of(ty);
 
-        let mut obj = Self {
-            able_to_omit: !metadata.has_alloca,
-            is_leaf: metadata.is_leaf,
-            stack_size: 0,
-            additional: 0,
-            options: target.options(),
-            slot_distance_from_rbp: SecondaryMap::default(),
-            preserved_regs_used: SmallVec::default(),
-            signature_abi: SignatureABI::classify(sig, function_params),
-        };
-
-        let view = FuncView::over(func);
-
-        for slot in view.dfg().stack_slots() {
-            let data = view.dfg().stack_slot(slot);
-            let layout = target.layout_of(data.ty());
-            let sz = layout.size() as usize;
-
-            obj.align_stack_for(layout.align() as usize);
-
-            // we add `layout.size()` because we're getting the address of the FIRST
-            // byte, and the stack grows downwards.
-            //
-            // ex: 8 byte object, 0 byte stack so far.
-            //     we want to start at `[rbp - 8]` not `[rbp]`, because the latter
-            //     would load the return address
-            //
-            obj.stack_size += sz;
-            obj.slot_distance_from_rbp.insert(slot, obj.stack_size);
+        if layout.size() > 64 {
+            return SystemVTypeClass::Memory;
         }
 
-        // keep stack aligned to 8-byte boundaries at all times
-        obj.stack_size += obj.stack_size % 8;
+        todo!()
+    }
 
-        obj
+    fn classify_struct(
+        pool: &TypePool,
+        ty: Type,
+        structure: Struct,
+        target: &Target<X86_64>,
+    ) -> SystemVTypeClass {
+        let layout = target.layout_of(ty);
+
+        if layout.size() > 64 {
+            return SystemVTypeClass::Memory;
+        }
+
+        //
+        // possible algo:
+        //
+        // set up an array of bytes, each byte with classification
+        // deal with 8 at a time
+        //
+        //
+
+        let members = structure.members(pool);
+
+        // initialize our list of eight-bytes to NO_CLASS
+        let words = SmallVec::<[SystemVTypeClass; 16]>::from_iter(
+            iter::repeat(SystemVTypeClass::NoClass).take(layout.size() as usize),
+        );
+
+        for i in 0..(members.len() - 1) {}
+
+        todo!()
     }
 }
 
@@ -397,8 +468,6 @@ impl StackFrame<X86_64> for SystemVStackFrame {
     }
 
     fn register_priority(&self) -> AvailableRegisters {
-        use crate::codegen::x86_64::X86_64;
-
         // rbp isn't available to allocate at all unless we're omitting the frame pointer
         let callee_preserved: &'static [PReg] = if self.will_omit_fp() {
             const CALLEE_PRESERVED_OMIT_FP: [PReg; 6] = [
@@ -442,6 +511,7 @@ impl StackFrame<X86_64> for SystemVStackFrame {
     }
 }
 
+/// Models the System-V calling convention
 pub struct SystemVCallingConv;
 
 impl CallingConv<X86_64> for SystemVCallingConv {

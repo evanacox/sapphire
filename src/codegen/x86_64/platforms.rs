@@ -11,7 +11,7 @@
 use crate::codegen::x86_64::sysv::{SystemVCallingConv, SystemVStackFrame};
 use crate::codegen::x86_64::win64::WindowsX64CallingConv;
 use crate::codegen::x86_64::X86_64;
-use crate::codegen::{CallingConv, CodegenOptions, Platform, StackFrame, Target};
+use crate::codegen::{CallingConv, Platform, StackFrame, Target};
 use crate::ir::{Cursor, FuncView, Function};
 
 pub(in crate::codegen::x86_64) const SYS_V_CC: SystemVCallingConv = SystemVCallingConv;

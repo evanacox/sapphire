@@ -1,7 +1,7 @@
 ; STANDARD
-fn i8 @add(i8, i8) {
-entry(i8 %0, i8 %1):
-  %2 = iadd i8 %0, %1
-  %3 = sdiv i8 %2, %2
-  ret i8 %3
+fn i8 @add_div(i8, i8, i8) {
+entry(i8 %0, i8 %1, i8 %2):
+  %3 = iadd i8 %0, %1
+  %4 = sdiv i8 %3, %2
+  ret i8 %4
 }

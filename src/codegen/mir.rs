@@ -111,6 +111,12 @@ pub enum Extern {
     Object(Type),
 }
 
+/// Holds a [`MIRFunction`] along with the associated stack frame information for it.
+pub type FuncFramePair<Inst> = (
+    MIRFunction<Inst>,
+    Box<dyn StackFrame<<Inst as MachInst>::Arch>>,
+);
+
 /// Equivalent of a [`Module`](crate::ir::Module) for MIR.
 ///
 /// This simply holds a list of [`MachInst`]s. A [`MIRModule`] may or may not
@@ -120,7 +126,7 @@ pub enum Extern {
 pub struct MIRModule<Inst: MachInst> {
     symbols: StringPool,
     externals: Vec<(Str, Extern)>,
-    functions: Vec<(MIRFunction<Inst>, Box<dyn StackFrame<Inst::Arch>>)>,
+    functions: Vec<FuncFramePair<Inst>>,
 }
 
 impl<Inst: MachInst> MIRModule<Inst> {
@@ -131,7 +137,7 @@ impl<Inst: MachInst> MIRModule<Inst> {
     pub fn new(
         symbols: StringPool,
         externals: Vec<(Str, Extern)>,
-        functions: Vec<(MIRFunction<Inst>, Box<dyn StackFrame<Inst::Arch>>)>,
+        functions: Vec<FuncFramePair<Inst>>,
     ) -> Self {
         Self {
             symbols,
@@ -141,12 +147,12 @@ impl<Inst: MachInst> MIRModule<Inst> {
     }
 
     /// Returns all the functions that are in the module, along with their associated frame info
-    pub fn functions(&self) -> &[(MIRFunction<Inst>, Box<dyn StackFrame<Inst::Arch>>)] {
+    pub fn functions(&self) -> &[FuncFramePair<Inst>] {
         &self.functions
     }
 
     /// Returns a mutable reference to all the functions in the module
-    pub fn functions_mut(&mut self) -> &mut [(MIRFunction<Inst>, Box<dyn StackFrame<Inst::Arch>>)] {
+    pub fn functions_mut(&mut self) -> &mut [FuncFramePair<Inst>] {
         &mut self.functions
     }
 

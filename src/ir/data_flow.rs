@@ -630,7 +630,7 @@ impl DataFlowGraph {
         let _ = self.stack_slots.get_mut(slot).unwrap().take();
     }
 
-    /// Returns a [`SecondarySet`](arena::SecondarySet) that contains every
+    /// Returns a [`SecondarySet`](crate::arena::SecondarySet) that contains every
     /// value with exactly one use in the DFG.
     ///
     /// **Note: This may include values that are NOT in the associated function layout!**

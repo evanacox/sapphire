@@ -11,6 +11,7 @@
 use crate::codegen::x86_64::{GreedyISel, X86_64};
 use crate::codegen::{
     x86_64, CodegenOptions, GenericISel, RegisterAllocator, Rewriter, StackRegAlloc, Target,
+    TargetPair,
 };
 use crate::codegen::{Architecture, Emitter, MIRModule};
 use crate::ir::Module;
@@ -45,8 +46,8 @@ where
 
     /// Emits assembly in a format specified by the emitter, returning
     /// a string that can be written to a file
-    pub fn assembly(&self, format: Emit::AssemblyFormat) -> String {
-        Emit::assembly(&self.mir, format)
+    pub fn assembly(&self, format: Emit::AssemblyFormat, target: TargetPair) -> String {
+        Emit::assembly(&self.mir, format, target)
     }
 
     /// Emits object code in a format specified by the emitter, returning
@@ -115,7 +116,7 @@ impl PresetBackends {
         let mut mir = GenericISel::<X86_64, GreedyISel>::lower(&mut target, &module, options);
 
         for (func, frame) in mir.functions_mut() {
-            let mut alloc = StackRegAlloc::default();
+            let alloc = StackRegAlloc::default();
             let allocation = alloc.allocate(func, frame.as_mut());
             let rewriter = Rewriter::with_allocation(allocation);
 

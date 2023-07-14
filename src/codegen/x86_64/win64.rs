@@ -10,11 +10,11 @@
 
 use crate::codegen::x86_64::{Inst, X86_64};
 use crate::codegen::{
-    AvailableRegisters, CallingConv, CodegenOptions, Ctx, FramelessCtx, LoweringContext, PReg, Reg,
-    StackFrame, VariableLocation, WriteableReg,
+    AvailableRegisters, CallingConv, Ctx, FramelessCtx, PReg, Reg, StackFrame, VariableLocation,
+    WriteableReg,
 };
 use crate::ir;
-use crate::ir::{Function, FunctionMetadata, Signature, StackSlot, Value};
+use crate::ir::{FunctionMetadata, Signature, StackSlot, Value};
 
 /// An implementation of [`StackFrame`] for the Windows x64 ABI.
 ///

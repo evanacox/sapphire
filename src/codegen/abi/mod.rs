@@ -8,13 +8,11 @@
 //                                                                           //
 //======---------------------------------------------------------------======//
 
-mod abi;
 mod aggregates;
 mod calling_conv;
 mod frame;
 mod layout;
 
-pub use abi::*;
 pub use aggregates::*;
 pub use calling_conv::*;
 pub use frame::*;

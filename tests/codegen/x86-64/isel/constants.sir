@@ -1,28 +1,13 @@
 ; MATCH-SECTION
 ;
-; fn i32 @main(i32, ptr) {
-; entry(i32 %argc, ptr %argv):
-;   %0 = iconst i32 42
-;   %1 = icmp eq i32 %argc, %0
-;   condbr bool %1, a, b
+; add:
+;     mov vi3, edi
 ;
-; a:
-;   %2 = iconst i32 6
-;   %3 = iconst i8 -3
-;   br merge(i32 %2, i8 %3)
 ;
-; b:
-;   %4 = iconst i32 5
-;   %5 = iconst i8 -1
-;   br merge(i32 %4, i8 %5)
-;
-; merge(i32 %6, i8 %7):
-;   ret i32 %6
-; }
 ;;
 fn i32 @main(i32, ptr) {
 entry(i32 %argc, ptr %argv):
   %0 = iconst i32 12
   %1 = iadd i32 %argc, %0
-  %2 = ptoi 
+  ret i32 %1
 }

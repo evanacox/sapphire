@@ -10,7 +10,9 @@
 
 use crate::arena::SecondaryMap;
 use crate::codegen::x86_64::*;
-use crate::codegen::{Emitter, Extern, MIRBlock, MIRFunction, MIRModule, Reg, RegClass};
+use crate::codegen::{
+    Emitter, Extern, MIRBlock, MIRFunction, MIRModule, Reg, RegClass, TargetPair,
+};
 use crate::ir::{FloatFormat, UType};
 use crate::utility::StringPool;
 use std::str::FromStr;
@@ -26,6 +28,14 @@ pub enum X86_64Assembly {
     NASM,
     /// Output compatible with MASM
     MASM,
+}
+
+fn into_mac_os_symbol_name(name: &str, is_mac: bool) -> String {
+    if is_mac {
+        format!("_{name}")
+    } else {
+        name.to_string()
+    }
 }
 
 impl FromStr for X86_64Assembly {
@@ -61,8 +71,8 @@ impl FromStr for X86_64ObjectFile {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "elf" => Ok(Self::ELF),
-            "macho" => Ok(Self::GNUIntel),
-            "pe" => Ok(Self::NASM),
+            "macho" => Ok(Self::MachO),
+            "pe" => Ok(Self::PE),
             _ => Err("only available x86-64 assembly formats are `elf`, `macho`, and `pe`"),
         }
     }
@@ -76,9 +86,14 @@ impl Emitter<X86_64> for Emit {
     type AssemblyFormat = X86_64Assembly;
     type ObjectCodeFormat = X86_64ObjectFile;
 
-    fn assembly(module: &MIRModule<Inst>, format: Self::AssemblyFormat) -> String {
+    fn assembly(
+        module: &MIRModule<Inst>,
+        format: Self::AssemblyFormat,
+        target: TargetPair,
+    ) -> String {
         let emitter = AsmEmitter {
             mode: format,
+            mac_os: matches!(target, TargetPair::X86_64macOS),
             state: String::default(),
             pool: module.symbols().clone(),
         };
@@ -93,6 +108,7 @@ impl Emitter<X86_64> for Emit {
 
 struct AsmEmitter {
     mode: X86_64Assembly,
+    mac_os: bool,
     state: String,
     pool: StringPool,
 }
@@ -109,12 +125,15 @@ impl AsmEmitter {
         self.emit_extern_symbols(module);
 
         for (function, frame) in module.functions() {
-            let name = module
-                .symbols()
-                .get(function.name())
-                .expect("should have name");
+            let name = into_mac_os_symbol_name(
+                module
+                    .symbols()
+                    .get(function.name())
+                    .expect("should have name"),
+                self.mac_os,
+            );
 
-            self.emit_function(name, function);
+            self.emit_function(&name, function);
         }
 
         if self.mode == X86_64Assembly::MASM {
@@ -128,12 +147,14 @@ impl AsmEmitter {
         let strings = module.symbols();
 
         for (function, frame) in module.functions() {
-            let name = strings
-                .get(function.name())
-                .expect("function name must be valid");
+            let name = into_mac_os_symbol_name(
+                strings.get(function.name()).expect("should have name"),
+                self.mac_os,
+            );
+
             let real = match self.mode {
                 X86_64Assembly::GNU | X86_64Assembly::GNUIntel => {
-                    format!("    .globl {name}\n    .type {name}, @function\n")
+                    format!("    .globl {name}\n")
                 }
                 X86_64Assembly::NASM => format!("    global {name}\n"),
                 X86_64Assembly::MASM => format!("PUBLIC {name}:PROC \n"),

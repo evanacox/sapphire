@@ -12,7 +12,7 @@ use crate::arena::SecondaryMap;
 use crate::codegen::regalloc::allocator::{defs, uses, RegisterMapping};
 use crate::codegen::{
     Allocation, Architecture, MIRFunction, MachInst, PReg, ProgramPoint, Reg, RegisterAllocator,
-    SpillReload, StackFrame, VariableLocation, WriteableReg,
+    SpillReload, StackFrame, VariableLocation,
 };
 use smallvec::SmallVec;
 use std::mem;
@@ -35,12 +35,11 @@ impl StackRegAlloc {
         &mut self,
         frame: &mut dyn StackFrame<Arch>,
         reg: Reg,
-        width: usize,
     ) -> VariableLocation {
         match self.spilled_regs.get(reg) {
             Some(loc) => *loc,
             None => {
-                let loc = frame.spill_slot(width);
+                let loc = frame.spill_slot(8);
 
                 self.spilled_regs.insert(reg, loc);
 
@@ -55,18 +54,11 @@ impl StackRegAlloc {
         frame: &mut dyn StackFrame<Arch>,
         reg: Reg,
         tmp: PReg,
-        width: usize,
     ) {
-        let loc = self.stack_space_for(frame, reg, width);
+        let loc = self.stack_space_for(frame, reg);
 
-        self.spills.push((
-            pp,
-            SpillReload::Spill {
-                from: tmp,
-                to: loc,
-                width,
-            },
-        ))
+        self.spills
+            .push((pp, SpillReload::Spill { from: tmp, to: loc }))
     }
 
     fn reload<Arch: Architecture>(
@@ -75,18 +67,11 @@ impl StackRegAlloc {
         frame: &mut dyn StackFrame<Arch>,
         reg: Reg,
         tmp: PReg,
-        width: usize,
     ) {
-        let loc = self.stack_space_for(frame, reg, width);
+        let loc = self.stack_space_for(frame, reg);
 
-        self.spills.push((
-            pp,
-            SpillReload::Reload {
-                from: loc,
-                to: tmp,
-                width,
-            },
-        ))
+        self.spills
+            .push((pp, SpillReload::Reload { from: loc, to: tmp }))
     }
 
     fn order_temporaries<Arch: Architecture>(&mut self, frame: &mut dyn StackFrame<Arch>) {
@@ -98,14 +83,14 @@ impl StackRegAlloc {
     }
 
     fn take_temporary(&mut self) -> PReg {
-        let preg = self
+        let p_reg = self
             .temporary_regs
             .pop()
             .expect("how did we get run out of temporaries?");
 
-        self.taken_temporary_regs.push(preg);
+        self.taken_temporary_regs.push(p_reg);
 
-        preg
+        p_reg
     }
 
     fn return_temporaries(&mut self) {
@@ -133,12 +118,10 @@ impl Default for StackRegAlloc {
 
 impl<Arch: Architecture> RegisterAllocator<Arch> for StackRegAlloc {
     fn allocate(
-        &mut self,
+        mut self,
         program: &MIRFunction<Arch::Inst>,
         frame: &mut dyn StackFrame<Arch>,
     ) -> Allocation {
-        // replace self with default state
-        mem::take(self);
         self.order_temporaries(frame);
 
         let mut mapping = SmallVec::default();
@@ -160,7 +143,7 @@ impl<Arch: Architecture> RegisterAllocator<Arch> for StackRegAlloc {
                     (Some(from), None) => {
                         let t1 = self.take_temporary();
 
-                        self.spill(after, frame, mov.to.to_reg(), t1, mov.width);
+                        self.spill(after, frame, mov.to.to_reg(), t1);
                         mapping.push((mov.from, from));
                         mapping.push((mov.to.to_reg(), t1));
                     }
@@ -168,7 +151,7 @@ impl<Arch: Architecture> RegisterAllocator<Arch> for StackRegAlloc {
                     (None, Some(to)) => {
                         let t1 = self.take_temporary();
 
-                        self.reload(before, frame, mov.from, t1, mov.width);
+                        self.reload(before, frame, mov.from, t1);
                         mapping.push((mov.from, t1));
                         mapping.push((mov.to.to_reg(), to));
                     }
@@ -182,26 +165,37 @@ impl<Arch: Architecture> RegisterAllocator<Arch> for StackRegAlloc {
                         let t1 = self.take_temporary();
                         let t2 = self.take_temporary();
 
-                        self.reload(before, frame, mov.from, t1, mov.width);
-                        self.spill(after, frame, mov.to.to_reg(), t2, mov.width);
+                        self.reload(before, frame, mov.from, t1);
+                        self.spill(after, frame, mov.to.to_reg(), t2);
                         mapping.push((mov.from, t1));
                         mapping.push((mov.to.to_reg(), t2));
                     }
                 }
             } else {
                 // case #4, we just reload all (virtual) uses and spill all (virtual) defs
-                for (reg, width) in uses!(inst, frame) {
-                    if reg.is_vreg() {
-                        let tmp = self.take_temporary();
+                let uses = uses!(inst, frame);
 
-                        self.reload(before, frame, reg, tmp, width as usize);
+                for (reg, _) in uses.iter().copied() {
+                    if reg.is_vreg() {
+                        // we need to be careful not to take a temporary that is used
+                        // by the instruction, or we'll break the behavior of the code
+                        let tmp = loop {
+                            let reg = self.take_temporary();
+
+                            if !uses.iter().any(|(r, _)| *r == Reg::from_preg(reg)) {
+                                break reg;
+                            }
+                        };
+
+                        self.reload(before, frame, reg, tmp);
                         mapping.push((reg, tmp));
                     } else {
+                        // self.reload(before, frame, reg, reg.as_preg().unwrap());
                         mapping.push((reg, reg.as_preg().unwrap()))
                     }
                 }
 
-                for (reg, width) in defs!(inst, frame) {
+                for (reg, _) in defs!(inst, frame) {
                     if reg.is_vreg() {
                         let matching_temporary: Option<(Reg, PReg)> = mapping
                             .as_slice()
@@ -221,7 +215,7 @@ impl<Arch: Architecture> RegisterAllocator<Arch> for StackRegAlloc {
                             }
                         };
 
-                        self.spill(after, frame, reg, tmp, width as usize);
+                        self.spill(after, frame, reg, tmp);
                     }
                 }
             }

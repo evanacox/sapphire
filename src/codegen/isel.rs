@@ -10,7 +10,7 @@
 
 use crate::arena::{ArenaMap, SecondaryMap, SecondarySet};
 use crate::codegen::*;
-use crate::ir::{Block, CallConv, Cursor, FuncView, Function, FunctionDefinition, Module, Value};
+use crate::ir::{Block, Cursor, FuncView, Function, FunctionDefinition, Module, Value};
 use crate::transforms::common::has_side_effect;
 use crate::utility::{Packable, Str, StringPool};
 use crate::{analysis, ir};
@@ -19,9 +19,8 @@ use std::marker::PhantomData;
 
 /// An instruction selector that lowers one [`Inst`] into (potentially many) [`MachInst`]s.
 ///
-/// Specific implementations of this trait may be generic (e.g. working with multiple
-/// potential [`ABI`] implementations), but for any selector it will produce code that
-/// is ready to be register allocated.
+/// Specific implementations of this trait may be generic (e.g. working with multiple ABIs),
+/// but for any selector it will produce code that is ready to be register allocated.
 ///
 /// [`Inst`]: ir::Inst
 pub trait InstructionSelector<'module, 'target, Arch: Architecture>: Sized {
@@ -63,7 +62,7 @@ pub type FramelessCtx<'module, 'target, 'ctx, Arch> = (
 );
 
 // make linter not whine about complex types
-type SilenceLinter<'module, 'target, Arch, Abi, Inst> = fn() -> (&'module Arch, &'target Abi, Inst);
+type SilenceLinter<'module, 'target, Arch> = fn() -> (&'module i32, &'target i32, Arch);
 
 /// The main instruction selection pipeline that takes in a target-specific
 /// instruction selector and repeatedly invokes it to lower each instruction.
@@ -73,7 +72,7 @@ where
     Selector: InstructionSelector<'module, 'target, Arch>,
 {
     selector: Selector,
-    _unused: PhantomData<fn() -> (&'module i32, &'target i32, Arch)>,
+    _unused: PhantomData<SilenceLinter<'module, 'target, Arch>>,
 }
 
 impl<'module, 'target, Arch, Selector> GenericISel<'module, 'target, Arch, Selector>

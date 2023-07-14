@@ -10,8 +10,8 @@
 
 use crate::arena::SecondaryMap;
 use crate::codegen::{
-    Allocation, Architecture, MIRBlockInterval, MIRFunction, MachInst, ProgramPoint,
-    ProgramPointsIterator, SpillReload, StackFrame,
+    Allocation, Architecture, MIRBlockInterval, MIRFunction, MachInst, ProgramPoint, SpillReload,
+    StackFrame,
 };
 
 /// Performs the final phase of codegen, rewriting register-allocated x86-64
@@ -36,7 +36,7 @@ impl Rewriter {
 
     /// Rewrites a MIR function according to the allocation given in [`Self::with_allocation`].
     pub fn rewrite<Arch: Architecture>(
-        mut self,
+        self,
         function: &mut MIRFunction<Arch::Inst>,
         frame: &dyn StackFrame<Arch>,
     ) {
@@ -67,12 +67,8 @@ impl Rewriter {
                 while spills.peek().is_some_and(move |(point, _)| *point == pp) {
                     let (_, spill) = spills.next().expect("we just checked .peek()");
                     let emit = match spill {
-                        SpillReload::Spill { to, from, width } => {
-                            Arch::Inst::store(*width, *from, *to)
-                        }
-                        SpillReload::Reload { to, from, width } => {
-                            Arch::Inst::load(*width, *from, *to)
-                        }
+                        SpillReload::Spill { to, from } => Arch::Inst::store(8, *from, *to),
+                        SpillReload::Reload { to, from } => Arch::Inst::load(8, *from, *to),
                     };
 
                     out.push(emit);

@@ -8,11 +8,8 @@
 //                                                                           //
 //======---------------------------------------------------------------======//
 
-use crate::arena::SecondaryMap;
-use crate::codegen::{Architecture, MIRFunction, PReg, Reg, StackFrame, VReg, VariableLocation};
+use crate::codegen::{Architecture, MIRFunction, PReg, Reg, StackFrame, VariableLocation};
 use smallvec::SmallVec;
-use static_assertions::assert_eq_size;
-use std::iter::Enumerate;
 
 macro_rules! uses {
     ($inst:expr, $fr:expr) => {{
@@ -95,8 +92,6 @@ pub enum SpillReload {
         from: PReg,
         /// The stack location to spill from
         to: VariableLocation,
-        /// The width of the store
-        width: usize,
     },
     /// A reload, i.e. `to = *from`
     Reload {
@@ -104,8 +99,6 @@ pub enum SpillReload {
         from: VariableLocation,
         /// The physical register being reloaded into
         to: PReg,
-        /// The width of the load
-        width: usize,
     },
 }
 
@@ -168,15 +161,15 @@ pub struct Allocation {
 /// pre-allocated operations that are bound to specific physical registers).
 ///
 /// The output is a (representation of) a valid register allocation for the
-/// program that can be fed into the [`Rewriter`](codegen::Rewriter), containing
+/// program that can be fed into the [`Rewriter`](crate::codegen::Rewriter), containing
 /// a list of spills/reloads to insert, and a mapping of virtual registers
 /// to physical registers..
-pub trait RegisterAllocator<Arch: Architecture> {
+pub trait RegisterAllocator<Arch: Architecture>: Sized + Default {
     /// Computes a valid register allocation for the given "program" (function).
     ///
     /// If the allocator performs any spills, it tells `frame` through [`StackFrame::spill_slot`].
     fn allocate(
-        &mut self,
+        self,
         program: &MIRFunction<Arch::Inst>,
         frame: &mut dyn StackFrame<Arch>,
     ) -> Allocation;

@@ -106,7 +106,7 @@ pub(in crate::codegen::x86_64) fn zeroing_mov(
     ctx.emit(Inst::Mov(Mov { width, src, dest }));
 }
 
-impl<'module, 'frame, 'target, 'ctx> GreedyISel
+impl<'module, 'target, 'ctx> GreedyISel
 where
     'module: 'ctx,
     'target: 'ctx,
@@ -444,11 +444,7 @@ impl<'mo, 'fr, 'ta, 'ctx> GenericInstVisitor<(), Ctx<'mo, 'fr, 'ta, 'ctx>> for G
 
         let convention = calling_conv(cc, ctx);
 
-        convention.lower_call(
-            data,
-            result.map(|reg| WriteableReg::from_reg(reg)),
-            (def, fr, ctx),
-        );
+        convention.lower_call(data, result.map(WriteableReg::from_reg), (def, fr, ctx));
     }
 
     fn visit_indirectcall(&mut self, data: &IndirectCallInst, context: Ctx<'_, '_, '_, '_>) {

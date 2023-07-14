@@ -22,6 +22,7 @@ pub struct CodegenOptions {
     pub omit_frame_pointer: bool,
 }
 
+#[allow(clippy::derivable_impls)]
 impl Default for CodegenOptions {
     fn default() -> Self {
         Self {

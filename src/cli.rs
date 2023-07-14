@@ -168,7 +168,7 @@ impl FromStr for FramePointer {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "always-omit" => Ok(FramePointer::OmitWhenPossible),
+            "omit" => Ok(FramePointer::OmitWhenPossible),
             "never-omit" => Ok(FramePointer::NeverOmit),
             _ => Err("only options are `omit` or `never-omit`"),
         }
