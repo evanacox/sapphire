@@ -296,6 +296,9 @@ where
         let rhs = self.rhs_operand_rm(data.rhs(), (def, fr, ctx));
         let mut width = value_into_width(data.lhs(), (def, fr, ctx));
 
+        // this covers the dividend and the quotient/remainder registers
+        ctx.begin_fixed_interval(&[X86_64::RAX, X86_64::RDX]);
+
         // IDIV dividend must be located in AX/EAX/RAX
         ctx.emit(Inst::Mov(Mov {
             width,
@@ -344,6 +347,9 @@ where
         let lhs = ctx.result_reg(data.lhs(), RegClass::Int);
         let rhs = self.rhs_operand_rm(data.rhs(), (def, fr, ctx));
         let mut width = value_into_width(data.lhs(), (def, fr, ctx));
+
+        // this covers the dividend and the quotient/remainder registers
+        ctx.begin_fixed_interval(&[X86_64::RAX, X86_64::RDX]);
 
         // DIV dividend must be located in AX/EAX/RAX
         ctx.emit(Inst::Mov(Mov {
@@ -658,6 +664,8 @@ impl<'mo, 'fr, 'ta, 'ctx> GenericInstVisitor<(), Ctx<'mo, 'fr, 'ta, 'ctx>> for G
             src: RegMemImm::Reg(IDiv::QUOTIENT),
             dest: WriteableReg::from_reg(dest),
         }));
+
+        ctx.end_fixed_interval(&[X86_64::RAX, X86_64::RDX]);
     }
 
     fn visit_udiv(&mut self, data: &ArithInst, (def, fr, ctx): Ctx<'_, '_, '_, '_>) {
@@ -669,6 +677,8 @@ impl<'mo, 'fr, 'ta, 'ctx> GenericInstVisitor<(), Ctx<'mo, 'fr, 'ta, 'ctx>> for G
             src: RegMemImm::Reg(Div::QUOTIENT),
             dest: WriteableReg::from_reg(dest),
         }));
+
+        ctx.end_fixed_interval(&[X86_64::RAX, X86_64::RDX]);
     }
 
     fn visit_srem(&mut self, data: &ArithInst, (def, fr, ctx): Ctx<'_, '_, '_, '_>) {
@@ -680,6 +690,8 @@ impl<'mo, 'fr, 'ta, 'ctx> GenericInstVisitor<(), Ctx<'mo, 'fr, 'ta, 'ctx>> for G
             src: RegMemImm::Reg(IDiv::REMAINDER),
             dest: WriteableReg::from_reg(dest),
         }));
+
+        ctx.end_fixed_interval(&[X86_64::RAX, X86_64::RDX]);
     }
 
     fn visit_urem(&mut self, data: &ArithInst, (def, fr, ctx): Ctx<'_, '_, '_, '_>) {
@@ -691,6 +703,8 @@ impl<'mo, 'fr, 'ta, 'ctx> GenericInstVisitor<(), Ctx<'mo, 'fr, 'ta, 'ctx>> for G
             src: RegMemImm::Reg(Div::REMAINDER),
             dest: WriteableReg::from_reg(dest),
         }));
+
+        ctx.end_fixed_interval(&[X86_64::RAX, X86_64::RDX]);
     }
 
     fn visit_fneg(&mut self, data: &FloatUnaryInst, context: Ctx<'_, '_, '_, '_>) {

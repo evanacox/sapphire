@@ -165,21 +165,21 @@ where
                 // the entry block's parameters are formal parameters, we need to get those from
                 // physical registers and copy them to virtual registers for the rest of the codegen
                 if cursor.is_entry_block(block) {
-                    context.begin_linear_lowering();
-
                     // find the parameters that were actually used in the function body and
                     // get the ABI code to copy them into the correct spot
                     for &param in cursor.block_params(block).iter() {
                         if let Some(&reg) = context.vreg_constraints.get(param) {
+                            context.begin_linear_lowering();
+
                             frame.lower_parameter(
                                 param,
                                 WriteableReg::from_reg(reg),
                                 (def, context),
                             );
+
+                            context.end_linear_lowering();
                         }
                     }
-
-                    context.end_linear_lowering();
                 }
 
                 context.current.len() - begin
@@ -200,12 +200,13 @@ where
         let mut frame = Selector::frame_for_func(func, context.target);
         let (name, mut blocks) = context.prepare_for_func(func);
         let (order, block_length) = self.perform_isel(func, frame.as_mut(), context, &blocks);
+        let fixed = context.compute_interval_lengths();
 
         // we haven't computed block lengths due to how isel works, need to do that now
         context.compute_block_lengths(&order, &block_length, &mut blocks);
 
         (
-            MIRFunction::new(name, context.take_insts(), blocks, order),
+            MIRFunction::new(name, context.take_insts(), blocks, order, fixed),
             frame,
         )
     }
@@ -244,6 +245,9 @@ pub struct LoweringContext<'module, 'target, Arch: Architecture> {
     next_int_vreg_id: usize,
     // the next float vreg hardware number to give out
     next_float_vreg_id: usize,
+    // a list of fixed intervals, this is not a full live interval yet.
+    // it's a tuple (reg, is defined by caller, distance from end, length)
+    fixed_intervals: Vec<(PReg, bool, usize, usize)>,
     // the current function being lowered
     func: Option<&'module Function>,
 }
@@ -269,6 +273,7 @@ impl<'module, 'target, Arch: Architecture> LoweringContext<'module, 'target, Arc
             merged: SecondaryMap::default(),
             colors: SecondaryMap::default(),
             vreg_constraints: SecondaryMap::default(),
+            fixed_intervals: Vec::default(),
             next_int_vreg_id: 0,
             next_float_vreg_id: 0,
             func: None,
@@ -349,6 +354,63 @@ impl<'module, 'target, Arch: Architecture> LoweringContext<'module, 'target, Arc
         for inst in self.current_linear.drain(..).rev() {
             self.current.push_front(inst);
         }
+    }
+
+    /// Begins creating a fixed interval for each register in `regs`.
+    ///
+    /// This must be accompanied by a call to [`Self::end_fixed_interval`] once
+    /// the instructions included in the interval are emitted.
+    pub fn begin_fixed_interval(&mut self, regs: &[PReg]) {
+        // iterate in reverse so we can go forward in `end` and have logic work out
+        // basically, for register at regs[i] we make fixed_intervals[len() - i - 1] be
+        // the data for calculating that interval later
+        for &reg in regs.iter().rev() {
+            // basically what's going on is we're storing
+            //
+            // 1. how many instructions are already in the final buffer (the 'distance from the end')
+            // 2. how many instructions are in the temporary buffer (the amount we need to subtract from our distance later
+            //    when we go to compute how many instructions are in the interval)
+            //
+            // the first one stays permanent, the second one is just a convenient place to store that
+            // value, it is overwritten with a real one in `end_fixed_interval`
+            self.fixed_intervals
+                .push((reg, false, self.current.len(), self.current_linear.len()))
+        }
+    }
+
+    /// This is specifically for lowering parameters and similar caller-defined registers,
+    /// where the interval needs to start before the function.
+    ///
+    /// Other than that, it works the same way as [`Self::begin_fixed_interval`].
+    pub fn begin_caller_defined_fixed_interval(&mut self, reg: PReg) {
+        self.fixed_intervals
+            .push((reg, true, self.current.len(), self.current_linear.len()));
+    }
+
+    /// Finishes creating a fixed interval for each register in `regs`.
+    ///
+    /// It is assumed that all the instructions emitted via [`Self::emit`] since
+    /// the call to [`Self::begin_fixed_interval`] are included in the interval.
+    ///
+    /// This must be accompanied by a call to [`Self::begin_fixed_interval`] before
+    /// this is called, and that call must have the same registers.
+    pub fn end_fixed_interval(&mut self, regs: &[PReg]) {
+        for (i, _) in regs.iter().enumerate() {
+            let index = self.fixed_intervals.len() - i - 1;
+            let (_, _, dist, length) = &mut self.fixed_intervals[index];
+            let additional_insts = self.current_linear.len() - *length;
+
+            // see above, length stores the amount we need to subtract, but we update it properly here
+            *length = additional_insts;
+        }
+    }
+
+    /// This is specifically for lowering parameters and similar caller-defined registers,
+    /// where the interval needs to start before the function.
+    ///
+    /// Other than that, it works the same way as [`Self::end_fixed_interval`].
+    pub fn end_caller_defined_fixed_interval(&mut self, reg: PReg) {
+        self.end_fixed_interval(&[reg]);
     }
 
     /// Resolves (and possibly inserts) a string in the MIR module's
@@ -601,5 +663,23 @@ impl<'module, 'target, Arch: Architecture> LoweringContext<'module, 'target, Arc
         }
 
         debug_assert_eq!(current, self.current.len() as u32);
+    }
+
+    fn compute_interval_lengths(&self) -> FixedIntervals {
+        let mut fixed = FixedIntervals::default();
+        let len = self.current.len();
+
+        for &(reg, caller_defined, dist_from_end, length) in self.fixed_intervals.iter() {
+            let end = (self.current.len() - dist_from_end - 1) as u32;
+            let interval = if caller_defined {
+                LiveInterval::defined_before_func(end)
+            } else {
+                LiveInterval::between(end - (length as u32) + 1, end)
+            };
+
+            fixed.add_fixed_interval(reg, interval);
+        }
+
+        fixed
     }
 }

@@ -184,6 +184,7 @@ impl BitAndAssign for RetAttributes {
 /// Models metadata about the function necessary for later codegen.
 ///
 /// This is kept up-to-date through the DFG
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
 #[cfg_attr(feature = "enable-serde", derive(Serialize, Deserialize))]
 pub struct FunctionMetadata {
     /// Whether the function contains an `alloca` instruction in any (possibly dead) path.

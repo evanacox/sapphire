@@ -9,6 +9,7 @@
 //======---------------------------------------------------------------======//
 
 use bpaf::Parser;
+use lazy_static::lazy_static;
 use sapphire::cli::{emit_machine_format, frame_pointer, passes, FramePointer, MachineFormat};
 use sapphire::codegen::x86_64::{X86_64Assembly, X86_64ObjectFile};
 use sapphire::codegen::{CodegenOptions, TargetPair};
@@ -33,6 +34,8 @@ pub struct Options {
     pub verify: bool,
     /// Whether to print the output to stdout
     pub print: bool,
+    /// Whether to emit fixed interval comments
+    pub fixed_intervals: bool,
     /// Passes to run over the IR
     pub passes: Vec<String>,
     /// If we're targeting an x86-64 platform and emitting assembly,
@@ -43,32 +46,56 @@ pub struct Options {
     pub x86_64_obj: Option<X86_64ObjectFile>,
 }
 
+lazy_static! {
+    static ref DESCRIPTION: String = format!(
+        "static compiler for Sapphire IR (default target: {})",
+        default_target()
+    );
+}
+
 /// Parses and infers all options necessary for the compiler.
 ///
 /// Some options are automatically inferred from the environment if they
 /// aren't explicit (e.g. target platform/format).
 pub fn parse_options() -> Options {
-    let ((format, passes, omit_fp, x86_asm, x86_obj, target, regalloc, opt, verify, print), base) =
-        cli::tool_with(
-            "static compiler for Sapphire IR",
-            "Usage: sirc [options] <input ir>",
-            bpaf::construct!(
-                emit_machine_format(),
-                passes(),
-                frame_pointer(),
-                x86_64_asm_format(),
-                x86_64_object_format(),
-                target_pair(),
-                reg_alloc(),
-                opt_level(),
-                verify(),
-                print()
-            ),
-        )
-        .run();
+    let default = default_target();
+
+    let (
+        (
+            format,
+            passes,
+            omit_fp,
+            x86_asm,
+            x86_obj,
+            target,
+            regalloc,
+            opt,
+            verify,
+            print,
+            fixed_intervals,
+        ),
+        base,
+    ) = cli::tool_with(
+        &DESCRIPTION,
+        "Usage: sirc [options] <input ir>",
+        bpaf::construct!(
+            emit_machine_format(),
+            passes(),
+            frame_pointer(),
+            x86_64_asm_format(),
+            x86_64_object_format(),
+            target_pair(),
+            reg_alloc(),
+            opt_level(),
+            verify(),
+            print(),
+            fixed_intervals()
+        ),
+    )
+    .run();
 
     // first: do we have a target?
-    let target = determine_target(target);
+    let target = target.unwrap_or(default);
     let reg_alloc = match regalloc {
         Some(r) => r,
         None => match opt {
@@ -97,89 +124,79 @@ pub fn parse_options() -> Options {
         opt,
         verify,
         print,
+        fixed_intervals,
         passes,
         x86_64_asm: x86_asm,
         x86_64_obj: x86_obj,
     }
 }
 
-fn determine_target(target: Option<TargetPair>) -> TargetPair {
-    if let Some(pair) = target {
-        return pair;
+#[cfg(target_family = "windows")]
+fn default_target() -> TargetPair {
+    use windows_sys::Win32::System::SystemInformation::{
+        IMAGE_FILE_MACHINE_AMD64, IMAGE_FILE_MACHINE_ARM64, IMAGE_FILE_MACHINE_UNKNOWN,
+    };
+    use windows_sys::Win32::System::Threading::{GetCurrentProcess, IsWow64Process2};
+
+    // see https://learn.microsoft.com/en-us/windows/win32/api/wow64apiset/nf-wow64apiset-iswow64process2
+    //
+    // if we're running under "WOW64" (x64 emulator) we may get fake information from GetSystemInfo and
+    // GetNativeSystemInfo, so we use this instead
+    unsafe {
+        let handle = GetCurrentProcess();
+        let mut process_machine = IMAGE_FILE_MACHINE_UNKNOWN;
+        let mut host_machine = IMAGE_FILE_MACHINE_UNKNOWN;
+        let result = IsWow64Process2(handle, &mut process_machine, &mut host_machine);
+
+        // if it's zero we fail, fix this later
+        assert_ne!(
+            result, 0,
+            "unknown error while detecting target, please use `--target=` explicitly"
+        );
+
+        match host_machine {
+            IMAGE_FILE_MACHINE_ARM64 => TargetPair::Arm64Windows,
+            IMAGE_FILE_MACHINE_AMD64 => TargetPair::X86_64Windows,
+            _ => panic!("unknown host config, please use `--target=` explicitly"),
+        }
     }
+}
 
-    // if the user wants it to be inferred, we need to dispatch based on
-    // the OS we're running on
+#[cfg(target_family = "unix")]
+fn default_target() -> TargetPair {
+    use std::ffi::CStr;
+    use std::mem::MaybeUninit;
 
-    #[cfg(target_family = "windows")]
-    {
-        use windows_sys::Win32::Foundation::BOOL;
-        use windows_sys::Win32::System::SystemInformation::{
-            IMAGE_FILE_MACHINE, IMAGE_FILE_MACHINE_AMD64, IMAGE_FILE_MACHINE_ARM64,
-            IMAGE_FILE_MACHINE_UNKNOWN,
-        };
-        use windows_sys::Win32::System::Threading::{GetCurrentProcess, IsWow64Process2};
-
-        // see https://learn.microsoft.com/en-us/windows/win32/api/wow64apiset/nf-wow64apiset-iswow64process2
-        //
-        // if we're running under "WOW64" (x64 emulator) we may get fake information from GetSystemInfo and
-        // GetNativeSystemInfo, so we use this instead
-        unsafe {
-            let handle = GetCurrentProcess();
-            let mut process_machine = IMAGE_FILE_MACHINE_UNKNOWN;
-            let mut host_machine = IMAGE_FILE_MACHINE_UNKNOWN;
-            let result = IsWow64Process2(handle, &mut process_machine, &mut host_machine);
-
-            // if it's zero we fail, fix this later
-            assert_ne!(
-                result, 0,
-                "unknown error while detecting target, please use `--target=` explicitly"
+    let (arch, os) = unsafe {
+        let mut data = MaybeUninit::uninit();
+        let uname = {
+            assert_eq!(
+                libc::uname(data.as_mut_ptr()),
+                0,
+                "unknown host config, please use `--target=` explicitly"
             );
 
-            match host_machine {
-                IMAGE_FILE_MACHINE_ARM64 => TargetPair::Arm64Windows,
-                IMAGE_FILE_MACHINE_AMD64 => TargetPair::X86_64Windows,
-                _ => panic!("unknown host config, please use `--target=` explicitly"),
-            }
-        }
-    }
-
-    #[cfg(target_family = "unix")]
-    {
-        use std::ffi::CStr;
-        use std::mem::MaybeUninit;
-
-        let (arch, os) = unsafe {
-            let mut data = MaybeUninit::uninit();
-            let uname = {
-                assert_eq!(
-                    libc::uname(data.as_mut_ptr()),
-                    0,
-                    "unknown host config, please use `--target=` explicitly"
-                );
-
-                // libc::uname initialized the data
-                data.assume_init()
-            };
-
-            // this is guaranteed to be populated by `libc::uname`,
-            // POSIX guarantees a null terminator
-            (
-                CStr::from_ptr(uname.machine.as_ptr()),
-                CStr::from_ptr(uname.sysname.as_ptr()),
-            )
+            // libc::uname initialized the data
+            data.assume_init()
         };
 
-        let arch_str = arch.to_str().expect("machine string is not utf-8");
-        let os_str = os.to_str().expect("os string is not utf-8");
+        // this is guaranteed to be populated by `libc::uname`,
+        // POSIX guarantees a null terminator
+        (
+            CStr::from_ptr(uname.machine.as_ptr()),
+            CStr::from_ptr(uname.sysname.as_ptr()),
+        )
+    };
 
-        match (arch_str, os_str) {
-            ("arm64", "Darwin") => TargetPair::Arm64macOS,
-            ("x86_64", "Darwin") => TargetPair::X86_64macOS,
-            ("aarch64", i) if i.contains("linux") => TargetPair::Aarch64Linux,
-            ("x86_64", i) if i.contains("linux") => TargetPair::X86_64Linux,
-            _ => panic!("unknown `uname` hardware configuration, use `--target` explicitly"),
-        }
+    let arch_str = arch.to_str().expect("machine string is not utf-8");
+    let os_str = os.to_str().expect("os string is not utf-8");
+
+    match (arch_str, os_str) {
+        ("arm64", "Darwin") => TargetPair::Arm64macOS,
+        ("x86_64", "Darwin") => TargetPair::X86_64macOS,
+        ("aarch64", i) if i.contains("linux") => TargetPair::Aarch64Linux,
+        ("x86_64", i) if i.contains("linux") => TargetPair::X86_64Linux,
+        _ => panic!("unknown `uname` hardware configuration, use `--target` explicitly"),
     }
 }
 
@@ -188,6 +205,12 @@ fn target_pair() -> impl Parser<Option<TargetPair>> {
         .help("the target to generate code for (affects default emit format)")
         .argument::<TargetPair>("TARGET")
         .optional()
+}
+
+fn fixed_intervals() -> impl Parser<bool> {
+    bpaf::long("fixed-intervals")
+        .help("whether to attempt to print fixed-interval information")
+        .flag(true, false)
 }
 
 /// Which register allocator to use

@@ -8,7 +8,7 @@
 //                                                                           //
 //======---------------------------------------------------------------======//
 
-use crate::arena::SecondaryMap;
+use crate::arena::{ArenaKey, SecondaryMap};
 use crate::codegen::regalloc::allocator::{defs, uses, RegisterMapping};
 use crate::codegen::{
     Allocation, Architecture, MIRFunction, MachInst, PReg, ProgramPoint, Reg, RegisterAllocator,
@@ -31,53 +31,10 @@ pub struct StackRegAlloc {
 }
 
 impl StackRegAlloc {
-    fn stack_space_for<Arch: Architecture>(
-        &mut self,
-        frame: &mut dyn StackFrame<Arch>,
-        reg: Reg,
-    ) -> VariableLocation {
-        match self.spilled_regs.get(reg) {
-            Some(loc) => *loc,
-            None => {
-                let loc = frame.spill_slot(8);
-
-                self.spilled_regs.insert(reg, loc);
-
-                loc
-            }
-        }
-    }
-
-    fn spill<Arch: Architecture>(
-        &mut self,
-        pp: ProgramPoint,
-        frame: &mut dyn StackFrame<Arch>,
-        reg: Reg,
-        tmp: PReg,
-    ) {
-        let loc = self.stack_space_for(frame, reg);
-
-        self.spills
-            .push((pp, SpillReload::Spill { from: tmp, to: loc }))
-    }
-
-    fn reload<Arch: Architecture>(
-        &mut self,
-        pp: ProgramPoint,
-        frame: &mut dyn StackFrame<Arch>,
-        reg: Reg,
-        tmp: PReg,
-    ) {
-        let loc = self.stack_space_for(frame, reg);
-
-        self.spills
-            .push((pp, SpillReload::Reload { from: loc, to: tmp }))
-    }
-
     fn order_temporaries<Arch: Architecture>(&mut self, frame: &mut dyn StackFrame<Arch>) {
         // we exclusively use clobbered registers, we spill everything anyway
         // so we may as well not necessitate preserving registers
-        for &reg in frame.register_priority().clobbered.iter().rev() {
+        for &reg in frame.registers().clobbered.iter().rev() {
             self.temporary_regs.push(reg);
         }
     }
@@ -102,22 +59,8 @@ impl StackRegAlloc {
             self.temporary_regs.push(preg);
         }
     }
-}
 
-impl Default for StackRegAlloc {
-    fn default() -> Self {
-        Self {
-            spills: Vec::default(),
-            mapping: RegisterMapping::new(),
-            spilled_regs: SecondaryMap::default(),
-            temporary_regs: Vec::default(),
-            taken_temporary_regs: SmallVec::default(),
-        }
-    }
-}
-
-impl<Arch: Architecture> RegisterAllocator<Arch> for StackRegAlloc {
-    fn allocate(
+    fn allocate<Arch: Architecture>(
         mut self,
         program: &MIRFunction<Arch::Inst>,
         frame: &mut dyn StackFrame<Arch>,
@@ -134,10 +77,10 @@ impl<Arch: Architecture> RegisterAllocator<Arch> for StackRegAlloc {
         //   4. for all other instructions, we load all operands and then store all modified (virtual) registers.
         //
         for (i, &inst) in program.all_instructions().iter().enumerate() {
-            let before = ProgramPoint(i as u32);
-            let after = ProgramPoint((i + 1) as u32);
+            let before = ProgramPoint::key_new(i);
+            let after = ProgramPoint::key_new(i + 1);
 
-            if let Some(mov) = inst.as_move() {
+            if let Some(mov) = inst.as_copy() {
                 match (mov.from.as_preg(), mov.to.to_reg().as_preg()) {
                     // case #1, need to spill `to`
                     (Some(from), None) => {
@@ -228,5 +171,66 @@ impl<Arch: Architecture> RegisterAllocator<Arch> for StackRegAlloc {
             spills: mem::take(&mut self.spills),
             mapping: mem::replace(&mut self.mapping, RegisterMapping::new()),
         }
+    }
+
+    fn stack_space_for<Arch: Architecture>(
+        &mut self,
+        frame: &mut dyn StackFrame<Arch>,
+        reg: Reg,
+    ) -> VariableLocation {
+        match self.spilled_regs.get(reg) {
+            Some(loc) => *loc,
+            None => {
+                let loc = frame.spill_slot(8);
+
+                self.spilled_regs.insert(reg, loc);
+
+                loc
+            }
+        }
+    }
+
+    fn spill<Arch: Architecture>(
+        &mut self,
+        pp: ProgramPoint,
+        frame: &mut dyn StackFrame<Arch>,
+        reg: Reg,
+        tmp: PReg,
+    ) {
+        let loc = self.stack_space_for(frame, reg);
+
+        self.spills
+            .push((pp, SpillReload::Spill { from: tmp, to: loc }))
+    }
+
+    fn reload<Arch: Architecture>(
+        &mut self,
+        pp: ProgramPoint,
+        frame: &mut dyn StackFrame<Arch>,
+        reg: Reg,
+        tmp: PReg,
+    ) {
+        let loc = self.stack_space_for(frame, reg);
+
+        self.spills
+            .push((pp, SpillReload::Reload { from: loc, to: tmp }))
+    }
+}
+
+impl Default for StackRegAlloc {
+    fn default() -> Self {
+        Self {
+            spills: Vec::default(),
+            mapping: RegisterMapping::new(),
+            spilled_regs: SecondaryMap::default(),
+            temporary_regs: Vec::default(),
+            taken_temporary_regs: SmallVec::default(),
+        }
+    }
+}
+
+impl<Arch: Architecture> RegisterAllocator<Arch> for StackRegAlloc {
+    fn allocate(program: &MIRFunction<Arch::Inst>, frame: &mut dyn StackFrame<Arch>) -> Allocation {
+        StackRegAlloc::default().allocate(program, frame)
     }
 }

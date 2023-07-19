@@ -8,7 +8,7 @@
 //                                                                           //
 //======---------------------------------------------------------------======//
 
-use crate::arena::SecondaryMap;
+use crate::arena::{ArenaKey, SecondaryMap};
 use crate::codegen::{
     Allocation, Architecture, MIRBlockInterval, MIRFunction, MachInst, ProgramPoint, SpillReload,
     StackFrame,
@@ -43,7 +43,7 @@ impl Rewriter {
         let mut out = Vec::default();
         let mut spills = self.allocation.spills.iter().peekable();
         let mut block_intervals = SecondaryMap::default();
-        let mut pp = ProgramPoint(0);
+        let mut pp = ProgramPoint::key_new(0);
         let mut index = 0u32;
 
         for &block in function.program_order() {
@@ -84,9 +84,14 @@ impl Rewriter {
                     index += (out.len() - old) as u32;
                 }
 
-                out.push(rewritten);
-                pp = ProgramPoint(pp.0 + 1);
-                index += 1;
+                // any `%r <- %r` instruction is removed, they are useless but common after
+                // regalloc. anything else is added to the buffer
+                if !rewritten.is_nop_copy() {
+                    out.push(rewritten);
+                    index += 1;
+                }
+
+                pp = ProgramPoint::key_new(pp.key_index() + 1);
             }
 
             // update the block intervals, this will include the epilogue(s)

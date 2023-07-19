@@ -19,7 +19,8 @@ use crate::codegen::{
 };
 use crate::ir;
 use crate::ir::{
-    Array, Cursor, FuncView, Function, Signature, StackSlot, Struct, Type, TypePool, UType, Value,
+    Array, Cursor, FuncView, Function, FunctionMetadata, Signature, StackSlot, Struct, Type,
+    TypePool, UType, Value,
 };
 use crate::utility::SaHashMap;
 use smallvec::SmallVec;
@@ -145,8 +146,7 @@ impl SignatureABI {
 ///
 /// This ABI is for x86-64 on most Unix platforms (Linux, macOS, BSD).
 pub struct SystemVStackFrame {
-    able_to_omit: bool,
-    is_leaf: bool,
+    metadata: FunctionMetadata,
     stack_size: usize,
     additional: usize,
     options: CodegenOptions,
@@ -174,8 +174,7 @@ impl SystemVStackFrame {
         let sig = func.signature();
 
         let mut obj = Self {
-            able_to_omit: !metadata.has_alloca,
-            is_leaf: metadata.is_leaf,
+            metadata,
             stack_size: 0,
             additional: 0,
             options: target.options(),
@@ -212,7 +211,7 @@ impl SystemVStackFrame {
 
     #[inline]
     fn will_omit_fp(&self) -> bool {
-        self.able_to_omit && self.options.omit_frame_pointer
+        !self.metadata.has_alloca && self.options.omit_frame_pointer
     }
 
     #[inline]
@@ -225,7 +224,7 @@ impl SystemVStackFrame {
         //
         // note that we don't do this if we will emit a frame pointer, because
         // the prologue would do `push rbp` and add an extra 8
-        if self.stack_size == 0 && !self.is_leaf && self.able_to_omit {
+        if self.stack_size == 0 && !self.metadata.is_leaf && !self.metadata.has_alloca {
             self.stack_size += 8;
 
             // almost every type only has <= 16-byte alignment here, once we've added
@@ -353,7 +352,11 @@ impl StackFrame<X86_64> for SystemVStackFrame {
             .expect("value is not a parameter")
         {
             ParamLocation::InReg(reg) => {
+                ctx.begin_caller_defined_fixed_interval(reg.as_preg().unwrap());
+
                 greedy_isel::zeroing_mov(result, RegMemImm::Reg(reg), def.dfg.ty(param), ctx);
+
+                ctx.end_caller_defined_fixed_interval(reg.as_preg().unwrap());
             }
             ParamLocation::RelativeToFP(offset) => {
                 let loc = self.fp_relative_offset_into_indirect_address(offset, ctx);
@@ -380,18 +383,21 @@ impl StackFrame<X86_64> for SystemVStackFrame {
                     let reg = self.signature_abi.ret[0];
                     let result = ctx.result_reg(val, reg.class());
 
+                    ctx.begin_fixed_interval(&[reg]);
+
                     greedy_isel::zeroing_mov(
                         WriteableReg::from_reg(Reg::from_preg(reg)),
                         RegMemImm::Reg(result),
                         ty,
                         ctx,
                     );
+
+                    ctx.emit(Inst::Ret(Ret {}));
+                    ctx.end_fixed_interval(&[reg]);
                 }
                 _ => todo!("aggregates that fit in registers"),
             }
         }
-
-        ctx.emit(Inst::Ret(Ret {}));
     }
 
     fn spill_slot(&mut self, bytes: usize) -> VariableLocation {
@@ -410,12 +416,16 @@ impl StackFrame<X86_64> for SystemVStackFrame {
         }
     }
 
-    fn register_use_def_call(&mut self, call: Inst, uses: &[Reg], defs: &[Reg]) {
+    fn register_use_def_call(&mut self, call: Inst, uses: &[PReg], defs: &[PReg]) {
         todo!()
     }
 
-    fn call_use_defs(&self, call: Inst) -> (&[Reg], &[Reg]) {
+    fn call_use_defs(&self, call: Inst) -> (&[PReg], &[PReg]) {
         todo!()
+    }
+
+    fn ret_uses(&self, ret: Inst) -> &[PReg] {
+        &self.signature_abi.ret
     }
 
     fn generate_prologue(&self, out: &mut Vec<Inst>) {
@@ -442,13 +452,17 @@ impl StackFrame<X86_64> for SystemVStackFrame {
             }));
         }
 
-        // sub rsp, stack_size
-        manipulate_rsp!(self, out, ALUOpcode::Sub);
+        if self.stack_size != 0 {
+            // sub rsp, stack_size
+            manipulate_rsp!(self, out, ALUOpcode::Sub);
+        }
     }
 
     fn generate_epilogue(&self, out: &mut Vec<Inst>) {
-        // add rsp, stack_size
-        manipulate_rsp!(self, out, ALUOpcode::Add);
+        if self.stack_size != 0 {
+            // add rsp, stack_size
+            manipulate_rsp!(self, out, ALUOpcode::Add);
+        }
 
         if !self.will_omit_fp() {
             // pop rbp
@@ -467,29 +481,23 @@ impl StackFrame<X86_64> for SystemVStackFrame {
         }
     }
 
-    fn register_priority(&self) -> AvailableRegisters {
-        // rbp isn't available to allocate at all unless we're omitting the frame pointer
-        let callee_preserved: &'static [PReg] = if self.will_omit_fp() {
-            const CALLEE_PRESERVED_OMIT_FP: [PReg; 6] = [
-                X86_64::RBP,
-                X86_64::RBX,
-                X86_64::R12,
-                X86_64::R13,
-                X86_64::R14,
-                X86_64::R15,
-            ];
+    fn registers(&self) -> AvailableRegisters {
+        const CALLEE_PRESERVED: [PReg; 6] = [
+            X86_64::RBX,
+            X86_64::R12,
+            X86_64::R13,
+            X86_64::R14,
+            X86_64::R15,
+            X86_64::RBP,
+        ];
 
-            &CALLEE_PRESERVED_OMIT_FP
+        // rbp isn't available to allocate at all unless we're omitting the frame pointer,
+        // if it isn't available to allocate then we manage rbp and don't have to tell the
+        // register allocator to preserve it
+        let callee_preserved = if self.will_omit_fp() {
+            &CALLEE_PRESERVED[..6]
         } else {
-            const CALLEE_PRESERVED_WITH_FP: [PReg; 5] = [
-                X86_64::RBX,
-                X86_64::R12,
-                X86_64::R13,
-                X86_64::R14,
-                X86_64::R15,
-            ];
-
-            &CALLEE_PRESERVED_WITH_FP
+            &CALLEE_PRESERVED[..5]
         };
 
         const CALLER_PRESERVED: [PReg; 9] = [
@@ -504,10 +512,24 @@ impl StackFrame<X86_64> for SystemVStackFrame {
             X86_64::R11,
         ];
 
+        const UNAVAILABLE: [PReg; 3] = [X86_64::RIP, X86_64::RSP, X86_64::RBP];
+
+        let un_allocatable = if self.will_omit_fp() {
+            &UNAVAILABLE[0..2]
+        } else {
+            &UNAVAILABLE[0..3]
+        };
+
         AvailableRegisters {
             preserved: callee_preserved,
             clobbered: &CALLER_PRESERVED,
+            unavailable: un_allocatable,
+            high_priority_temporaries: &[],
         }
+    }
+
+    fn metadata(&self) -> FunctionMetadata {
+        self.metadata
     }
 }
 

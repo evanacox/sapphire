@@ -11,10 +11,12 @@
 use crate::arena::SecondaryMap;
 use crate::codegen::x86_64::*;
 use crate::codegen::{
-    Emitter, Extern, MIRBlock, MIRFunction, MIRModule, Reg, RegClass, TargetPair,
+    Emitter, Extern, MIRBlock, MIRFunction, MIRModule, PReg, Reg, RegClass, TargetPair,
 };
 use crate::ir::{FloatFormat, UType};
-use crate::utility::StringPool;
+use crate::utility::{SaHashMap, StringPool};
+use smallvec::SmallVec;
+use std::iter;
 use std::str::FromStr;
 
 /// Different assembly formats for x86-64
@@ -35,6 +37,135 @@ fn into_mac_os_symbol_name(name: &str, is_mac: bool) -> String {
         format!("_{name}")
     } else {
         name.to_string()
+    }
+}
+
+/// Formats the "canonical" assembly form of an x86-64 register
+pub fn format_reg(reg: Reg, width: Width, syntax: X86_64Assembly) -> String {
+    let asm_prefix = if syntax == X86_64Assembly::GNU {
+        "%"
+    } else {
+        ""
+    };
+
+    if let Some(vreg) = reg.as_vreg() {
+        let number = vreg.hw_number();
+        let prefix = match vreg.class() {
+            RegClass::Float => "f",
+            RegClass::Int => "i",
+        };
+
+        format!("{asm_prefix}v{prefix}{number}")
+    } else {
+        let preg = reg.as_preg().unwrap();
+
+        if preg.class() == RegClass::Float {
+            let n = preg.hw_number();
+
+            return format!("{asm_prefix}xmm{n}");
+        }
+
+        let name = match preg {
+            X86_64::RAX => match width {
+                Width::Byte => "al",
+                Width::Word => "ax",
+                Width::Dword => "eax",
+                Width::Qword => "rax",
+            },
+            X86_64::RBX => match width {
+                Width::Byte => "bl",
+                Width::Word => "bx",
+                Width::Dword => "ebx",
+                Width::Qword => "rbx",
+            },
+            X86_64::RCX => match width {
+                Width::Byte => "cl",
+                Width::Word => "cx",
+                Width::Dword => "ecx",
+                Width::Qword => "rcx",
+            },
+            X86_64::RDX => match width {
+                Width::Byte => "dl",
+                Width::Word => "dx",
+                Width::Dword => "edx",
+                Width::Qword => "rdx",
+            },
+            X86_64::RSI => match width {
+                Width::Byte => "sil",
+                Width::Word => "si",
+                Width::Dword => "esi",
+                Width::Qword => "rsi",
+            },
+            X86_64::RDI => match width {
+                Width::Byte => "dil",
+                Width::Word => "di",
+                Width::Dword => "edi",
+                Width::Qword => "rdi",
+            },
+            X86_64::RBP => match width {
+                Width::Byte => "bpl",
+                Width::Word => "bp",
+                Width::Dword => "ebp",
+                Width::Qword => "rbp",
+            },
+            X86_64::RSP => match width {
+                Width::Byte => "spl",
+                Width::Word => "sp",
+                Width::Dword => "esp",
+                Width::Qword => "rsp",
+            },
+            X86_64::R8 => match width {
+                Width::Byte => "r8b",
+                Width::Word => "r8w",
+                Width::Dword => "r8d",
+                Width::Qword => "r8",
+            },
+            X86_64::R9 => match width {
+                Width::Byte => "r9b",
+                Width::Word => "r9w",
+                Width::Dword => "r9d",
+                Width::Qword => "r9",
+            },
+            X86_64::R10 => match width {
+                Width::Byte => "r10b",
+                Width::Word => "r10w",
+                Width::Dword => "r10d",
+                Width::Qword => "r10",
+            },
+            X86_64::R11 => match width {
+                Width::Byte => "r11b",
+                Width::Word => "r11w",
+                Width::Dword => "r11d",
+                Width::Qword => "r11",
+            },
+            X86_64::R12 => match width {
+                Width::Byte => "r12b",
+                Width::Word => "r12w",
+                Width::Dword => "r12d",
+                Width::Qword => "r12",
+            },
+            X86_64::R13 => match width {
+                Width::Byte => "r13b",
+                Width::Word => "r13w",
+                Width::Dword => "r13d",
+                Width::Qword => "r13",
+            },
+            X86_64::R14 => match width {
+                Width::Byte => "r14b",
+                Width::Word => "r14w",
+                Width::Dword => "r14d",
+                Width::Qword => "r14",
+            },
+            X86_64::R15 => match width {
+                Width::Byte => "r15b",
+                Width::Word => "r15w",
+                Width::Dword => "r15d",
+                Width::Qword => "r15",
+            },
+            _ => unreachable!(),
+        };
+
+        format!("{asm_prefix}{name}")
     }
 }
 
@@ -90,12 +221,14 @@ impl Emitter<X86_64> for Emit {
         module: &MIRModule<Inst>,
         format: Self::AssemblyFormat,
         target: TargetPair,
+        fixed_interval_comments: bool,
     ) -> String {
         let emitter = AsmEmitter {
             mode: format,
             mac_os: matches!(target, TargetPair::X86_64macOS),
             state: String::default(),
             pool: module.symbols().clone(),
+            fixed_interval_comments,
         };
 
         emitter.emit(module)
@@ -111,6 +244,7 @@ struct AsmEmitter {
     mac_os: bool,
     state: String,
     pool: StringPool,
+    fixed_interval_comments: bool,
 }
 
 impl AsmEmitter {
@@ -205,21 +339,51 @@ impl AsmEmitter {
         }
     }
 
-    fn emit_function_name(&mut self, name: &str) {
+    fn emit_function_name(&mut self, name: &str, defined_by_caller: &[PReg]) {
         let name = match self.mode {
             X86_64Assembly::GNU | X86_64Assembly::GNUIntel | X86_64Assembly::NASM => {
-                format!("    .text\n{name}:\n")
+                self.state += "    .text\n";
+
+                format!("{name}:")
             }
-            X86_64Assembly::MASM => format!("_TEXT SEGMENT\n{name} PROC\n"),
+            X86_64Assembly::MASM => {
+                self.state += "_TEXT SEGMENT\n";
+
+                format!("{name} PROC")
+            }
         };
 
         self.state += &name;
+
+        if self.fixed_interval_comments && !defined_by_caller.is_empty() {
+            // append spaces if name isn't obscenely long
+            if name.len() < 50 {
+                self.state.extend(iter::repeat(' ').take(50 - name.len()));
+            } else {
+                self.state += " ";
+            }
+
+            self.state += &format!("{} def by caller:", self.comment_char());
+
+            for &reg in defined_by_caller {
+                let r = self.emit_reg(Reg::from_preg(reg), Width::Qword);
+
+                self.state += &format!(" {r},");
+            }
+
+            // remove last ,
+            self.state.pop();
+        }
+
+        self.state += "\n";
     }
 
     fn emit_function(&mut self, name: &str, function: &MIRFunction<Inst>) {
         let mut block_names = SecondaryMap::with_capacity(function.program_order().len());
+        let (fixed_begin_at, fixed_end_at, defined_by_caller) = self.fixed_begin_end(function);
+        let mut i = 0usize;
 
-        self.emit_function_name(name);
+        self.emit_function_name(name, &defined_by_caller);
 
         for (count, &block) in function
             .program_order()
@@ -237,14 +401,102 @@ impl AsmEmitter {
             }
 
             for &inst in function.block(block) {
-                self.state += "    ";
-                self.state += &self.emit_inst(inst, &block_names);
-                self.state += "\n";
+                let asm = self.emit_inst(inst, &block_names);
+
+                self.emit_single_inst(i, asm, &fixed_begin_at, &fixed_end_at);
+
+                i += 1;
             }
         }
 
         if self.mode == X86_64Assembly::MASM {
             self.state += "_TEXT ENDS\n"
+        }
+    }
+
+    fn fixed_begin_end(
+        &mut self,
+        function: &MIRFunction<Inst>,
+    ) -> (
+        SaHashMap<usize, SmallVec<[PReg; 2]>>,
+        SaHashMap<usize, SmallVec<[PReg; 2]>>,
+        Vec<PReg>,
+    ) {
+        let mut fixed_begin_at = SaHashMap::<usize, SmallVec<[PReg; 2]>>::default();
+        let mut fixed_end_at = SaHashMap::<usize, SmallVec<[PReg; 2]>>::default();
+        let mut defined_by_caller = Vec::<PReg>::default();
+
+        for (reg, intervals) in function.fixed_intervals().all_intervals() {
+            for &interval in intervals {
+                match interval.first_defined_after() {
+                    Some(idx) => {
+                        fixed_begin_at.entry(idx as usize).or_default().push(reg);
+                    }
+                    None => {
+                        defined_by_caller.push(reg);
+                    }
+                }
+
+                fixed_end_at
+                    .entry(interval.last_used_by() as usize)
+                    .or_default()
+                    .push(reg);
+            }
+        }
+
+        (fixed_begin_at, fixed_end_at, defined_by_caller)
+    }
+
+    fn emit_single_inst(
+        &mut self,
+        i: usize,
+        asm: String,
+        fixed_begin_at: &SaHashMap<usize, SmallVec<[PReg; 2]>>,
+        fixed_end_at: &SaHashMap<usize, SmallVec<[PReg; 2]>>,
+    ) {
+        // if we begin or end any fixed intervals, we print it out here.
+        //
+        // we'll get a result that looks like this:
+        //
+        //     mov vi0, rax                      ; fixed: end rax
+        //
+        if self.fixed_interval_comments
+            && (fixed_begin_at.contains_key(&i) || fixed_end_at.contains_key(&i))
+        {
+            let ch = self.comment_char();
+
+            self.state += &format!("    {asm:<45} {ch} fixed:");
+
+            if let Some(vec) = fixed_begin_at.get(&i) {
+                for &reg in fixed_begin_at.get(&i).unwrap().iter() {
+                    self.state += &format!(
+                        " begin {},",
+                        self.emit_reg(Reg::from_preg(reg), Width::Qword)
+                    );
+                }
+            }
+
+            if let Some(vec) = fixed_end_at.get(&i) {
+                for &reg in fixed_end_at.get(&i).unwrap().iter() {
+                    self.state +=
+                        &format!(" end {},", self.emit_reg(Reg::from_preg(reg), Width::Qword));
+                }
+            }
+
+            // remove the last ,
+            self.state.pop();
+            self.state += "\n";
+        } else {
+            self.state += "    ";
+            self.state += &asm;
+            self.state += "\n";
+        }
+    }
+
+    fn comment_char(&self) -> char {
+        match self.mode {
+            X86_64Assembly::GNU | X86_64Assembly::GNUIntel => '#',
+            X86_64Assembly::NASM | X86_64Assembly::MASM => ';',
         }
     }
 
@@ -280,131 +532,7 @@ impl AsmEmitter {
     }
 
     fn emit_reg(&self, reg: Reg, width: Width) -> String {
-        let asm_prefix = if self.mode == X86_64Assembly::GNU {
-            "%"
-        } else {
-            ""
-        };
-
-        if let Some(vreg) = reg.as_vreg() {
-            let number = vreg.hw_number();
-            let prefix = match vreg.class() {
-                RegClass::Float => "f",
-                RegClass::Int => "i",
-            };
-
-            format!("{asm_prefix}v{prefix}{number}")
-        } else {
-            let preg = reg.as_preg().unwrap();
-
-            if preg.class() == RegClass::Float {
-                let n = preg.hw_number();
-
-                return format!("{asm_prefix}xmm{n}");
-            }
-
-            let name = match preg {
-                X86_64::RAX => match width {
-                    Width::Byte => "al",
-                    Width::Word => "ax",
-                    Width::Dword => "eax",
-                    Width::Qword => "rax",
-                },
-                X86_64::RBX => match width {
-                    Width::Byte => "bl",
-                    Width::Word => "bx",
-                    Width::Dword => "ebx",
-                    Width::Qword => "rbx",
-                },
-                X86_64::RCX => match width {
-                    Width::Byte => "cl",
-                    Width::Word => "cx",
-                    Width::Dword => "ecx",
-                    Width::Qword => "rcx",
-                },
-                X86_64::RDX => match width {
-                    Width::Byte => "dl",
-                    Width::Word => "dx",
-                    Width::Dword => "edx",
-                    Width::Qword => "rdx",
-                },
-                X86_64::RSI => match width {
-                    Width::Byte => "sil",
-                    Width::Word => "si",
-                    Width::Dword => "esi",
-                    Width::Qword => "rsi",
-                },
-                X86_64::RDI => match width {
-                    Width::Byte => "dil",
-                    Width::Word => "di",
-                    Width::Dword => "edi",
-                    Width::Qword => "rdi",
-                },
-                X86_64::RBP => match width {
-                    Width::Byte => "bpl",
-                    Width::Word => "bp",
-                    Width::Dword => "ebp",
-                    Width::Qword => "rbp",
-                },
-                X86_64::RSP => match width {
-                    Width::Byte => "spl",
-                    Width::Word => "sp",
-                    Width::Dword => "esp",
-                    Width::Qword => "rsp",
-                },
-                X86_64::R8 => match width {
-                    Width::Byte => "r8b",
-                    Width::Word => "r8w",
-                    Width::Dword => "r8d",
-                    Width::Qword => "r8",
-                },
-                X86_64::R9 => match width {
-                    Width::Byte => "r9b",
-                    Width::Word => "r9w",
-                    Width::Dword => "r9d",
-                    Width::Qword => "r9",
-                },
-                X86_64::R10 => match width {
-                    Width::Byte => "r10b",
-                    Width::Word => "r10w",
-                    Width::Dword => "r10d",
-                    Width::Qword => "r10",
-                },
-                X86_64::R11 => match width {
-                    Width::Byte => "r11b",
-                    Width::Word => "r11w",
-                    Width::Dword => "r11d",
-                    Width::Qword => "r11",
-                },
-                X86_64::R12 => match width {
-                    Width::Byte => "r12b",
-                    Width::Word => "r12w",
-                    Width::Dword => "r12d",
-                    Width::Qword => "r12",
-                },
-                X86_64::R13 => match width {
-                    Width::Byte => "r13b",
-                    Width::Word => "r13w",
-                    Width::Dword => "r13d",
-                    Width::Qword => "r13",
-                },
-                X86_64::R14 => match width {
-                    Width::Byte => "r14b",
-                    Width::Word => "r14w",
-                    Width::Dword => "r14d",
-                    Width::Qword => "r14",
-                },
-                X86_64::R15 => match width {
-                    Width::Byte => "r15b",
-                    Width::Word => "r15w",
-                    Width::Dword => "r15d",
-                    Width::Qword => "r15",
-                },
-                _ => unreachable!(),
-            };
-
-            format!("{asm_prefix}{name}")
-        }
+        format_reg(reg, width, self.mode)
     }
 
     fn emit_indirect_address(&self, loc: IndirectAddress) -> String {

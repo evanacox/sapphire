@@ -8,14 +8,21 @@
 //                                                                           //
 //======---------------------------------------------------------------======//
 
-use crate::codegen::{Architecture, MIRFunction, PReg, Reg, StackFrame, VariableLocation};
-use smallvec::SmallVec;
+use crate::codegen::{
+    Architecture, LiveInterval, MIRFunction, PReg, Reg, StackFrame, VariableLocation,
+};
+use smallvec::{smallvec, SmallVec};
 
 macro_rules! uses {
     ($inst:expr, $fr:expr) => {{
         let mut collector = SmallVec::<[(Reg, u32); 16]>::default();
+        let unavailable = $fr.registers().unavailable;
 
         $inst.uses($fr, &mut collector);
+
+        // any uses of unavailable registers are ignored
+        collector
+            .retain(|(reg, _)| !(reg.is_preg() && unavailable.contains(&reg.as_preg().unwrap())));
 
         collector
     }};
@@ -31,18 +38,36 @@ macro_rules! defs {
     }};
 }
 
+use crate::arena::{ArenaKey, SecondaryMap};
+use crate::dense_arena_key;
 pub(in crate::codegen::regalloc) use defs;
 pub(in crate::codegen::regalloc) use uses;
 
-/// A single point in a MIR program.
-///
-/// This represents an offset from the beginning of the program,
-/// with the assumption being that this points "before" that offset. Ex:
-/// a reload is set to be inserted at `ProgramPoint(0)`, this means the
-/// instruction is to be emitted *before* the instruction at offset `0`.
-#[repr(transparent)]
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
-pub struct ProgramPoint(pub u32);
+dense_arena_key! {
+    /// A single point in a MIR program.
+    ///
+    /// This represents an offset from the beginning of the program,
+    /// with the assumption being that this points "before" that offset. Ex:
+    /// a reload is set to be inserted at `ProgramPoint(0)`, this means the
+    /// instruction is to be emitted *before* the instruction at offset `0`.
+    pub struct ProgramPoint;
+}
+
+impl ProgramPoint {
+    /// Creates a [`ProgramPoint`] that points to the location before `i`.
+    #[inline]
+    pub fn before(i: u32) -> Self {
+        Self::key_new(i as usize)
+    }
+
+    /// Returns the index that the program point points to.
+    ///
+    /// Remember that `self` points to the instruction **before** the index returned.
+    #[inline]
+    pub fn offset_of_next(self) -> u32 {
+        self.0
+    }
+}
 
 /// A nice way to iterate over program points when desired.
 ///
@@ -100,6 +125,45 @@ pub enum SpillReload {
         /// The physical register being reloaded into
         to: PReg,
     },
+}
+
+/// A list of "fixed" intervals.
+///
+/// These are live intervals for physical registers, and are used to create "sections"
+#[derive(Clone, Debug, Default)]
+pub struct FixedIntervals {
+    intervals: SecondaryMap<PReg, SmallVec<[LiveInterval; 2]>>,
+}
+
+impl FixedIntervals {
+    /// Adds an interval to a register's set of fixed intervals.
+    #[inline]
+    pub fn add_fixed_interval(&mut self, reg: PReg, interval: LiveInterval) {
+        if let Some(vec) = self.intervals.get_mut(reg) {
+            vec.push(interval);
+            vec.sort_unstable();
+        } else {
+            self.intervals.insert(reg, smallvec![interval]);
+        }
+    }
+
+    /// Gets the list of fixed intervals for `reg`.
+    ///
+    /// The list is guaranteed to be sorted in ascending order.
+    #[inline]
+    pub fn intervals_for(&self, reg: PReg) -> &[LiveInterval] {
+        self.intervals
+            .get(reg)
+            .map(|vec| vec.as_slice())
+            .unwrap_or(&[])
+    }
+
+    /// Allows iterating over all the fixed intervals.
+    pub fn all_intervals(&self) -> impl Iterator<Item = (PReg, &[LiveInterval])> + '_ {
+        self.intervals
+            .iter()
+            .map(|(reg, vec)| (reg, vec.as_slice()))
+    }
 }
 
 /// Models mapping an instruction to the register allocation it has.
@@ -164,13 +228,9 @@ pub struct Allocation {
 /// program that can be fed into the [`Rewriter`](crate::codegen::Rewriter), containing
 /// a list of spills/reloads to insert, and a mapping of virtual registers
 /// to physical registers..
-pub trait RegisterAllocator<Arch: Architecture>: Sized + Default {
+pub trait RegisterAllocator<Arch: Architecture>: Sized {
     /// Computes a valid register allocation for the given "program" (function).
     ///
     /// If the allocator performs any spills, it tells `frame` through [`StackFrame::spill_slot`].
-    fn allocate(
-        self,
-        program: &MIRFunction<Arch::Inst>,
-        frame: &mut dyn StackFrame<Arch>,
-    ) -> Allocation;
+    fn allocate(program: &MIRFunction<Arch::Inst>, frame: &mut dyn StackFrame<Arch>) -> Allocation;
 }

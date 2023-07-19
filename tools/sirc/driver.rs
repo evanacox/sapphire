@@ -12,8 +12,8 @@ use crate::options::{Options, RegAlloc};
 use sapphire::analysis::*;
 use sapphire::codegen::x86_64::{GreedyISel, X86_64Assembly, X86_64};
 use sapphire::codegen::{
-    x86_64, Backend, GenericISel, PresetTargets, RegisterAllocator, Rewriter, StackRegAlloc,
-    TargetPair,
+    x86_64, Backend, GenericISel, LinearScanRegAlloc, PresetTargets, RegisterAllocator, Rewriter,
+    StackRegAlloc, TargetPair,
 };
 use sapphire::ir::Module;
 use sapphire::pass::*;
@@ -123,10 +123,27 @@ fn compile_x86_64(mut module: Module, pair: TargetPair, options: &Options) {
 
     let mut mir = GenericISel::<X86_64, GreedyISel>::lower(&mut target, &module, options.codegen);
 
+    #[cfg(none)]
+    for (func, frame) in mir.functions() {
+        let intervals = LiveIntervals::compute(func, frame.as_ref());
+
+        for (reg, interval) in intervals.intervals() {
+            let reg = x86_64::format_reg(reg, x86_64::Width::Qword, X86_64Assembly::GNU);
+            let end = interval.last_used_by();
+
+            if let Some(begin) = interval.first_defined_after() {
+                println!("{reg}: ({begin}, {end})");
+            } else {
+                println!("{reg}: [..., {end})");
+            }
+        }
+    }
+
     if options.reg_alloc != RegAlloc::None {
         for (func, frame) in mir.functions_mut() {
             let allocation = match options.reg_alloc {
-                RegAlloc::Stack => StackRegAlloc::default().allocate(func, frame.as_mut()),
+                RegAlloc::Stack => StackRegAlloc::allocate(func, frame.as_mut()),
+                RegAlloc::Linear => LinearScanRegAlloc::allocate(func, frame.as_mut()),
                 _ => todo!(),
             };
 
@@ -147,7 +164,10 @@ fn compile_x86_64(mut module: Module, pair: TargetPair, options: &Options) {
     };
 
     if options.print {
-        println!("{}", backend.assembly(output, pair));
+        println!(
+            "{}",
+            backend.assembly(output, pair, options.fixed_intervals)
+        );
     } else {
         unimplemented!()
     }

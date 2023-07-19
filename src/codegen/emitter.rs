@@ -25,10 +25,13 @@ pub trait Emitter<Arch: Architecture>: Sized {
 
     /// Emits assembly in a format specified by the emitter, returning a string
     /// that can be written to a file or printed.
+    ///
+    /// Note that `fixed_interval_comments` only works when regalloc has not been done.
     fn assembly(
         module: &MIRModule<Arch::Inst>,
         format: Self::AssemblyFormat,
         target: TargetPair,
+        fixed_interval_comments: bool,
     ) -> String;
 
     /// Emits object code in a format specified by the emitter, returning

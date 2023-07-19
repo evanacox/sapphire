@@ -9,7 +9,9 @@
 //======---------------------------------------------------------------======//
 
 use crate::arena::{ArenaMap, SecondaryMap};
-use crate::codegen::{Architecture, PReg, Reg, StackFrame, VariableLocation, WriteableReg};
+use crate::codegen::{
+    Architecture, FixedIntervals, PReg, Reg, StackFrame, VariableLocation, WriteableReg,
+};
 use crate::dense_arena_key;
 use crate::ir::Type;
 use crate::utility::{Packable, Str, StringPool};
@@ -20,7 +22,7 @@ use std::ops::Range;
 
 /// An abstract representation of a `mov` between two registers
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Hash)]
-pub struct Move {
+pub struct RegToRegCopy {
     /// The width (in bytes) of the copy
     pub width: usize,
     /// The destination of the copy
@@ -64,22 +66,29 @@ pub trait MachInst: Copy + Debug + Hash + Sized {
         collector: &mut RegCollector<N>,
     );
 
-    /// Checks if the instruction is a `mov` (or the equivalent for the
-    /// target architecture) between two registers, i.e. a copy.
-    ///
-    /// If it is, it can be coalesced by the copy coalescing pass.
+    /// Checks if the instruction is a copy between two registers.
     #[inline]
-    fn is_move(&self) -> bool {
-        self.as_move().is_some()
+    fn is_copy(&self) -> bool {
+        self.as_copy().is_some()
     }
 
-    /// Returns `self` as a [`Move`].
-    fn as_move(self) -> Option<Move>;
-
-    /// Creates a `mov` instruction that copies a value of `width` bytes.
+    /// Checks if the instruction is a copy from the same register being copied to.
     ///
-    /// This must return an object where [`Self::is_move`] returns `true`.
-    fn mov(width: usize, src: Reg, dest: WriteableReg) -> Self;
+    /// These `%r <- %r` copies are useless and are able to be removed by the rewriter.
+    #[inline]
+    fn is_nop_copy(&self) -> bool {
+        self.as_copy()
+            .is_some_and(|copy| copy.to.to_reg() == copy.from)
+    }
+
+    /// Returns `self` as a [`RegToRegCopy`] if `self` is a register-to-register copy.
+    fn as_copy(&self) -> Option<RegToRegCopy>;
+
+    /// Creates a target-specific copy instruction that copies a value of `width` bytes
+    /// between two registers.
+    ///
+    /// This must return an object where [`Self::is_copy`] returns `true`.
+    fn copy(width: usize, src: Reg, dest: WriteableReg) -> Self;
 
     /// Creates an instruction that loads `from` into `to`.
     fn load(width: usize, from: VariableLocation, to: PReg) -> Self;
@@ -226,6 +235,7 @@ pub struct MIRFunction<Inst: MachInst> {
     name: Str,
     insts: Vec<Inst>,
     order: Vec<MIRBlock>,
+    fixed: FixedIntervals,
     blocks: ArenaMap<MIRBlock, MIRBlockInterval>,
 }
 
@@ -235,12 +245,14 @@ impl<Inst: MachInst> MIRFunction<Inst> {
         insts: Vec<Inst>,
         blocks: ArenaMap<MIRBlock, MIRBlockInterval>,
         order: Vec<MIRBlock>,
+        fixed: FixedIntervals,
     ) -> Self {
         Self {
             name,
             insts,
             blocks,
             order,
+            fixed,
         }
     }
 
@@ -303,5 +315,10 @@ impl<Inst: MachInst> MIRFunction<Inst> {
         }
 
         self.insts = new_insts;
+    }
+
+    /// Gets the list of fixed intervals defined by the instruction selector.
+    pub fn fixed_intervals(&self) -> &FixedIntervals {
+        &self.fixed
     }
 }

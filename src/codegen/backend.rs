@@ -46,12 +46,19 @@ where
 
     /// Emits assembly in a format specified by the emitter, returning
     /// a string that can be written to a file
-    pub fn assembly(&self, format: Emit::AssemblyFormat, target: TargetPair) -> String {
-        Emit::assembly(&self.mir, format, target)
+    #[inline]
+    pub fn assembly(
+        &self,
+        format: Emit::AssemblyFormat,
+        target: TargetPair,
+        fixed_interval_comments: bool,
+    ) -> String {
+        Emit::assembly(&self.mir, format, target, fixed_interval_comments)
     }
 
     /// Emits object code in a format specified by the emitter, returning
     /// a byte array that can be written to a file
+    #[inline]
     pub fn object(&self, format: Emit::ObjectCodeFormat) -> Vec<u8> {
         Emit::object(&self.mir, format)
     }
@@ -116,8 +123,7 @@ impl PresetBackends {
         let mut mir = GenericISel::<X86_64, GreedyISel>::lower(&mut target, &module, options);
 
         for (func, frame) in mir.functions_mut() {
-            let alloc = StackRegAlloc::default();
-            let allocation = alloc.allocate(func, frame.as_mut());
+            let allocation = StackRegAlloc::allocate(func, frame.as_mut());
             let rewriter = Rewriter::with_allocation(allocation);
 
             rewriter.rewrite(func, frame.as_ref());

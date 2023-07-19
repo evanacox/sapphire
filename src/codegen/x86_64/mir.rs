@@ -10,7 +10,8 @@
 
 use crate::codegen::x86_64::X86_64;
 use crate::codegen::{
-    MIRBlock, MachInst, Move, PReg, Reg, RegCollector, StackFrame, VariableLocation, WriteableReg,
+    MIRBlock, MachInst, PReg, Reg, RegCollector, RegToRegCopy, StackFrame, VariableLocation,
+    WriteableReg,
 };
 use crate::ir;
 use crate::utility::Str;
@@ -945,7 +946,7 @@ impl MachInst for Inst {
             Inst::Call(call) => {
                 for &reg in frame.call_use_defs(*self).0 {
                     // we can't assume width, and they're extended to 8 anyway
-                    collector.push(into_pair(reg, Width::Qword));
+                    collector.push(into_pair(Reg::from_preg(reg), Width::Qword));
                 }
             }
             Inst::IndirectCall(call) => {
@@ -953,11 +954,15 @@ impl MachInst for Inst {
 
                 for &reg in frame.call_use_defs(*self).0 {
                     // we can't assume width, and they're extended to 8 anyway
-                    collector.push(into_pair(reg, Width::Qword));
+                    collector.push(into_pair(Reg::from_preg(reg), Width::Qword));
                 }
             }
             Inst::Jump(_) => {}
-            Inst::Ret(_) => {}
+            Inst::Ret(_) => {
+                for &reg in frame.ret_uses(*self) {
+                    collector.push(into_pair(Reg::from_preg(reg), Width::Qword));
+                }
+            }
             Inst::Ud2(_) => {}
         }
     }
@@ -1025,12 +1030,12 @@ impl MachInst for Inst {
             }
             Inst::Call(call) => {
                 for &reg in frame.call_use_defs(*self).1 {
-                    collector.push(into_pair(reg, Width::Qword));
+                    collector.push(into_pair(Reg::from_preg(reg), Width::Qword));
                 }
             }
             Inst::IndirectCall(_) => {
                 for &reg in frame.call_use_defs(*self).1 {
-                    collector.push(into_pair(reg, Width::Qword));
+                    collector.push(into_pair(Reg::from_preg(reg), Width::Qword));
                 }
             }
             Inst::Jump(_) => {}
@@ -1039,17 +1044,17 @@ impl MachInst for Inst {
         }
     }
 
-    fn is_move(&self) -> bool {
+    fn is_copy(&self) -> bool {
         match self {
             Self::Mov(mov) => matches!(mov.src, RegMemImm::Reg(_)),
             _ => false,
         }
     }
 
-    fn as_move(self) -> Option<Move> {
+    fn as_copy(&self) -> Option<RegToRegCopy> {
         match self {
             Self::Mov(mov) => match mov.src {
-                RegMemImm::Reg(src) => Some(Move {
+                RegMemImm::Reg(src) => Some(RegToRegCopy {
                     width: mov.width.into_bytes(),
                     to: mov.dest,
                     from: src,
@@ -1060,11 +1065,7 @@ impl MachInst for Inst {
         }
     }
 
-    fn is_ret(&self) -> bool {
-        matches!(self, Self::Ret(_))
-    }
-
-    fn mov(width: usize, src: Reg, dest: WriteableReg) -> Self {
+    fn copy(width: usize, src: Reg, dest: WriteableReg) -> Self {
         Self::Mov(Mov {
             width: Width::from_bytes(width),
             src: RegMemImm::Reg(src),
@@ -1102,6 +1103,10 @@ impl MachInst for Inst {
                 }
             },
         })
+    }
+
+    fn is_ret(&self) -> bool {
+        matches!(self, Self::Ret(_))
     }
 
     fn rewrite(self, rewrites: &[(Reg, PReg)]) -> Self {

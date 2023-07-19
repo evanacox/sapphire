@@ -39,9 +39,7 @@ mod liveness;
 mod lsra;
 mod stack;
 
-pub use allocator::{
-    Allocation, ProgramPoint, ProgramPointsIterator, RegisterAllocator, SpillReload,
-};
+pub use allocator::*;
 pub use graph::GraphColoringRegAlloc;
 pub use liveness::*;
 pub use lsra::LinearScanRegAlloc;

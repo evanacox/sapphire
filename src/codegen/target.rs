@@ -13,6 +13,7 @@ use crate::codegen::x86_64::{LinuxX86_64, MacOSX86_64, WindowsX86_64, X86_64};
 use crate::codegen::{CallingConv, CodegenOptions, MachInst, StackFrame};
 use crate::ir::{FloatFormat, Function, Module, Type, TypePool, UType};
 use crate::utility::SaHashMap;
+use std::fmt;
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::str::FromStr;
@@ -58,6 +59,19 @@ impl FromStr for TargetPair {
             _ => {
                 Err("the available targets are `x86_64-linux`, `x86_64-mac`, `x86_64-win`, `aarch64-linux`, `arm64-mac`, `arm64-win`")
             }
+        }
+    }
+}
+
+impl fmt::Display for TargetPair {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            TargetPair::X86_64Linux => write!(f, "x86_64-linux"),
+            TargetPair::X86_64macOS => write!(f, "x86_64-mac"),
+            TargetPair::X86_64Windows => write!(f, "x86_64-win"),
+            TargetPair::Aarch64Linux => write!(f, "aarch64-linux"),
+            TargetPair::Arm64macOS => write!(f, "arm64-mac"),
+            TargetPair::Arm64Windows => write!(f, "arm64-win"),
         }
     }
 }

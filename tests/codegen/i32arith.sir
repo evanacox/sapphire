@@ -1,8 +1,10 @@
 ; STANDARD
-fn i32 @funny(i32, i32) {
-entry(i32 %0, i32 %1):
-  %2 = iconst i32 5
-  %3 = iadd i32 %0, %1
-  %4 = imul i32 %3, %2
-  ret i32 %4
+fn i32 @big(i32, i32, i32, i32, i32, i32) {
+entry(i32 %0, i32 %1, i32 %2, i32 %3, i32 %4, i32 %5):
+  %6 = iadd i32 %0, %1
+  %7 = iadd i32 %6, %2
+  %8 = iadd i32 %7, %3
+  %9 = iadd i32 %8, %4
+  %10 = iadd i32 %9, %5
+  ret i32 %10
 }
