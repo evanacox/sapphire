@@ -99,7 +99,7 @@ pub fn parse_options() -> Options {
     let reg_alloc = match regalloc {
         Some(r) => r,
         None => match opt {
-            OptLevel::Debug => RegAlloc::Stack,
+            OptLevel::Debug => RegAlloc::Linear,
             OptLevel::Release => RegAlloc::Graph,
         },
     };
@@ -194,8 +194,8 @@ fn default_target() -> TargetPair {
     match (arch_str, os_str) {
         ("arm64", "Darwin") => TargetPair::Arm64macOS,
         ("x86_64", "Darwin") => TargetPair::X86_64macOS,
-        ("aarch64", i) if i.contains("linux") => TargetPair::Aarch64Linux,
-        ("x86_64", i) if i.contains("linux") => TargetPair::X86_64Linux,
+        ("aarch64", i) if i.contains("linux") || i.contains("Linux") => TargetPair::Aarch64Linux,
+        ("x86_64", i) if i.contains("linux") || i.contains("Linux") => TargetPair::X86_64Linux,
         _ => panic!("unknown `uname` hardware configuration, use `--target` explicitly"),
     }
 }

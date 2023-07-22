@@ -8,7 +8,7 @@
 //                                                                           //
 //======---------------------------------------------------------------======//
 
-use crate::options::{Options, RegAlloc};
+use crate::options::{OptLevel, Options, RegAlloc};
 use sapphire::analysis::*;
 use sapphire::codegen::x86_64::{GreedyISel, X86_64Assembly, X86_64};
 use sapphire::codegen::{
@@ -21,6 +21,7 @@ use sapphire::transforms::*;
 use std::fs;
 use std::io;
 use std::io::ErrorKind;
+use std::path::PathBuf;
 
 /// Drives compilation given a list of options
 pub fn driver(options: Options) -> io::Result<()> {
@@ -45,7 +46,7 @@ fn compile_single_file(source: &str, path: &str, options: &Options) -> Result<()
         Ok(module) => {
             match options.target {
                 TargetPair::X86_64Linux | TargetPair::X86_64macOS | TargetPair::X86_64Windows => {
-                    compile_x86_64(module, options.target, options);
+                    compile_x86_64(path, module, options.target, options);
                 }
                 TargetPair::Aarch64Linux | TargetPair::Arm64macOS | TargetPair::Arm64Windows => {
                     panic!(
@@ -110,9 +111,24 @@ fn run_passes(module: &mut Module, options: &Options, extra: &[&'static str]) {
     mpm.run(module, &mut mam);
 }
 
-fn compile_x86_64(mut module: Module, pair: TargetPair, options: &Options) {
+fn compile_x86_64(path: &str, mut module: Module, pair: TargetPair, options: &Options) {
     // the x86-64 backend requires split-crit-edges before lowering
-    run_passes(&mut module, options, &["split-crit-edges"]);
+    let passes: &[&'static str] = if options.opt == OptLevel::Release {
+        &[
+            "mem2reg",
+            "simplifyinst",
+            "gvn",
+            "dce",
+            "simplifyinst",
+            "gvn",
+            "dce",
+            "split-crit-edges",
+        ]
+    } else {
+        &["split-crit-edges"]
+    };
+
+    run_passes(&mut module, options, passes);
 
     let mut target = match pair {
         TargetPair::X86_64Linux => PresetTargets::linux_x86_64(options.codegen),
@@ -122,22 +138,6 @@ fn compile_x86_64(mut module: Module, pair: TargetPair, options: &Options) {
     };
 
     let mut mir = GenericISel::<X86_64, GreedyISel>::lower(&mut target, &module, options.codegen);
-
-    #[cfg(none)]
-    for (func, frame) in mir.functions() {
-        let intervals = LiveIntervals::compute(func, frame.as_ref());
-
-        for (reg, interval) in intervals.intervals() {
-            let reg = x86_64::format_reg(reg, x86_64::Width::Qword, X86_64Assembly::GNU);
-            let end = interval.last_used_by();
-
-            if let Some(begin) = interval.first_defined_after() {
-                println!("{reg}: ({begin}, {end})");
-            } else {
-                println!("{reg}: [..., {end})");
-            }
-        }
-    }
 
     if options.reg_alloc != RegAlloc::None {
         for (func, frame) in mir.functions_mut() {
@@ -163,12 +163,23 @@ fn compile_x86_64(mut module: Module, pair: TargetPair, options: &Options) {
         },
     };
 
+    let result = backend.assembly(output, pair, options.fixed_intervals);
+
     if options.print {
-        println!(
-            "{}",
-            backend.assembly(output, pair, options.fixed_intervals)
-        );
+        println!("{result}");
     } else {
-        unimplemented!()
+        let output = if let Some(path) = &options.base.output {
+            path.clone()
+        } else {
+            let mut buf = PathBuf::from(path);
+
+            buf.set_extension("s");
+
+            buf
+        };
+
+        let err = format!("unable to write output to file `{}`", output.display());
+
+        fs::write(output, result).expect(&err)
     }
 }

@@ -10,10 +10,10 @@
 
 use crate::arena::SecondaryMap;
 use crate::codegen::regalloc::allocator::{defs, uses};
-use crate::codegen::{MIRBlock, MIRFunction, MachInst, ProgramPoint, Reg, StackFrame};
-use smallvec::SmallVec;
+use crate::codegen::{MIRBlock, MIRFunction, MachInst, PReg, ProgramPoint, Reg, StackFrame};
+use smallvec::{smallvec, SmallVec};
 use std::cmp::Ordering;
-use std::fmt;
+use std::{fmt, mem};
 
 /// Models the live range information necessary for the register allocators.
 ///
@@ -133,6 +133,30 @@ impl LiveInterval {
         }
     }
 
+    /// Returns whether or not `self` stops being live before `other` begins.
+    #[inline]
+    pub fn ends_before(self, other: LiveInterval) -> bool {
+        self.last_used_by() <= other.first_defined_after().unwrap_or(0)
+    }
+
+    /// Returns whether or not `self` stops being live before `other` ends.
+    #[inline]
+    pub fn ends_after(self, other: LiveInterval) -> bool {
+        !self.ends_before(other)
+    }
+
+    /// Returns whether or not `self` starts being live after `other` ends.
+    #[inline]
+    pub fn starts_after(self, other: LiveInterval) -> bool {
+        other.ends_before(self)
+    }
+
+    /// Returns whether or not `self` starts being live before `other` ends.
+    #[inline]
+    pub fn starts_before(self, other: LiveInterval) -> bool {
+        !other.ends_before(self)
+    }
+
     /// Gets the range of program points represented by the interval
     #[inline]
     pub fn program_points(self) -> impl Iterator<Item = ProgramPoint> {
@@ -157,13 +181,37 @@ impl fmt::Display for LiveInterval {
     }
 }
 
+#[inline(always)]
+fn filter_p_regs<Inst: MachInst>(
+    mir: &MIRFunction<Inst>,
+    unavailable: &[PReg],
+    vec: &mut SmallVec<[(Reg, u32); 16]>,
+) {
+    vec.retain(move |(reg, _)| match reg.as_preg() {
+        Some(preg) => {
+            debug_assert!(
+                unavailable.contains(&preg)
+                    || !mir.fixed_intervals().intervals_for(preg).is_empty()
+            );
+
+            false
+        }
+        None => true,
+    });
+}
+
 /// Models a simpler form of live-ness, live intervals.
 ///
 /// This effectively treats the entire function as one linear block and computes
 /// the intervals of this "block" that various registers are live for.
+///
+/// This also computes all points that any register will need to be spilled at,
+/// this is a lightweight form of usage information that can be used when an
+/// interval needs to be spilled later.
 pub struct ConservativeLiveIntervals {
     intervals: SecondaryMap<Reg, LiveInterval>,
     begins_with_copy: SecondaryMap<Reg, Reg>,
+    spill_points: SecondaryMap<Reg, SmallVec<[u32; 4]>>,
 }
 
 impl ConservativeLiveIntervals {
@@ -174,23 +222,19 @@ impl ConservativeLiveIntervals {
     ) -> Self {
         let mut intervals = SecondaryMap::<Reg, LiveInterval>::default();
         let mut begins_with_copy = SecondaryMap::default();
+        let mut spill_points = SecondaryMap::<Reg, SmallVec<[u32; 4]>>::default();
         let unavailable = frame.registers().unavailable;
 
         for (i, &inst) in mir.all_instructions().iter().enumerate() {
-            let uses = uses!(inst, frame);
-            let defs = defs!(inst, frame);
+            let mut uses = uses!(inst, frame);
+            let mut defs = defs!(inst, frame);
+
+            filter_p_regs(mir, unavailable, &mut uses);
+            filter_p_regs(mir, unavailable, &mut defs);
 
             for (reg, size) in uses {
                 // ignore base/stack pointer and things with a fixed interval defining them.
                 // any other uses of physical registers is a bug in the MIR
-                if let Some(preg) = reg.as_preg() {
-                    debug_assert!(
-                        unavailable.contains(&preg)
-                            || !mir.fixed_intervals().intervals_for(preg).is_empty()
-                    );
-
-                    continue;
-                }
 
                 // if we already have an interval, extend it to this instruction.
                 // if we don't already have an interval, we don't screw with it
@@ -201,18 +245,17 @@ impl ConservativeLiveIntervals {
                         _ => unreachable!(),
                     };
                 }
+
+                // record our possible spill points
+                match spill_points.get_mut(reg) {
+                    Some(vec) => vec.push(i as u32),
+                    None => {
+                        spill_points.insert(reg, smallvec![i as u32]);
+                    }
+                }
             }
 
             for (reg, size) in defs {
-                if let Some(preg) = reg.as_preg() {
-                    debug_assert!(
-                        unavailable.contains(&preg)
-                            || !mir.fixed_intervals().intervals_for(preg).is_empty()
-                    );
-
-                    continue;
-                }
-
                 // if we don't have an interval, insert it.
                 if !intervals.contains(reg) {
                     if let Some(copy) = inst.as_copy() {
@@ -227,22 +270,36 @@ impl ConservativeLiveIntervals {
         Self {
             intervals,
             begins_with_copy,
+            spill_points,
         }
     }
 
     /// Gets the live intervals for each register. These are not sorted in any way,
     /// they are effectively in a random order.
-    ///
-    /// The values yielded are:
-    /// 1. register being defined
-    /// 2. the interval the register is defined for
-    /// 3. the register being copied from if the register is initially defined by a copy
-    pub fn intervals(&self) -> impl Iterator<Item = (Reg, LiveInterval, Option<Reg>)> + '_ {
-        self.intervals.iter().map(|(reg, int)| {
-            let begins_copy = self.begins_with_copy.get(reg).copied();
+    #[inline]
+    pub fn intervals(&self) -> impl Iterator<Item = (Reg, LiveInterval)> + '_ {
+        self.intervals
+            .iter()
+            .map(|(reg, interval)| (reg, *interval))
+    }
 
-            (reg, *int, begins_copy)
-        })
+    /// If `reg`'s live interval was started by a copy instruction,
+    /// this returns the register it was being copied from.
+    #[inline]
+    pub fn started_by_copy(&self, reg: Reg) -> Option<Reg> {
+        self.begins_with_copy.get(reg).copied()
+    }
+
+    /// Gets the points that `reg` needs to be reloaded at
+    #[inline]
+    pub fn reload_points(&self, reg: Reg) -> &[u32] {
+        &self.spill_points[reg]
+    }
+
+    /// Takes the small vector holding the points that `reg` needs to be reloaded at
+    #[inline]
+    pub fn take_reload_points(&mut self, reg: Reg) -> SmallVec<[u32; 4]> {
+        mem::take(&mut self.spill_points[reg])
     }
 }
 
@@ -290,5 +347,8 @@ mod tests {
 
         // [0, 3) doesn't overlap (3, 4)
         assert!(!LiveInterval::defined_before_func(3).overlaps(LiveInterval::between(3, 4)));
+
+        assert!(LiveInterval::between(1, 1).overlaps(LiveInterval::between(1, 2)));
+        assert!(LiveInterval::between(1, 1).overlaps(LiveInterval::between(0, 1)));
     }
 }

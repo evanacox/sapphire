@@ -520,11 +520,13 @@ impl StackFrame<X86_64> for SystemVStackFrame {
             &UNAVAILABLE[0..3]
         };
 
+        const HIGH_PRIORITY: [PReg; 3] = [X86_64::RAX, X86_64::RCX, X86_64::RDX];
+
         AvailableRegisters {
             preserved: callee_preserved,
             clobbered: &CALLER_PRESERVED,
             unavailable: un_allocatable,
-            high_priority_temporaries: &[],
+            high_priority_temporaries: &HIGH_PRIORITY,
         }
     }
 

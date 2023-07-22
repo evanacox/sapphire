@@ -68,11 +68,11 @@ impl<'f> SimplifyVisitor<'f> {
 
     // returns if the replacer should replace with swapped operands.
     //
-    // there are four cases we care about:
+    // there are the cases we care about:
     //   - lhs is constant, rhs is not: should swap always to move the constant
     //   - lhs is not, rhs is constant: should never swap
     //   - lhs is constant, rhs is constant: should swap based on lhs.value > rhs.value
-    //   - neither are constant: should swap if lhs value number is larger
+    //   - neither are constant: should swap if lhs is a phi and rhs isnt or if lhs value number is larger
     fn should_sort_binary_ops(&mut self, lhs: Value, rhs: Value) -> bool {
         match (
             self.cursor.value_to_inst(lhs),
@@ -89,7 +89,19 @@ impl<'f> SimplifyVisitor<'f> {
                     (false, false) => lhs.key_index() > rhs.key_index(),
                 }
             }
-            _ => lhs.key_index() > rhs.key_index(),
+            _ => {
+                // try to keep phi nodes on the right if possible
+                let dfg = self.cursor.dfg();
+                let lhs_phi = dfg.is_block_param(lhs);
+                let rhs_phi = dfg.is_block_param(rhs);
+
+                // if both are phis or neither are phis, sort based on number
+                if lhs_phi == rhs_phi {
+                    lhs.key_index() > rhs.key_index()
+                } else {
+                    lhs_phi && !rhs_phi
+                }
+            }
         }
     }
 

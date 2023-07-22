@@ -13,7 +13,7 @@ use crate::codegen::regalloc::allocator::{defs, uses};
 use crate::codegen::{
     Allocation, Architecture, AvailableRegisters, ConservativeLiveIntervals, FixedIntervals,
     LiveInterval, MIRFunction, MachInst, PReg, ProgramPointsIterator, Reg, RegisterAllocator,
-    RegisterMapping, StackFrame,
+    RegisterMapping, StackFrame, VariableLocation,
 };
 use crate::ir::FunctionMetadata;
 use crate::utility::SaHashMap;
@@ -32,13 +32,15 @@ pub struct LinearScanRegAlloc<'a> {
     original_reg_to_int: SaHashMap<Reg, LiveInterval>,
     mapping: SaHashMap<LiveInterval, PReg>,
     started_by_copy: SaHashMap<LiveInterval, Reg>,
+    reload_points: SaHashMap<LiveInterval, SmallVec<[u32; 4]>>,
+    spills: SaHashMap<LiveInterval, VariableLocation>,
     pool: RegisterPool,
 }
 
 impl<'a> LinearScanRegAlloc<'a> {
     fn new(
         fixed: &'a FixedIntervals,
-        live: ConservativeLiveIntervals,
+        mut live: ConservativeLiveIntervals,
         metadata: FunctionMetadata,
         available: AvailableRegisters,
     ) -> Self {
@@ -46,15 +48,24 @@ impl<'a> LinearScanRegAlloc<'a> {
         let mut original_int_to_reg = SaHashMap::default();
         let mut original_reg_to_int = SaHashMap::default();
         let mut started_by_copy = SaHashMap::default();
+        let mut reload_points = SaHashMap::default();
 
-        for (reg, interval, defined_by_copy) in live.intervals() {
+        for (reg, interval) in live.intervals() {
             original_int_to_reg.insert(interval, reg);
             original_reg_to_int.insert(reg, interval);
             intervals.push(interval);
 
-            if let Some(reg) = defined_by_copy {
+            if let Some(reg) = live.started_by_copy(reg) {
                 started_by_copy.insert(interval, reg);
             }
+        }
+
+        // we have to do this after, because we're using `take_reload_points` to avoid
+        // needing to re-create the SmallVec objects
+        for &interval in intervals.iter() {
+            let &reg = original_int_to_reg.get(&interval).unwrap();
+
+            reload_points.insert(interval, live.take_reload_points(reg));
         }
 
         // intervals need to be sorted by increasing start point, `LiveInterval`
@@ -67,8 +78,10 @@ impl<'a> LinearScanRegAlloc<'a> {
             original_int_to_reg,
             original_reg_to_int,
             started_by_copy,
+            reload_points,
             active: Vec::default(),
             mapping: SaHashMap::default(),
+            spills: SaHashMap::default(),
             pool: RegisterPool::from(metadata, available),
         }
     }
@@ -90,8 +103,6 @@ impl<'a> LinearScanRegAlloc<'a> {
                 self.maybe_allocate(interval, frame);
             }
         }
-
-        let _ = mem::replace(&mut self.intervals, intervals);
     }
 
     fn maybe_allocate<Arch: Architecture>(
@@ -166,7 +177,7 @@ impl<'a> LinearScanRegAlloc<'a> {
 
         // go through the active list and find the sublist we need to remove
         for (i, old) in self.active.iter().enumerate() {
-            if old.last_used_by() > interval.first_defined_after().unwrap_or(0) {
+            if old.ends_after(interval) {
                 break;
             }
 
@@ -175,14 +186,19 @@ impl<'a> LinearScanRegAlloc<'a> {
 
         // return all the now expired registers to the pool
         if let Some(remove_until) = remove_until {
+            let mut v = vec![];
+
             for i in 0..=remove_until {
                 let mapping = self.mapping.get(&self.active[i]).copied().unwrap();
+
+                v.push(mapping);
 
                 self.pool.make_register_available(mapping);
             }
 
-            // remove those active elements
-            self.active.rotate_left(remove_until + 1);
+            // remove those active elements. this isn't particularly efficient but this
+            // active set will always be very small, since .len() <= R
+            self.active.drain(0..=remove_until);
         }
     }
 
@@ -191,7 +207,22 @@ impl<'a> LinearScanRegAlloc<'a> {
         interval: LiveInterval,
         frame: &mut dyn StackFrame<Arch>,
     ) {
-        todo!()
+        let spill = self
+            .active
+            .last()
+            .expect("spilling while nothing is active?");
+
+        if spill.last_used_by() > interval.last_used_by() {
+            let vreg = self.original_int_to_reg.get(spill).copied().unwrap();
+            let reg = self.mapping.get(spill).copied().unwrap();
+            let spill = self.active.pop().unwrap();
+
+            self.mapping.insert(interval, reg);
+            self.spills.insert(spill, frame.spill_slot(8));
+
+            for &reload in self.reload_points.get(&spill).unwrap() {}
+        } else {
+        }
     }
 }
 
@@ -236,7 +267,7 @@ impl<'a, Arch: Architecture> RegisterAllocator<Arch> for LinearScanRegAlloc<'a> 
 }
 
 struct RegisterPool {
-    priority: SecondaryMap<PReg, i8>,
+    priority: SecondaryMap<PReg, i32>,
     register_queue: Vec<PReg>,
     total: usize,
 }
@@ -257,14 +288,14 @@ impl RegisterPool {
         // 0 => clobbered priority value, 1 => preserved priority value,
         // 2 => high priority priority value
         let priorities = if metadata.is_leaf {
-            [2, 1, 10]
+            [200, 100, 1000]
         } else {
-            [1, 2, 10]
+            [100, 200, 1000]
         };
 
         for (i, &register_subset) in order.iter().enumerate() {
-            for &preg in register_subset {
-                priority.insert(preg, priorities[i]);
+            for (j, &preg) in register_subset.iter().enumerate().rev() {
+                priority.insert(preg, (priorities[i] - j) as i32);
                 register_queue.push(preg);
             }
         }
@@ -287,7 +318,10 @@ impl RegisterPool {
 
     fn make_register_available(&mut self, preg: PReg) {
         // insert while maintaining sorted order
-        match self.register_queue.binary_search(&preg) {
+        match self
+            .register_queue
+            .binary_search_by_key(&self.priority[preg], |&preg| self.priority[preg])
+        {
             Ok(pos) => panic!("somehow duplicated a register"),
             Err(pos) => self.register_queue.insert(pos, preg),
         }

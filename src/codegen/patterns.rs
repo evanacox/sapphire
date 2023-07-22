@@ -327,6 +327,48 @@ impl<Arch: Architecture> ISelMergeMatcher<Arch> for ISelMergeAnyMatcher<Arch> {
     }
 }
 
+struct ISelMergePhiMatcher<Arch: Architecture> {
+    _unused: PhantomData<fn() -> Arch>,
+}
+
+impl<Arch: Architecture> Clone for ISelMergePhiMatcher<Arch> {
+    fn clone(&self) -> Self {
+        Self {
+            _unused: PhantomData::default(),
+        }
+    }
+}
+
+impl<Arch> Copy for ISelMergePhiMatcher<Arch> where Arch: Architecture {}
+
+impl<Arch: Architecture> ISelMergeMatcher<Arch> for ISelMergePhiMatcher<Arch> {
+    #[inline(always)]
+    fn matches_as_base(&self, _: ir::Inst, _: FramelessCtx<'_, '_, '_, Arch>) -> bool {
+        // phis are never instructions
+        false
+    }
+
+    #[inline(always)]
+    fn matches_as_operand(
+        &self,
+        value: Value,
+        _: ir::Inst,
+        (def, _): FramelessCtx<'_, '_, '_, Arch>,
+    ) -> bool {
+        def.dfg.is_block_param(value)
+    }
+
+    #[inline(always)]
+    fn mark_as_merged_base(&self, _: ir::Inst, _: FramelessCtx<'_, '_, '_, Arch>) {
+        /* nothing to merge, this is explicitly the "phi (which is in a register)" case */
+    }
+
+    #[inline(always)]
+    fn mark_as_merged_operand(&self, _: Value, _: ir::Inst, _: FramelessCtx<'_, '_, '_, Arch>) {
+        /* nothing to merge, this is explicitly the "phi (which is in a register)" case */
+    }
+}
+
 /// Matches any instruction, or anything else that produces a value.
 ///
 /// This is effectively the "stop matching" marker when making a pattern,
@@ -342,6 +384,31 @@ impl<Arch: Architecture> ISelMergeMatcher<Arch> for ISelMergeAnyMatcher<Arch> {
 #[inline(always)]
 pub fn any<Arch: Architecture>() -> impl ISelMergeMatcher<Arch> + Copy {
     ISelMergeAnyMatcher {
+        _unused: PhantomData::default(),
+    }
+}
+
+/// Matches any block parameter (aka phi nodes).
+///
+/// This is a more specific "stop matching" marker when making a pattern,
+/// e.g. the pattern `iadd(phi(), iconst(5))` would match the following IR:
+///
+/// ```text
+/// bb0(i32 %0):
+///   %1 = iconst i32 5
+///   %2 = iadd i32 %0, %1
+/// ```
+///
+/// but would not match this IR:
+///
+/// ```text
+/// bb0:
+///   %1 = iconst i32 5
+///   %2 = iadd i32 %1, %1
+/// ```
+#[inline(always)]
+pub fn phi<Arch: Architecture>() -> impl ISelMergeMatcher<Arch> + Copy {
+    ISelMergePhiMatcher {
         _unused: PhantomData::default(),
     }
 }
