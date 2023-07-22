@@ -602,7 +602,7 @@ impl<'mo, 'fr, 'ta, 'ctx> GenericInstVisitor<(), Ctx<'mo, 'fr, 'ta, 'ctx>> for G
         }
 
         ctx.emit(Inst::ALU(ALU {
-            opc: ALUOpcode::Sub,
+            opc: ALUOpcode::Xor,
             width,
             lhs,
             rhs,
