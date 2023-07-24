@@ -17,9 +17,9 @@ use crate::utility::Packable;
 ///
 /// Each edge that is split has a dummy node inserted that contains only an
 /// unconditional branch to the block that was originally being targeted.
-pub struct SplitCriticalEdges;
+pub struct SplitCriticalEdgesPass;
 
-impl FunctionTransformPass for SplitCriticalEdges {
+impl FunctionTransformPass for SplitCriticalEdgesPass {
     fn run(&mut self, func: &mut Function, am: &mut FunctionAnalysisManager) -> PreservedAnalyses {
         let cfg = am.get::<ControlFlowGraphAnalysis>(func);
 

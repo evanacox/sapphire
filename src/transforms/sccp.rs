@@ -8,7 +8,16 @@
 //                                                                           //
 //======---------------------------------------------------------------======//
 
+use crate::ir::Function;
+use crate::pass::{FunctionAnalysisManager, FunctionTransformPass, PreservedAnalyses};
+
 /// A Sparse Conditional Constant Propagation pass.
 ///
 /// This uses the same constant folder internally as `InstSimplify`
 pub struct SCCPPass;
+
+impl FunctionTransformPass for SCCPPass {
+    fn run(&mut self, func: &mut Function, am: &mut FunctionAnalysisManager) -> PreservedAnalyses {
+        todo!()
+    }
+}

@@ -18,6 +18,10 @@ path = "./tools/filetest/main.rs"
 test = true
 required-features = ["dev-tools"]
 
+[[bin]]
+name = "siro"
+path = "./tools/siro/main.rs"
+required-features = ["dev-tools"]
 
 [target.'cfg(windows)'.dependencies.windows-sys]
 version = "0.48.0"

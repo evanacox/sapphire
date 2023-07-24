@@ -10,11 +10,11 @@
 
 use crate::runners::optimization_runner::*;
 use crate::subtest::Subtest;
-use sapphire::transforms::DeadCodeEliminationPass;
+use sapphire::transforms::AggressiveDCEPass;
 
 runner_for_opt!(
     dce,
-    FunctionToModulePassAdapter::adapt(DeadCodeEliminationPass)
+    FunctionToModulePassAdapter::adapt(AggressiveDCEPass)
 );
 
 pub const fn dce_subtest() -> Subtest {

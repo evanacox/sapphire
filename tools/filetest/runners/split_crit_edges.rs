@@ -10,11 +10,11 @@
 
 use crate::runners::optimization_runner::*;
 use crate::subtest::Subtest;
-use sapphire::transforms::SplitCriticalEdges;
+use sapphire::transforms::SplitCriticalEdgesPass;
 
 runner_for_opt!(
     split_crit_edges,
-    FunctionToModulePassAdapter::adapt(SplitCriticalEdges)
+    FunctionToModulePassAdapter::adapt(SplitCriticalEdgesPass)
 );
 
 pub const fn split_crit_edges_subtest() -> Subtest {

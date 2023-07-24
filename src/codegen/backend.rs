@@ -83,14 +83,14 @@ impl PresetBackends {
         mam.add_analysis(FunctionAnalysisManagerModuleProxy::wrap(fam));
 
         fpm.add_pass(Mem2RegPass);
-        fpm.add_pass(DeadCodeEliminationPass);
+        fpm.add_pass(AggressiveDCEPass);
         fpm.add_pass(SimplifyInstPass);
-        fpm.add_pass(GlobalValueNumberingPass);
+        fpm.add_pass(GVNPass);
         fpm.add_pass(SimplifyInstPass);
-        fpm.add_pass(DeadCodeEliminationPass);
+        fpm.add_pass(AggressiveDCEPass);
 
         // split-crit-edges must happen at the end so that SSA deconstruction can happen
-        fpm.add_pass(SplitCriticalEdges);
+        fpm.add_pass(SplitCriticalEdgesPass);
 
         mpm.add_pass(FunctionToModulePassAdapter::adapt(fpm));
         mpm.run(&mut module, &mut mam);
@@ -115,7 +115,7 @@ impl PresetBackends {
         mam.add_analysis(FunctionAnalysisManagerModuleProxy::wrap(fam));
 
         // split-crit-edges must happen at the end so that SSA deconstruction can happen
-        fpm.add_pass(SplitCriticalEdges);
+        fpm.add_pass(SplitCriticalEdgesPass);
 
         mpm.add_pass(FunctionToModulePassAdapter::adapt(fpm));
         mpm.run(&mut module, &mut mam);

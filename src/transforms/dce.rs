@@ -25,7 +25,7 @@ use smallvec::SmallVec;
 /// is alive.
 ///
 /// This will also remove dead φ nodes from basic blocks.
-pub struct DeadCodeEliminationPass;
+pub struct AggressiveDCEPass;
 
 /// Scans over an entire function and removes dead instructions and φ nodes.
 ///
@@ -107,7 +107,7 @@ pub fn aggressive_instruction_dce(
     }
 }
 
-impl FunctionTransformPass for DeadCodeEliminationPass {
+impl FunctionTransformPass for AggressiveDCEPass {
     fn run(&mut self, func: &mut Function, am: &mut FunctionAnalysisManager) -> PreservedAnalyses {
         let cfg = am.get::<ControlFlowGraphAnalysis>(func);
         let domtree = am.get::<DominatorTreeAnalysis>(func);

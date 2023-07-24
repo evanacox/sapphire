@@ -10,7 +10,7 @@
 
 use bpaf::Parser;
 use lazy_static::lazy_static;
-use sapphire::cli::{emit_machine_format, frame_pointer, passes, FramePointer, MachineFormat};
+use sapphire::cli::{emit_machine_format, frame_pointer, verify, FramePointer, MachineFormat};
 use sapphire::codegen::x86_64::{X86_64Assembly, X86_64ObjectFile};
 use sapphire::codegen::{CodegenOptions, TargetPair};
 use sapphire::{cli, cli::BaseOptions};
@@ -36,8 +36,6 @@ pub struct Options {
     pub print: bool,
     /// Whether to emit fixed interval comments
     pub fixed_intervals: bool,
-    /// Passes to run over the IR
-    pub passes: Vec<String>,
     /// If we're targeting an x86-64 platform and emitting assembly,
     /// this is the format to emit.
     pub x86_64_asm: Option<X86_64Assembly>,
@@ -61,26 +59,13 @@ pub fn parse_options() -> Options {
     let default = default_target();
 
     let (
-        (
-            format,
-            passes,
-            omit_fp,
-            x86_asm,
-            x86_obj,
-            target,
-            regalloc,
-            opt,
-            verify,
-            print,
-            fixed_intervals,
-        ),
+        (format, omit_fp, x86_asm, x86_obj, target, regalloc, opt, verify, print, fixed_intervals),
         base,
     ) = cli::tool_with(
         &DESCRIPTION,
         "Usage: sirc [options] <input ir>",
         bpaf::construct!(
             emit_machine_format(),
-            passes(),
             frame_pointer(),
             x86_64_asm_format(),
             x86_64_object_format(),
@@ -125,7 +110,6 @@ pub fn parse_options() -> Options {
         verify,
         print,
         fixed_intervals,
-        passes,
         x86_64_asm: x86_asm,
         x86_64_obj: x86_obj,
     }
@@ -280,12 +264,6 @@ fn x86_64_object_format() -> impl Parser<Option<X86_64ObjectFile>> {
         .help("the specific type of file to generate for x86-64 binaries")
         .argument::<X86_64ObjectFile>("FORMAT")
         .optional()
-}
-
-fn verify() -> impl Parser<bool> {
-    bpaf::long("verify")
-        .help("whether to verify the IR before and after passes")
-        .flag(true, false)
 }
 
 fn print() -> impl Parser<bool> {

@@ -8,6 +8,9 @@
 //                                                                           //
 //======---------------------------------------------------------------======//
 
+use crate::ir::Function;
+use crate::pass::{FunctionAnalysisManager, FunctionTransformPass, PreservedAnalyses};
+
 /// A control-flow graph simplification pass.
 ///
 /// Performs the following simplifications:
@@ -18,3 +21,9 @@
 /// 4. Merges blocks into their predecessors if they only have one predecessor
 ///    and their predecessor only has one successor
 pub struct SimplifyCFGPass;
+
+impl FunctionTransformPass for SimplifyCFGPass {
+    fn run(&mut self, func: &mut Function, am: &mut FunctionAnalysisManager) -> PreservedAnalyses {
+       todo!()
+    }
+}

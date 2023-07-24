@@ -44,15 +44,33 @@ pub fn driver(options: Options) -> io::Result<()> {
 fn compile_single_file(source: &str, path: &str, options: &Options) -> Result<(), ()> {
     match sapphire::parse_sir(path, source) {
         Ok(module) => {
-            match options.target {
+            let asm = match options.target {
                 TargetPair::X86_64Linux | TargetPair::X86_64macOS | TargetPair::X86_64Windows => {
-                    compile_x86_64(path, module, options.target, options);
+                    compile_x86_64(module, options.target, options)
                 }
                 TargetPair::Aarch64Linux | TargetPair::Arm64macOS | TargetPair::Arm64Windows => {
                     panic!(
                         "native arm codegen is not implemented, specify `--target=x86_64-{{os}}`"
                     )
                 }
+            };
+
+            if options.print {
+                println!("{asm}");
+            } else {
+                let output = if let Some(path) = &options.base.output {
+                    path.clone()
+                } else {
+                    let mut buf = PathBuf::from(path);
+
+                    buf.set_extension("s");
+
+                    buf
+                };
+
+                let err = format!("unable to write output to file `{}`", output.display());
+
+                fs::write(output, asm).expect(&err)
             }
 
             Ok(())
@@ -65,7 +83,12 @@ fn compile_single_file(source: &str, path: &str, options: &Options) -> Result<()
     }
 }
 
-fn run_passes(module: &mut Module, options: &Options, extra: &[&'static str]) {
+fn run_passes(
+    module: &mut Module,
+    options: &Options,
+    fn_extra: impl FnOnce(&mut FunctionPassManager),
+    module_extra: impl FnOnce(&mut ModulePassManager),
+) {
     let mut fam = FunctionAnalysisManager::new();
     fam.add_analysis(ControlFlowGraphAnalysis);
     fam.add_analysis(DominatorTreeAnalysis);
@@ -75,25 +98,19 @@ fn run_passes(module: &mut Module, options: &Options, extra: &[&'static str]) {
     mam.add_analysis(FunctionAnalysisManagerModuleProxy::wrap(fam));
     mam.add_analysis(ModuleStringifyAnalysis);
 
-    let mut fpm = FunctionPassManager::new();
+    let mut fpm = FunctionPassManager::default();
 
-    for pass in options
-        .passes
-        .iter()
-        .cloned()
-        .chain(extra.iter().map(|s| s.to_string()))
-    {
-        match pass.as_str() {
-            "mem2reg" => fpm.add_pass(Mem2RegPass),
-            "dce" => fpm.add_pass(DeadCodeEliminationPass),
-            "gvn" => fpm.add_pass(GlobalValueNumberingPass),
-            "simplifyinst" => fpm.add_pass(SimplifyInstPass),
-            "split-crit-edges" => fpm.add_pass(SplitCriticalEdges),
-            _ => {
-                unreachable!()
-            }
+    if options.opt == OptLevel::Release {
+        fpm.add_pass(Mem2RegPass);
+
+        for _ in 0..2 {
+            fpm.add_pass(SimplifyInstPass);
+            fpm.add_pass(GVNPass);
+            fpm.add_pass(AggressiveDCEPass);
         }
     }
+
+    fn_extra(&mut fpm);
 
     let mut mpm = ModulePassManager::new();
 
@@ -103,32 +120,24 @@ fn run_passes(module: &mut Module, options: &Options, extra: &[&'static str]) {
 
     mpm.add_pass(FunctionToModulePassAdapter::adapt(fpm));
 
+    module_extra(&mut mpm);
+
     // no reason to verify a second time if we didn't change anything
-    if options.verify && !options.passes.is_empty() {
+    if options.verify {
         mpm.add_pass(VerifyModulePass);
     }
 
     mpm.run(module, &mut mam);
 }
 
-fn compile_x86_64(path: &str, mut module: Module, pair: TargetPair, options: &Options) {
+fn compile_x86_64(mut module: Module, pair: TargetPair, options: &Options) -> String {
     // the x86-64 backend requires split-crit-edges before lowering
-    let passes: &[&'static str] = if options.opt == OptLevel::Release {
-        &[
-            "mem2reg",
-            "simplifyinst",
-            "gvn",
-            "dce",
-            "simplifyinst",
-            "gvn",
-            "dce",
-            "split-crit-edges",
-        ]
-    } else {
-        &["split-crit-edges"]
-    };
-
-    run_passes(&mut module, options, passes);
+    run_passes(
+        &mut module,
+        options,
+        |fpm| fpm.add_pass(SplitCriticalEdgesPass),
+        |_| return,
+    );
 
     let mut target = match pair {
         TargetPair::X86_64Linux => PresetTargets::linux_x86_64(options.codegen),
@@ -163,23 +172,5 @@ fn compile_x86_64(path: &str, mut module: Module, pair: TargetPair, options: &Op
         },
     };
 
-    let result = backend.assembly(output, pair, options.fixed_intervals);
-
-    if options.print {
-        println!("{result}");
-    } else {
-        let output = if let Some(path) = &options.base.output {
-            path.clone()
-        } else {
-            let mut buf = PathBuf::from(path);
-
-            buf.set_extension("s");
-
-            buf
-        };
-
-        let err = format!("unable to write output to file `{}`", output.display());
-
-        fs::write(output, result).expect(&err)
-    }
+    backend.assembly(output, pair, options.fixed_intervals)
 }

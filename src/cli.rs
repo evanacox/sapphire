@@ -194,9 +194,16 @@ pub fn jobs() -> impl Parser<Option<usize>> {
 
 /// Gets a list of passes to run over the IR
 pub fn passes() -> impl Parser<Vec<String>> {
-    bpaf::long("passes")
+    bpaf::long("pass")
         .short('p')
         .help("a pass to run over the input")
         .argument::<String>("PASS-NAME")
         .many()
+}
+
+/// Whether the user wants verify passes inserted between optimization passes
+pub fn verify() -> impl Parser<bool> {
+    bpaf::long("verify")
+        .help("whether to verify the IR before and after passes")
+        .flag(true, false)
 }
