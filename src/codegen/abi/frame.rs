@@ -9,8 +9,8 @@
 //======---------------------------------------------------------------======//
 
 use crate::codegen::{Architecture, FramelessCtx, PReg, Reg, WriteableReg};
-use crate::ir;
 use crate::ir::{FunctionMetadata, StackSlot, Value};
+use crate::{dense_arena_key, ir};
 
 /// The location of a single "variable." This denotes something at the ABI level,
 /// e.g. `stackslot`s, parameters and the like. This identifies where they are
@@ -24,7 +24,9 @@ pub enum VariableLocation {
     RelativeToFP(i32),
     /// Says that a variable is located at an offset relative to the stack pointer after
     /// the canonical prologue has executed.
-    RelativeToSP(i32),
+    ///
+    /// The other value is the stack size at the time of emission
+    RelativeToSP(i32, usize),
 }
 
 /// A representation of the specific available registers on a particular ABI.
@@ -42,6 +44,12 @@ pub struct AvailableRegisters {
     /// These will be preferred over other registers if any are available, and it is assumed
     /// that occurring earlier in the list means higher relative priority.
     pub high_priority_temporaries: &'static [PReg],
+}
+
+dense_arena_key! {
+    /// Used by [`StackFrame::register_use_def_call`] and [`StackFrame::call_use_defs`]
+    /// as a unique identifier for a `call` in a function.
+    pub struct CallUseDefId;
 }
 
 /// Interface for a generic "stack frame" that a target can implement. This is used by the code generator
@@ -82,16 +90,13 @@ pub trait StackFrame<Arch: Architecture> {
     ///
     /// This is called by the calling convention when a `call`-like instruction is
     /// generated, with a list of used registers and a list of defined registers.
-    ///
-    /// This is used later in the register allocator, this just happens to be the best place
-    /// to store this information.
-    fn register_use_def_call(&mut self, call: Arch::Inst, uses: &[PReg], defs: &[PReg]);
+    fn register_use_def_call(&mut self, uses: &[PReg], defs: &[PReg]) -> CallUseDefId;
 
     /// Returns the use-def information previously given to [`Self::register_use_def_call`].
-    fn call_use_defs(&self, call: Arch::Inst) -> (&[PReg], &[PReg]);
+    fn call_use_defs(&self, id: CallUseDefId) -> (&[PReg], &[PReg]);
 
-    /// Returns the use-def information of a `ret`-like instruction
-    fn ret_uses(&self, ret: Arch::Inst) -> &[PReg];
+    /// Returns the use-def information of a `ret` instruction
+    fn ret_uses(&self) -> &[PReg];
 
     /// Called during the final emitting phase, will emit a function's prologue (if necessary).
     ///
@@ -110,4 +115,7 @@ pub trait StackFrame<Arch: Architecture> {
 
     /// Gets the metadata for the associated SIR function at the time of lowering
     fn metadata(&self) -> FunctionMetadata;
+
+    /// The number of bytes that have been put on the stack at this point in the lowering
+    fn stack_size(&self) -> usize;
 }

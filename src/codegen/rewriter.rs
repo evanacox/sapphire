@@ -60,7 +60,7 @@ impl Rewriter {
 
             for &inst in function.block(block) {
                 let rewrites = self.allocation.mapping.mapping_at(pp);
-                let rewritten = inst.rewrite(rewrites);
+                let rewritten = inst.rewrite(rewrites, frame);
 
                 // if we have any spills/reloads that are at this location, we need to emit them
                 // before we emit the instruction. they will be in order from reg-alloc
@@ -71,7 +71,9 @@ impl Rewriter {
                         SpillReload::Reload { to, from } => Arch::Inst::load(8, *from, *to),
                     };
 
-                    out.push(emit);
+                    // we need to make sure to rewrite the store/load to make sure stack accesses
+                    // are actually pointing at valid addresses
+                    out.push(emit.rewrite(&[], frame));
                     index += 1;
                 }
 

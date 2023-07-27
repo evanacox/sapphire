@@ -447,6 +447,34 @@ impl AsmEmitter {
         (fixed_begin_at, fixed_end_at, defined_by_caller)
     }
 
+    fn emit_fixed_regs(
+        &mut self,
+        prefix: &'static str,
+        i: usize,
+        map: &SaHashMap<usize, SmallVec<[PReg; 2]>>,
+    ) {
+        let mut looped = false;
+
+        if let Some(vec) = map.get(&i) {
+            self.state += " ";
+            self.state += prefix;
+            self.state += "( ";
+
+            for &reg in map.get(&i).unwrap().iter() {
+                looped = true;
+
+                self.state += &format!("{}, ", self.emit_reg(Reg::from_preg(reg), Width::Qword));
+            }
+
+            if looped {
+                self.state.pop();
+                self.state.pop();
+            }
+
+            self.state += " )";
+        }
+    }
+
     fn emit_single_inst(
         &mut self,
         i: usize,
@@ -466,25 +494,9 @@ impl AsmEmitter {
             let ch = self.comment_char();
 
             self.state += &format!("    {asm:<45} {ch} fixed:");
+            self.emit_fixed_regs("begin", i, fixed_begin_at);
+            self.emit_fixed_regs("end", i, fixed_end_at);
 
-            if let Some(vec) = fixed_begin_at.get(&i) {
-                for &reg in fixed_begin_at.get(&i).unwrap().iter() {
-                    self.state += &format!(
-                        " begin {},",
-                        self.emit_reg(Reg::from_preg(reg), Width::Qword)
-                    );
-                }
-            }
-
-            if let Some(vec) = fixed_end_at.get(&i) {
-                for &reg in fixed_end_at.get(&i).unwrap().iter() {
-                    self.state +=
-                        &format!(" end {},", self.emit_reg(Reg::from_preg(reg), Width::Qword));
-                }
-            }
-
-            // remove the last ,
-            self.state.pop();
             self.state += "\n";
         } else {
             self.state += "    ";
@@ -558,6 +570,19 @@ impl AsmEmitter {
                     format!("[{e1} + {e2}]")
                 }
             }
+            IndirectAddress::StackOffset(offset, _, _) => {
+                let emit = self.emit_reg(Reg::from_preg(X86_64::RSP), Width::Qword);
+
+                if self.mode == X86_64Assembly::GNU {
+                    format!("__stackoffset {offset}({emit})")
+                } else if offset >= 0 {
+                    format!("__stackoffset [{emit} + {offset}]")
+                } else {
+                    let abs = offset.abs();
+
+                    format!("__stackoffset [{emit} - {abs}]")
+                }
+            }
             IndirectAddress::RegOffset(reg, offset) => {
                 let emit = self.emit_reg(reg, Width::Qword);
 
@@ -578,7 +603,7 @@ impl AsmEmitter {
                 if self.mode == X86_64Assembly::GNU {
                     format!("({emit},{integral})")
                 } else {
-                    format!("[{emit} + {integral}]")
+                    format!("[{emit}*{integral}]")
                 }
             }
             IndirectAddress::RegScaledReg(r1, r2, scale) => {

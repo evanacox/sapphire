@@ -8,7 +8,7 @@
 //                                                                           //
 //======---------------------------------------------------------------======//
 
-use crate::arena::SecondaryMap;
+use crate::arena::{SecondaryMap, SecondarySet};
 use crate::codegen::regalloc::allocator::{defs, uses};
 use crate::codegen::{MIRBlock, MIRFunction, MachInst, PReg, ProgramPoint, Reg, StackFrame};
 use smallvec::{smallvec, SmallVec};
@@ -66,7 +66,7 @@ impl Ord for LiveInterval {
 impl LiveInterval {
     /// Makes a live interval representing `(start, start)`.
     #[inline]
-    pub fn at(start: u32) -> Self {
+    pub fn spill(start: u32) -> Self {
         Self((start, start))
     }
 
@@ -109,6 +109,10 @@ impl LiveInterval {
         let self_ends_before_other = x2 <= y1;
         let other_ends_before_self = x1 >= y2;
 
+        if x1 == x2 && y1 == y2 {
+            return x1 == y1;
+        }
+
         // different cases if either one is u32::MAX, because that means they actually
         // are a closed range starting at 0 so we can assume they go first and not check
         // the second condition
@@ -139,6 +143,14 @@ impl LiveInterval {
         self.last_used_by() <= other.first_defined_after().unwrap_or(0)
     }
 
+    /// Returns whether or not `self` stops being live before `other` begins,
+    /// except that `(x, x)` and `(x, y)` intervals are considered
+    /// to overlap.
+    #[inline]
+    pub fn ends_before_without_overlap(self, other: LiveInterval) -> bool {
+        self.last_used_by() < other.first_defined_after().unwrap_or(0)
+    }
+
     /// Returns whether or not `self` stops being live before `other` ends.
     #[inline]
     pub fn ends_after(self, other: LiveInterval) -> bool {
@@ -166,6 +178,13 @@ impl LiveInterval {
         };
 
         iter.map(|x| ProgramPoint::before(x))
+    }
+
+    /// A "spill interval" is an interval of the form `(x, x)`. If this
+    /// interval is one of those, returns `true`.
+    #[inline]
+    pub fn is_spill_interval(self) -> bool {
+        (self.0).0 == (self.0).1
     }
 }
 
@@ -210,7 +229,8 @@ fn filter_p_regs<Inst: MachInst>(
 /// interval needs to be spilled later.
 pub struct ConservativeLiveIntervals {
     intervals: SecondaryMap<Reg, LiveInterval>,
-    begins_with_copy: SecondaryMap<Reg, Reg>,
+    begins_with_copy_from: SecondaryMap<Reg, Reg>,
+    ends_with_copy_to: SecondaryMap<Reg, Reg>,
     spill_points: SecondaryMap<Reg, SmallVec<[u32; 4]>>,
 }
 
@@ -221,8 +241,9 @@ impl ConservativeLiveIntervals {
         frame: &dyn StackFrame<Inst::Arch>,
     ) -> Self {
         let mut intervals = SecondaryMap::<Reg, LiveInterval>::default();
-        let mut begins_with_copy = SecondaryMap::default();
+        let mut begins_with_copy_from = SecondaryMap::default();
         let mut spill_points = SecondaryMap::<Reg, SmallVec<[u32; 4]>>::default();
+        let mut ends_with_copy_to = SecondaryMap::default();
         let unavailable = frame.registers().unavailable;
 
         for (i, &inst) in mir.all_instructions().iter().enumerate() {
@@ -232,13 +253,21 @@ impl ConservativeLiveIntervals {
             filter_p_regs(mir, unavailable, &mut uses);
             filter_p_regs(mir, unavailable, &mut defs);
 
-            for (reg, size) in uses {
-                // ignore base/stack pointer and things with a fixed interval defining them.
-                // any other uses of physical registers is a bug in the MIR
+            let uses_iter = uses.iter().map(|(reg, size)| (true, *reg, *size));
+            let defs_iter = defs.iter().map(|(reg, size)| (false, *reg, *size));
+
+            // this is almost identical for uses vs defs, so we use `map` to give a is_use flag
+            for (is_use, reg, size) in uses_iter.chain(defs_iter) {
+                // if we don't have an interval, insert it.
+                if !intervals.contains(reg) {
+                    if let Some(copy) = inst.as_copy() {
+                        begins_with_copy_from.insert(reg, copy.from);
+                    }
+
+                    intervals.insert(reg, LiveInterval::spill(i as u32));
+                }
 
                 // if we already have an interval, extend it to this instruction.
-                // if we don't already have an interval, we don't screw with it
-                // since it's either an undef thing or some ABI constraint
                 if let Some(interval) = intervals.get_mut(reg) {
                     *interval = match interval.first_defined_after() {
                         Some(idx) => LiveInterval::between(idx, i as u32),
@@ -253,24 +282,22 @@ impl ConservativeLiveIntervals {
                         spill_points.insert(reg, smallvec![i as u32]);
                     }
                 }
-            }
 
-            for (reg, size) in defs {
-                // if we don't have an interval, insert it.
-                if !intervals.contains(reg) {
+                if is_use {
                     if let Some(copy) = inst.as_copy() {
-                        begins_with_copy.insert(reg, copy.from);
+                        ends_with_copy_to.insert(reg, copy.to.to_reg());
+                    } else {
+                        ends_with_copy_to.remove(reg);
                     }
-
-                    intervals.insert(reg, LiveInterval::at(i as u32));
                 }
             }
         }
 
         Self {
             intervals,
-            begins_with_copy,
+            begins_with_copy_from,
             spill_points,
+            ends_with_copy_to,
         }
     }
 
@@ -287,7 +314,14 @@ impl ConservativeLiveIntervals {
     /// this returns the register it was being copied from.
     #[inline]
     pub fn started_by_copy(&self, reg: Reg) -> Option<Reg> {
-        self.begins_with_copy.get(reg).copied()
+        self.begins_with_copy_from.get(reg).copied()
+    }
+
+    /// If `reg`'s last use is a copy to another register,
+    /// this returns the register it is being copied to
+    #[inline]
+    pub fn last_use_copy(&self, reg: Reg) -> Option<Reg> {
+        self.ends_with_copy_to.get(reg).copied()
     }
 
     /// Gets the points that `reg` needs to be reloaded at
@@ -348,7 +382,21 @@ mod tests {
         // [0, 3) doesn't overlap (3, 4)
         assert!(!LiveInterval::defined_before_func(3).overlaps(LiveInterval::between(3, 4)));
 
-        assert!(LiveInterval::between(1, 1).overlaps(LiveInterval::between(1, 2)));
-        assert!(LiveInterval::between(1, 1).overlaps(LiveInterval::between(0, 1)));
+        // (1, 1) doesn't overlap (1, 2)
+        assert!(!LiveInterval::spill(1).overlaps(LiveInterval::between(1, 2)));
+
+        // (1, 1) doesn't overlap (0, 1)
+        assert!(!LiveInterval::spill(1).overlaps(LiveInterval::between(0, 1)));
+
+        // (1, 1) overlaps (0, 2)
+        assert!(LiveInterval::spill(1).overlaps(LiveInterval::between(0, 2)));
+
+        // (1, 1) overlaps (1, 1)
+        assert!(LiveInterval::spill(1).overlaps(LiveInterval::spill(1)));
+    }
+
+    #[test]
+    fn test_within() {
+        assert!(LiveInterval::spill(1).within(ProgramPoint::before(1)));
     }
 }

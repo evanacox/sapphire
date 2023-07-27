@@ -10,10 +10,9 @@
 
 use crate::codegen::x86_64::X86_64;
 use crate::codegen::{
-    MIRBlock, MachInst, PReg, Reg, RegCollector, RegToRegCopy, StackFrame, VariableLocation,
-    WriteableReg,
+    CallUseDefId, MIRBlock, MachInst, PReg, Reg, RegCollector, RegToRegCopy, StackFrame,
+    VariableLocation, WriteableReg,
 };
-use crate::ir;
 use crate::utility::Str;
 use static_assertions::assert_eq_size;
 
@@ -274,6 +273,10 @@ pub enum IndirectAddress {
     RegReg(Reg, Reg),
     /// Adding a constant offset to a register and loading, i.e. `[reg + offset]`
     RegOffset(Reg, i32),
+    /// An offset from `rsp`. The storage is (offset, lo of stacksize, hi of stacksize)
+    /// because due to the extreme layout manipulation that Rust is doing, storing this as
+    /// a `usize` or `u64` actually makes `Inst` bigger than 32 bytes
+    StackOffset(i32, u32, u32),
     /// Scales a register by a scalar and then uses that, i.e. `[reg*scale]`
     ScaledReg(Reg, Scale),
     /// Adds a register to another register that's scaled, i.e. `[reg1 + reg2*scale`]
@@ -282,6 +285,14 @@ pub enum IndirectAddress {
     RegScaledRegIndex(Reg, Reg, ScaleAnd30BitOffset),
     /// This is the `[rip + global]` addressing mode for accessing a global
     RipGlobal(Str),
+}
+
+impl IndirectAddress {
+    /// Properly creates a [`Self::StackOffset`].
+    #[inline]
+    pub fn stack_offset(offset: i32, stack_size: usize) -> Self {
+        Self::StackOffset(offset, stack_size as u32, (stack_size >> 32) as u32)
+    }
 }
 
 assert_eq_size!(IndirectAddress, [u64; 2]);
@@ -670,8 +681,8 @@ pub struct Pop {
 pub struct Call {
     /// The name of the function to call
     pub func: Str,
-    /// The IR function being called, required for ABI constraint stuff
-    pub ir_func: ir::Func,
+    /// An ID that can be used to access use-def info from the stack frame
+    pub id: CallUseDefId,
 }
 
 /// Performs an indirect call to a register, function pointer in memory, etc.
@@ -679,6 +690,8 @@ pub struct Call {
 pub struct IndirectCall {
     /// Where the function pointer is located
     pub func: RegMemImm,
+    /// An ID that can be used to access use-def info from the stack frame
+    pub id: CallUseDefId,
 }
 
 /// Returns from the current function
@@ -763,6 +776,9 @@ macro_rules! push_if_reg {
     (IndirectAddress, $e:expr, $collector:expr) => {
         match $e {
             IndirectAddress::Reg(r) | IndirectAddress::RegOffset(r, _) => $collector.push((r, 8)),
+            IndirectAddress::StackOffset(_, _, _) => {
+                $collector.push((Reg::from_preg(X86_64::RSP), 8))
+            }
             IndirectAddress::RegReg(r1, r2) => {
                 $collector.push((r1, 8));
                 $collector.push((r2, 8));
@@ -800,63 +816,74 @@ macro_rules! push_if_reg {
 }
 
 macro_rules! rewrite_for {
-    ($reg:expr, $rewrites:expr) => {{
-        let mut result = X86_64::RIP;
+    ($reg:expr, $rewrites:expr, $frame:expr) => {{
+        let mut result = $reg;
 
         for &(reg, preg) in $rewrites {
             if reg == $reg {
-                result = preg;
+                result = Reg::from_preg(preg);
             }
         }
 
-        debug_assert_ne!(result, X86_64::RIP);
-
-        Reg::from_preg(result)
+        result
     }};
 
-    (rmi, $rmi:expr, $rewrites:expr) => {{
+    (rmi, $rmi:expr, $rewrites:expr, $frame:expr) => {{
         match $rmi {
-            RegMemImm::Reg(r) => RegMemImm::Reg(rewrite_for!(r, $rewrites)),
-            RegMemImm::Mem(m) => RegMemImm::Mem(rewrite_for!(mem, m, $rewrites)),
+            RegMemImm::Reg(r) => RegMemImm::Reg(rewrite_for!(r, $rewrites, $frame)),
+            RegMemImm::Mem(m) => RegMemImm::Mem(rewrite_for!(mem, m, $rewrites, $frame)),
             RegMemImm::Imm(i) => RegMemImm::Imm(i),
         }
     }};
 
-    (rm, $rm:expr, $rewrites:expr) => {{
+    (rm, $rm:expr, $rewrites:expr, $frame:expr) => {{
         match $rm {
-            RegMem::Reg(r) => RegMem::Reg(rewrite_for!(r, $rewrites)),
-            RegMem::Mem(m) => RegMem::Mem(rewrite_for!(mem, m, $rewrites)),
+            RegMem::Reg(r) => RegMem::Reg(rewrite_for!(r, $rewrites, $frame)),
+            RegMem::Mem(m) => RegMem::Mem(rewrite_for!(mem, m, $rewrites, $frame)),
         }
     }};
 
-    (ri, $ri:expr, $rewrites:expr) => {{
+    (ri, $ri:expr, $rewrites:expr, $frame:expr) => {{
         match $ri {
-            RegImm::Reg(r) => RegImm::Reg(rewrite_for!(r, $rewrites)),
+            RegImm::Reg(r) => RegImm::Reg(rewrite_for!(r, $rewrites, $frame)),
             RegImm::Imm(i) => RegImm::Imm(i),
         }
     }};
 
-    (mem, $mem:expr, $rewrites:expr) => {{
+    (mem, $mem:expr, $rewrites:expr, $frame:expr) => {{
         match $mem {
-            IndirectAddress::Reg(r) => IndirectAddress::Reg(rewrite_for!(r, $rewrites)),
-            IndirectAddress::RegReg(r1, r2) => {
-                IndirectAddress::RegReg(rewrite_for!(r1, $rewrites), rewrite_for!(r2, $rewrites))
+            IndirectAddress::Reg(r) => IndirectAddress::Reg(rewrite_for!(r, $rewrites, $frame)),
+            IndirectAddress::StackOffset(offset, lo, hi) => {
+                let old_size = ((hi as usize) << 8) | lo as usize;
+
+                if $frame.stack_size() != old_size {
+                    // only gets bigger
+                    let diff = $frame.stack_size() - old_size;
+
+                    IndirectAddress::RegOffset(Reg::from_preg(X86_64::RSP), offset + (diff as i32))
+                } else {
+                    IndirectAddress::RegOffset(Reg::from_preg(X86_64::RSP), offset)
+                }
             }
+            IndirectAddress::RegReg(r1, r2) => IndirectAddress::RegReg(
+                rewrite_for!(r1, $rewrites, $frame),
+                rewrite_for!(r2, $rewrites, $frame),
+            ),
             IndirectAddress::RegOffset(r, imm) => {
-                IndirectAddress::RegOffset(rewrite_for!(r, $rewrites), imm)
+                IndirectAddress::RegOffset(rewrite_for!(r, $rewrites, $frame), imm)
             }
             IndirectAddress::ScaledReg(r, scale) => {
-                IndirectAddress::ScaledReg(rewrite_for!(r, $rewrites), scale)
+                IndirectAddress::ScaledReg(rewrite_for!(r, $rewrites, $frame), scale)
             }
             IndirectAddress::RegScaledReg(r1, r2, scale) => IndirectAddress::RegScaledReg(
-                rewrite_for!(r1, $rewrites),
-                rewrite_for!(r2, $rewrites),
+                rewrite_for!(r1, $rewrites, $frame),
+                rewrite_for!(r2, $rewrites, $frame),
                 scale,
             ),
             IndirectAddress::RegScaledRegIndex(r1, r2, scale_index) => {
                 IndirectAddress::RegScaledRegIndex(
-                    rewrite_for!(r1, $rewrites),
-                    rewrite_for!(r2, $rewrites),
+                    rewrite_for!(r1, $rewrites, $frame),
+                    rewrite_for!(r2, $rewrites, $frame),
                     scale_index,
                 )
             }
@@ -944,7 +971,7 @@ impl MachInst for Inst {
                 collector.push(into_pair(IDiv::DIVIDEND_HI, idiv.width));
             }
             Inst::Call(call) => {
-                for &reg in frame.call_use_defs(*self).0 {
+                for &reg in frame.call_use_defs(call.id).0 {
                     // we can't assume width, and they're extended to 8 anyway
                     collector.push(into_pair(Reg::from_preg(reg), Width::Qword));
                 }
@@ -952,14 +979,14 @@ impl MachInst for Inst {
             Inst::IndirectCall(call) => {
                 push_if_reg!(RegMemImm, call.func, Width::Qword, collector);
 
-                for &reg in frame.call_use_defs(*self).0 {
+                for &reg in frame.call_use_defs(call.id).0 {
                     // we can't assume width, and they're extended to 8 anyway
                     collector.push(into_pair(Reg::from_preg(reg), Width::Qword));
                 }
             }
             Inst::Jump(_) => {}
             Inst::Ret(_) => {
-                for &reg in frame.ret_uses(*self) {
+                for &reg in frame.ret_uses() {
                     collector.push(into_pair(Reg::from_preg(reg), Width::Qword));
                 }
             }
@@ -1029,12 +1056,12 @@ impl MachInst for Inst {
                 collector.push(into_pair(IDiv::REMAINDER, idiv.width));
             }
             Inst::Call(call) => {
-                for &reg in frame.call_use_defs(*self).1 {
+                for &reg in frame.call_use_defs(call.id).1 {
                     collector.push(into_pair(Reg::from_preg(reg), Width::Qword));
                 }
             }
-            Inst::IndirectCall(_) => {
-                for &reg in frame.call_use_defs(*self).1 {
+            Inst::IndirectCall(call) => {
+                for &reg in frame.call_use_defs(call.id).1 {
                     collector.push(into_pair(Reg::from_preg(reg), Width::Qword));
                 }
             }
@@ -1079,9 +1106,9 @@ impl MachInst for Inst {
             dest: WriteableReg::from_reg(Reg::from_preg(to)),
             src: match from {
                 VariableLocation::InReg(r) => RegMemImm::Reg(r),
-                VariableLocation::RelativeToSP(offset) => RegMemImm::Mem(
-                    IndirectAddress::RegOffset(Reg::from_preg(X86_64::RSP), offset),
-                ),
+                VariableLocation::RelativeToSP(offset, size) => {
+                    RegMemImm::Mem(IndirectAddress::stack_offset(offset, size))
+                }
                 VariableLocation::RelativeToFP(offset) => RegMemImm::Mem(
                     IndirectAddress::RegOffset(Reg::from_preg(X86_64::RBP), offset),
                 ),
@@ -1095,8 +1122,8 @@ impl MachInst for Inst {
             src: RegImm::Reg(Reg::from_preg(from)),
             dest: match to {
                 VariableLocation::InReg(r) => unreachable!(),
-                VariableLocation::RelativeToSP(offset) => {
-                    IndirectAddress::RegOffset(Reg::from_preg(X86_64::RSP), offset)
+                VariableLocation::RelativeToSP(offset, stack_size) => {
+                    IndirectAddress::stack_offset(offset, stack_size)
                 }
                 VariableLocation::RelativeToFP(offset) => {
                     IndirectAddress::RegOffset(Reg::from_preg(X86_64::RBP), offset)
@@ -1109,12 +1136,12 @@ impl MachInst for Inst {
         matches!(self, Self::Ret(_))
     }
 
-    fn rewrite(self, rewrites: &[(Reg, PReg)]) -> Self {
+    fn rewrite(self, rewrites: &[(Reg, PReg)], frame: &dyn StackFrame<X86_64>) -> Self {
         match self {
             Inst::Nop(_) => self,
             Inst::Mov(mov) => {
-                let src = rewrite_for!(rmi, mov.src, rewrites);
-                let dest = WriteableReg::from_reg(rewrite_for!(mov.dest.to_reg(), rewrites));
+                let src = rewrite_for!(rmi, mov.src, rewrites, frame);
+                let dest = WriteableReg::from_reg(rewrite_for!(mov.dest.to_reg(), rewrites, frame));
 
                 Inst::Mov(Mov {
                     src,
@@ -1123,8 +1150,9 @@ impl MachInst for Inst {
                 })
             }
             Inst::Movzx(movzx) => {
-                let src = rewrite_for!(rmi, movzx.src, rewrites);
-                let dest = WriteableReg::from_reg(rewrite_for!(movzx.dest.to_reg(), rewrites));
+                let src = rewrite_for!(rmi, movzx.src, rewrites, frame);
+                let dest =
+                    WriteableReg::from_reg(rewrite_for!(movzx.dest.to_reg(), rewrites, frame));
 
                 Inst::Movzx(Movzx {
                     src,
@@ -1133,8 +1161,9 @@ impl MachInst for Inst {
                 })
             }
             Inst::Movsx(movsx) => {
-                let src = rewrite_for!(rmi, movsx.src, rewrites);
-                let dest = WriteableReg::from_reg(rewrite_for!(movsx.dest.to_reg(), rewrites));
+                let src = rewrite_for!(rmi, movsx.src, rewrites, frame);
+                let dest =
+                    WriteableReg::from_reg(rewrite_for!(movsx.dest.to_reg(), rewrites, frame));
 
                 Inst::Movsx(Movsx {
                     src,
@@ -1143,8 +1172,8 @@ impl MachInst for Inst {
                 })
             }
             Inst::MovStore(mov) => {
-                let src = rewrite_for!(ri, mov.src, rewrites);
-                let dest = rewrite_for!(mem, mov.dest, rewrites);
+                let src = rewrite_for!(ri, mov.src, rewrites, frame);
+                let dest = rewrite_for!(mem, mov.dest, rewrites, frame);
 
                 Inst::MovStore(MovStore {
                     src,
@@ -1153,7 +1182,7 @@ impl MachInst for Inst {
                 })
             }
             Inst::Movabs(movabs) => {
-                let dest = rewrite_for!(movabs.dest.to_reg(), rewrites);
+                let dest = rewrite_for!(movabs.dest.to_reg(), rewrites, frame);
 
                 Inst::Movabs(Movabs {
                     value: movabs.value,
@@ -1161,8 +1190,8 @@ impl MachInst for Inst {
                 })
             }
             Inst::Lea(lea) => {
-                let src = rewrite_for!(mem, lea.src, rewrites);
-                let dest = rewrite_for!(lea.dest.to_reg(), rewrites);
+                let src = rewrite_for!(mem, lea.src, rewrites, frame);
+                let dest = rewrite_for!(lea.dest.to_reg(), rewrites, frame);
 
                 Inst::Lea(Lea {
                     src,
@@ -1170,8 +1199,8 @@ impl MachInst for Inst {
                 })
             }
             Inst::ALU(alu) => {
-                let lhs = rewrite_for!(alu.lhs.to_reg(), rewrites);
-                let rhs = rewrite_for!(rmi, alu.rhs, rewrites);
+                let lhs = rewrite_for!(alu.lhs.to_reg(), rewrites, frame);
+                let rhs = rewrite_for!(rmi, alu.rhs, rewrites, frame);
 
                 Inst::ALU(ALU {
                     opc: alu.opc,
@@ -1181,7 +1210,7 @@ impl MachInst for Inst {
                 })
             }
             Inst::Not(not) => {
-                let reg = rewrite_for!(not.reg.to_reg(), rewrites);
+                let reg = rewrite_for!(not.reg.to_reg(), rewrites, frame);
 
                 Inst::Not(Not {
                     width: not.width,
@@ -1189,7 +1218,7 @@ impl MachInst for Inst {
                 })
             }
             Inst::Neg(neg) => {
-                let reg = rewrite_for!(neg.reg.to_reg(), rewrites);
+                let reg = rewrite_for!(neg.reg.to_reg(), rewrites, frame);
 
                 Inst::Neg(Neg {
                     width: neg.width,
@@ -1197,8 +1226,8 @@ impl MachInst for Inst {
                 })
             }
             Inst::IMul(imul) => {
-                let lhs = rewrite_for!(imul.lhs.to_reg(), rewrites);
-                let rhs = rewrite_for!(rmi, imul.rhs, rewrites);
+                let lhs = rewrite_for!(imul.lhs.to_reg(), rewrites, frame);
+                let rhs = rewrite_for!(rmi, imul.rhs, rewrites, frame);
 
                 Inst::IMul(IMul {
                     width: imul.width,
@@ -1210,7 +1239,7 @@ impl MachInst for Inst {
             Inst::Cdq(_) => self,
             Inst::Cqo(_) => self,
             Inst::Div(div) => {
-                let divisor = rewrite_for!(rm, div.divisor, rewrites);
+                let divisor = rewrite_for!(rm, div.divisor, rewrites, frame);
 
                 Inst::Div(Div {
                     width: div.width,
@@ -1218,7 +1247,7 @@ impl MachInst for Inst {
                 })
             }
             Inst::IDiv(idiv) => {
-                let divisor = rewrite_for!(rm, idiv.divisor, rewrites);
+                let divisor = rewrite_for!(rm, idiv.divisor, rewrites, frame);
 
                 Inst::IDiv(IDiv {
                     width: idiv.width,
@@ -1226,8 +1255,8 @@ impl MachInst for Inst {
                 })
             }
             Inst::Cmp(cmp) => {
-                let lhs = rewrite_for!(cmp.lhs, rewrites);
-                let rhs = rewrite_for!(rmi, cmp.rhs, rewrites);
+                let lhs = rewrite_for!(cmp.lhs, rewrites, frame);
+                let rhs = rewrite_for!(rmi, cmp.rhs, rewrites, frame);
 
                 Inst::Cmp(Cmp {
                     width: cmp.width,
@@ -1236,8 +1265,8 @@ impl MachInst for Inst {
                 })
             }
             Inst::Test(test) => {
-                let lhs = rewrite_for!(test.lhs, rewrites);
-                let rhs = rewrite_for!(rmi, test.rhs, rewrites);
+                let lhs = rewrite_for!(test.lhs, rewrites, frame);
+                let rhs = rewrite_for!(rmi, test.rhs, rewrites, frame);
 
                 Inst::Test(Test {
                     width: test.width,
@@ -1246,7 +1275,7 @@ impl MachInst for Inst {
                 })
             }
             Inst::Set(set) => {
-                let dest = rewrite_for!(set.dest.to_reg(), rewrites);
+                let dest = rewrite_for!(set.dest.to_reg(), rewrites, frame);
 
                 Inst::Set(Set {
                     condition: set.condition,
@@ -1254,7 +1283,7 @@ impl MachInst for Inst {
                 })
             }
             Inst::Push(push) => {
-                let reg = rewrite_for!(push.value, rewrites);
+                let reg = rewrite_for!(push.value, rewrites, frame);
 
                 Inst::Push(Push {
                     width: push.width,
@@ -1262,7 +1291,7 @@ impl MachInst for Inst {
                 })
             }
             Inst::Pop(pop) => {
-                let reg = rewrite_for!(pop.dest.to_reg(), rewrites);
+                let reg = rewrite_for!(pop.dest.to_reg(), rewrites, frame);
 
                 Inst::Pop(Pop {
                     width: pop.width,
@@ -1272,9 +1301,12 @@ impl MachInst for Inst {
             Inst::Jump(_) => self,
             Inst::Call(_) => self,
             Inst::IndirectCall(indirectcall) => {
-                let func = rewrite_for!(rmi, indirectcall.func, rewrites);
+                let func = rewrite_for!(rmi, indirectcall.func, rewrites, frame);
 
-                Inst::IndirectCall(IndirectCall { func })
+                Inst::IndirectCall(IndirectCall {
+                    func,
+                    id: indirectcall.id,
+                })
             }
             Inst::Ret(_) => self,
             Inst::Ud2(_) => self,

@@ -8,32 +8,93 @@
 //                                                                           //
 //======---------------------------------------------------------------======//
 
-use crate::arena::SecondaryMap;
+use crate::arena::{SecondaryMap, SecondarySet};
 use crate::codegen::regalloc::allocator::{defs, uses};
 use crate::codegen::{
     Allocation, Architecture, AvailableRegisters, ConservativeLiveIntervals, FixedIntervals,
     LiveInterval, MIRFunction, MachInst, PReg, ProgramPointsIterator, Reg, RegisterAllocator,
-    RegisterMapping, StackFrame, VariableLocation,
+    RegisterMapping, SpillReload, StackFrame, VariableLocation,
 };
 use crate::ir::FunctionMetadata;
 use crate::utility::SaHashMap;
 use smallvec::{smallvec, SmallVec};
-use std::mem;
+use std::cmp::{Ordering, Reverse};
+use std::collections::BinaryHeap;
+
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
+struct RegLivePair {
+    /* raw: u128, */
+    reg: Reg,
+    live: LiveInterval,
+}
+
+impl RegLivePair {
+    #[inline]
+    fn new(reg: Reg, live: LiveInterval) -> Self {
+        /* let (reg, live): (u32, u64) = unsafe { (mem::transmute(reg), mem::transmute(live)) };
+
+        Self {
+            raw: (reg as u128) << 64 | (live as u128),
+        }
+        */
+
+        Self { reg, live }
+    }
+
+    #[inline]
+    fn reg(self) -> Reg {
+        /* unsafe { mem::transmute((self.raw >> 64) as u32) } */
+        self.reg
+    }
+
+    #[inline]
+    fn live(self) -> LiveInterval {
+        /* unsafe { mem::transmute(self.raw as u64) } */
+        self.live
+    }
+}
+
+impl PartialOrd for RegLivePair {
+    #[inline]
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        self.live().partial_cmp(&other.live())
+    }
+}
+
+impl Ord for RegLivePair {
+    #[inline]
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.live().cmp(&other.live())
+    }
+}
 
 /// A linear scanning based register allocator
 ///
 /// This allocator is a balance between compile time performance and output
 /// quality, it provides a balance of both.
 pub struct LinearScanRegAlloc<'a> {
-    active: Vec<LiveInterval>,
-    intervals: Vec<LiveInterval>,
+    active: Vec<RegLivePair>,
+    intervals: BinaryHeap<Reverse<RegLivePair>>,
     fixed: &'a FixedIntervals,
-    original_int_to_reg: SaHashMap<LiveInterval, Reg>,
-    original_reg_to_int: SaHashMap<Reg, LiveInterval>,
-    mapping: SaHashMap<LiveInterval, PReg>,
-    started_by_copy: SaHashMap<LiveInterval, Reg>,
-    reload_points: SaHashMap<LiveInterval, SmallVec<[u32; 4]>>,
-    spills: SaHashMap<LiveInterval, VariableLocation>,
+    // maps a v-reg to its live-pair
+    reg_to_pair: SaHashMap<Reg, RegLivePair>,
+    // maps (vreg, live interval of vreg) -> preg.
+    // this is only populated if vreg hasn't been spilled
+    mapping: SaHashMap<RegLivePair, PReg>,
+    // maps a vreg's live interval to the register it was copied from **if**
+    // it began from a copy from another register (virtual or otherwise)
+    started_by_copy_from: SaHashMap<RegLivePair, Reg>,
+    // maps a vreg's live interval to the register it is copied to **if**
+    // it ends with a copy to another register (virtual or otherwise)
+    ends_by_copy_to: SaHashMap<RegLivePair, Reg>,
+    // if an interval is spilled, this maps it to a list of use points
+    // where it needs to be given a register
+    spill_points: SaHashMap<RegLivePair, SmallVec<[u32; 4]>>,
+    // where a given v-reg was spilled to, if it was spilled
+    spills: SaHashMap<Reg, VariableLocation>,
+    // a bitset representing the registers that are "preserved" by the function
+    // and thus need to be `push`ed or whatever by the stack frame
+    preserved: SecondarySet<PReg>,
     pool: RegisterPool,
 }
 
@@ -44,41 +105,45 @@ impl<'a> LinearScanRegAlloc<'a> {
         metadata: FunctionMetadata,
         available: AvailableRegisters,
     ) -> Self {
-        let mut intervals = Vec::default();
-        let mut original_int_to_reg = SaHashMap::default();
-        let mut original_reg_to_int = SaHashMap::default();
-        let mut started_by_copy = SaHashMap::default();
-        let mut reload_points = SaHashMap::default();
+        let mut intervals = BinaryHeap::default();
+        let mut started_by_copy_from = SaHashMap::default();
+        let mut ends_by_copy_to = SaHashMap::default();
+        let mut spill_points = SaHashMap::default();
+        let mut preserved = SecondarySet::default();
+        let mut reg_to_pair = SaHashMap::default();
 
         for (reg, interval) in live.intervals() {
-            original_int_to_reg.insert(interval, reg);
-            original_reg_to_int.insert(reg, interval);
-            intervals.push(interval);
-
-            if let Some(reg) = live.started_by_copy(reg) {
-                started_by_copy.insert(interval, reg);
-            }
+            let pair = RegLivePair::new(reg, interval);
+            intervals.push(Reverse(pair));
+            reg_to_pair.insert(reg, pair);
         }
 
         // we have to do this after, because we're using `take_reload_points` to avoid
         // needing to re-create the SmallVec objects
-        for &interval in intervals.iter() {
-            let &reg = original_int_to_reg.get(&interval).unwrap();
+        for &Reverse(pair) in intervals.iter() {
+            if let Some(reg) = live.started_by_copy(pair.reg()) {
+                started_by_copy_from.insert(pair, reg);
+            }
 
-            reload_points.insert(interval, live.take_reload_points(reg));
+            if let Some(reg) = live.last_use_copy(pair.reg()) {
+                ends_by_copy_to.insert(pair, reg);
+            }
+
+            spill_points.insert(pair, live.take_reload_points(pair.reg()));
         }
 
-        // intervals need to be sorted by increasing start point, `LiveInterval`
-        // implements `Ord` in that way so we can just sort normally
-        intervals.sort_unstable();
+        for &reg in available.preserved {
+            preserved.insert(reg);
+        }
 
         Self {
             intervals,
             fixed,
-            original_int_to_reg,
-            original_reg_to_int,
-            started_by_copy,
-            reload_points,
+            started_by_copy_from,
+            ends_by_copy_to,
+            reg_to_pair,
+            spill_points,
+            preserved,
             active: Vec::default(),
             mapping: SaHashMap::default(),
             spills: SaHashMap::default(),
@@ -89,10 +154,7 @@ impl<'a> LinearScanRegAlloc<'a> {
 
 impl<'a> LinearScanRegAlloc<'a> {
     fn lsra<Arch: Architecture>(&mut self, frame: &mut dyn StackFrame<Arch>) {
-        let end = self.intervals.last().unwrap().last_used_by();
-        let intervals = mem::take(&mut self.intervals);
-
-        for &interval in intervals.iter() {
+        while let Some(Reverse(interval)) = self.intervals.pop() {
             self.expire_old_intervals(interval, frame);
 
             // if this is true we need more registers than the target has, so we have to spill
@@ -105,9 +167,17 @@ impl<'a> LinearScanRegAlloc<'a> {
         }
     }
 
+    fn push_active(&mut self, interval: RegLivePair) {
+        self.active.push(interval);
+
+        // sort in order of increasing end points, needed for ExpireOldIntervals
+        self.active
+            .sort_unstable_by_key(|pair| pair.live().last_used_by())
+    }
+
     fn maybe_allocate<Arch: Architecture>(
         &mut self,
-        interval: LiveInterval,
+        interval: RegLivePair,
         frame: &mut dyn StackFrame<Arch>,
     ) {
         match self.register_for_interval(interval) {
@@ -115,11 +185,13 @@ impl<'a> LinearScanRegAlloc<'a> {
             // and record the register mapping for this interval
             Some(reg) => {
                 self.mapping.insert(interval, reg);
-                self.active.push(interval);
+                self.push_active(interval);
 
-                // sort in order of increasing end points, needed for ExpireOldIntervals
-                self.active
-                    .sort_unstable_by_key(|interval| interval.last_used_by())
+                // if we ended up allocating a preserved register, we need to push it
+                // in the function's prologue, so we tell the frame about that
+                if self.preserved.contains(reg) {
+                    frame.preserved_reg_used(reg);
+                }
             }
             // if we didn't get a valid register, spill the interval anyway
             // and then return. should happen very very rarely
@@ -135,12 +207,15 @@ impl<'a> LinearScanRegAlloc<'a> {
     // right now, the main heuristic is trying to make the allocator prefer
     // getting the same register as the interval that we're copying from,
     // therefore making a `x <- x` instruction we can remove in the rewriter.
-    fn register_for_interval(&mut self, interval: LiveInterval) -> Option<PReg> {
-        // if this interval wasn't started by a copy instruction,
+    fn register_for_interval(&mut self, pair: RegLivePair) -> Option<PReg> {
+        // if this interval wasn't started by and/or doesn't end with a copy instruction,
         // we don't have anything we can really do.
-        let reg = match self.started_by_copy.get(&interval) {
+        let reg = match self.started_by_copy_from.get(&pair) {
             Some(reg) => *reg,
-            None => return self.pool.try_take_any(interval, self.fixed),
+            None => match self.ends_by_copy_to.get(&pair) {
+                Some(reg) => *reg,
+                None => return self.pool.try_take_any(pair.live(), self.fixed),
+            },
         };
 
         let preferred = match reg.as_preg() {
@@ -148,36 +223,41 @@ impl<'a> LinearScanRegAlloc<'a> {
             // so we directly access the value instead of copying it needlessly
             Some(preg) => preg,
             None => {
-                let associated = self.original_reg_to_int.get(&reg).copied().unwrap();
+                let associated = self.reg_to_pair.get(&reg).copied().unwrap();
 
                 // if this is a `x <- y` instruction, try to take `y` as our register
                 // if we don't overlap with its live interval.
                 //
-                // we can assume `y` is already allocated due to it being before us.
-                if !interval.overlaps(associated) {
-                    self.mapping.get(&associated).copied().unwrap()
+                // the one edge case is that `y` may have been spilled, in which case we bail
+                if !pair.live().overlaps(associated.live()) {
+                    if let Some(reg) = self.mapping.get(&associated).copied() {
+                        reg
+                    } else {
+                        // if `associated` was spilled, we bail
+                        return self.pool.try_take_any(pair.live(), self.fixed);
+                    }
                 } else {
-                    // if it overlaps, we just bail and try to take anything
-                    return self.pool.try_take_any(interval, self.fixed);
+                    // if it overlaps we bail
+                    return self.pool.try_take_any(pair.live(), self.fixed);
                 }
             }
         };
 
         return self
             .pool
-            .try_take_specific_register(preferred, interval, self.fixed);
+            .try_take_specific_register(preferred, pair.live(), self.fixed);
     }
 
     fn expire_old_intervals<Arch: Architecture>(
         &mut self,
-        interval: LiveInterval,
+        interval: RegLivePair,
         frame: &mut dyn StackFrame<Arch>,
     ) {
         let mut remove_until = None;
 
         // go through the active list and find the sublist we need to remove
         for (i, old) in self.active.iter().enumerate() {
-            if old.ends_after(interval) {
+            if old.live().ends_after(interval.live()) {
                 break;
             }
 
@@ -204,31 +284,121 @@ impl<'a> LinearScanRegAlloc<'a> {
 
     fn spill_at_interval<Arch: Architecture>(
         &mut self,
-        interval: LiveInterval,
+        interval: RegLivePair,
         frame: &mut dyn StackFrame<Arch>,
     ) {
-        let spill = self
-            .active
-            .last()
-            .expect("spilling while nothing is active?");
+        // we can't spill a spill interval without running into trouble, choose another interval to spill
+        let (reg, old_preg, reloads) = if interval.live().is_spill_interval() {
+            // find the latest non-spill interval
+            let (i, _) = self
+                .active
+                .iter()
+                .enumerate()
+                .rev()
+                .find(|(i, pair)| !pair.live().is_spill_interval())
+                .expect("every active slot is a spill interval, don't have enough registers on the target");
 
-        if spill.last_used_by() > interval.last_used_by() {
-            let vreg = self.original_int_to_reg.get(spill).copied().unwrap();
-            let reg = self.mapping.get(spill).copied().unwrap();
-            let spill = self.active.pop().unwrap();
+            let spill = self.active.remove(i);
 
-            self.mapping.insert(interval, reg);
-            self.spills.insert(spill, frame.spill_slot(8));
-
-            for &reload in self.reload_points.get(&spill).unwrap() {}
+            self.spill_other_interval(interval, spill, frame)
         } else {
+            let &maybe_spill = self
+                .active
+                .last()
+                .expect("spilling while nothing is active?");
+
+            // if the last active interval ends after our current interval, try to spill that instead.
+            if maybe_spill.live().last_used_by() > interval.live().last_used_by()
+                && !maybe_spill.live().is_spill_interval()
+            {
+                let spill = self.active.pop().unwrap();
+
+                self.spill_other_interval(interval, spill, frame)
+            } else {
+                self.spill(interval, frame)
+            }
+        };
+
+        let reloads = SmallVec::<[u32; 64]>::from(reloads);
+
+        // create a bunch of miniature intervals at (reload, reload) so we can 'spill everywhere'
+        for reload in reloads {
+            let micro_interval = LiveInterval::spill(reload);
+            let pair = RegLivePair::new(reg, micro_interval);
+
+            // spill everywhere idea: with all of our micro-intervals we are
+            // in one of two cases.
+            //
+            // 1. it was *before* the current `interval` it can just keep using
+            //    the register it was already allocated to (through `old_preg`)
+            //
+            // 2. it is after the current interval, in which case we add it to
+            //    the interval queue so it gets allocated later
+            if micro_interval.ends_before_without_overlap(interval.live()) {
+                // case #1
+                self.mapping.insert(
+                    pair,
+                    old_preg.expect("had interval before but no old allocation"),
+                );
+            } else {
+                // case #2
+                self.intervals.push(Reverse(pair));
+            }
+
+            // we both need to insert a new tiny interval (if this is after) AND we need to
+            // map it as the only spill point (of itself), we might end up spilling
+            // one of our spill intervals if we have an absolutely terrible function
+
+            self.spill_points.insert(pair, smallvec![reload]);
         }
+    }
+
+    fn spill_other_interval<Arch: Architecture>(
+        &mut self,
+        interval: RegLivePair,
+        spill: RegLivePair,
+        frame: &mut dyn StackFrame<Arch>,
+    ) -> (Reg, Option<PReg>, &[u32]) {
+        let reg = self.mapping.get(&spill).copied().unwrap();
+
+        // take the register that `spill` was mapped to, and remove its mapping
+        self.mapping.insert(interval, reg);
+        self.mapping.remove(&spill);
+
+        // spill the value and get a new location for it
+        self.spills.insert(spill.reg(), frame.spill_slot(8));
+
+        // add interval to the active set
+        self.push_active(interval);
+
+        (
+            spill.reg(),
+            Some(reg),
+            self.spill_points.get(&spill).unwrap(),
+        )
+    }
+
+    fn spill<Arch: Architecture>(
+        &mut self,
+        interval: RegLivePair,
+        frame: &mut dyn StackFrame<Arch>,
+    ) -> (Reg, Option<PReg>, &[u32]) {
+        debug_assert!(!interval.live().is_spill_interval());
+
+        self.spills.insert(interval.reg(), frame.spill_slot(8));
+
+        (
+            interval.reg(),
+            None,
+            self.spill_points.get(&interval).unwrap(),
+        )
     }
 }
 
 impl<'a, Arch: Architecture> RegisterAllocator<Arch> for LinearScanRegAlloc<'a> {
     fn allocate(program: &MIRFunction<Arch::Inst>, frame: &mut dyn StackFrame<Arch>) -> Allocation {
         let mut mapping = RegisterMapping::new();
+        let mut spills = Vec::default();
         let live = ConservativeLiveIntervals::compute(program, frame);
         let mut obj = LinearScanRegAlloc::new(
             program.fixed_intervals(),
@@ -244,25 +414,84 @@ impl<'a, Arch: Architecture> RegisterAllocator<Arch> for LinearScanRegAlloc<'a> 
             let uses = uses!(inst, frame);
             let defs = defs!(inst, frame);
 
-            for &(reg, _) in uses.iter().chain(defs.iter()) {
-                // rewriter expects us to map `%preg` -> `%preg`
-                if let Some(preg) = reg.as_preg() {
-                    pairs.push((reg, preg))
-                } else {
-                    let interval = obj.original_reg_to_int.get(&reg).unwrap();
-                    let preg = obj.mapping.get(interval).copied().unwrap();
+            for (reg, _) in uses {
+                let (loc, preg) = {
+                    // rewriter expects us to map `%preg` -> `%preg`
+                    if let Some(preg) = reg.as_preg() {
+                        (None, preg)
+                    } else {
+                        match obj.spills.get(&reg) {
+                            Some(loc) => {
+                                let pair_for_current =
+                                    RegLivePair::new(reg, LiveInterval::spill(pp.offset_of_next()));
+                                let register = obj.mapping.get(&pair_for_current).copied().unwrap();
 
-                    pairs.push((reg, preg));
+                                (Some(*loc), register)
+                            }
+                            None => {
+                                let interval = obj.reg_to_pair.get(&reg).copied().unwrap();
+                                let register = obj.mapping.get(&interval).copied().unwrap();
+
+                                (None, register)
+                            }
+                        }
+                    }
+                };
+
+                pairs.push((reg, preg));
+
+                if let Some(loc) = loc {
+                    spills.push((
+                        pp,
+                        SpillReload::Reload {
+                            from: loc,
+                            to: preg,
+                        },
+                    ))
+                }
+            }
+
+            for (reg, _) in defs {
+                let (loc, preg) = {
+                    // rewriter expects us to map `%preg` -> `%preg`
+                    if let Some(preg) = reg.as_preg() {
+                        (None, preg)
+                    } else {
+                        match obj.spills.get(&reg) {
+                            Some(loc) => {
+                                let pair_for_current =
+                                    RegLivePair::new(reg, LiveInterval::spill(pp.offset_of_next()));
+                                let register = obj.mapping.get(&pair_for_current).copied().unwrap();
+
+                                (Some(*loc), register)
+                            }
+                            None => {
+                                let interval = obj.reg_to_pair.get(&reg).copied().unwrap();
+                                let register = obj.mapping.get(&interval).copied().unwrap();
+
+                                (None, register)
+                            }
+                        }
+                    }
+                };
+
+                pairs.push((reg, preg));
+
+                if let Some(loc) = loc {
+                    spills.push((
+                        pp,
+                        SpillReload::Spill {
+                            from: preg,
+                            to: loc,
+                        },
+                    ))
                 }
             }
 
             mapping.push(pp, pairs);
         }
 
-        Allocation {
-            mapping,
-            spills: vec![],
-        }
+        Allocation { mapping, spills }
     }
 }
 

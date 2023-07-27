@@ -8,23 +8,45 @@
 //                                                                           //
 //======---------------------------------------------------------------======//
 
-use crate::arena::SecondaryMap;
+use crate::arena::{ArenaMap, SecondaryMap};
 use crate::codegen::x86_64::{
-    greedy_isel, ALUOpcode, IndirectAddress, Inst, Lea, Mov, Pop, Push, RegMemImm, Ret, Width, ALU,
-    X86_64,
+    greedy_isel, ALUOpcode, Call, IndirectAddress, IndirectCall, Inst, Lea, Mov, Pop, Push,
+    RegMemImm, Ret, Width, ALU, X86_64,
 };
 use crate::codegen::{
-    AvailableRegisters, CallingConv, CodegenOptions, Ctx, FramelessCtx, LoweringContext, PReg, Reg,
-    StackFrame, Target, VariableLocation, WriteableReg,
+    AvailableRegisters, CallUseDefId, CallingConv, CodegenOptions, Ctx, FramelessCtx,
+    LoweringContext, PReg, Reg, RegClass, StackFrame, Target, VariableLocation, WriteableReg,
 };
 use crate::ir;
 use crate::ir::{
-    Array, Cursor, FuncView, Function, FunctionMetadata, Signature, StackSlot, Struct, Type,
+    Array, Cursor, FuncView, Function, FunctionMetadata, Sig, Signature, StackSlot, Struct, Type,
     TypePool, UType, Value,
 };
 use crate::utility::SaHashMap;
 use smallvec::SmallVec;
+use static_assertions::{const_assert, const_assert_eq};
 use std::iter;
+
+const CALLEE_PRESERVED: [PReg; 6] = [
+    X86_64::RBX,
+    X86_64::R12,
+    X86_64::R13,
+    X86_64::R14,
+    X86_64::R15,
+    X86_64::RBP,
+];
+
+const CALLER_PRESERVED: [PReg; 9] = [
+    X86_64::RAX,
+    X86_64::RCX,
+    X86_64::RDX,
+    X86_64::RDI,
+    X86_64::RSI,
+    X86_64::R8,
+    X86_64::R9,
+    X86_64::R10,
+    X86_64::R11,
+];
 
 #[allow(clippy::upper_case_acronyms)]
 #[repr(u8)]
@@ -148,20 +170,22 @@ impl SignatureABI {
 pub struct SystemVStackFrame {
     metadata: FunctionMetadata,
     stack_size: usize,
+    unaligned_by: usize,
     additional: usize,
     options: CodegenOptions,
     slot_distance_from_rbp: SecondaryMap<StackSlot, usize>,
     preserved_regs_used: SmallVec<[PReg; 8]>,
     signature_abi: SignatureABI,
+    call_use_defs: ArenaMap<CallUseDefId, (Box<[PReg]>, Box<[PReg]>)>,
 }
 
 macro_rules! manipulate_rsp {
-    ($self:expr, $out:expr, $opc:expr) => {{
+    ($size:expr, $out:expr, $opc:expr) => {{
         $out.push(Inst::ALU(ALU {
             opc: $opc,
             width: Width::Qword,
             lhs: WriteableReg::from_reg(Reg::from_preg(X86_64::RSP)),
-            rhs: RegMemImm::Imm($self.stack_size as i32),
+            rhs: RegMemImm::Imm($size as i32),
         }));
     }};
 }
@@ -176,11 +200,13 @@ impl SystemVStackFrame {
         let mut obj = Self {
             metadata,
             stack_size: 0,
+            unaligned_by: 8,
             additional: 0,
             options: target.options(),
             slot_distance_from_rbp: SecondaryMap::default(),
             preserved_regs_used: SmallVec::default(),
             signature_abi: SignatureABI::classify(sig, function_params),
+            call_use_defs: ArenaMap::default(),
         };
 
         let view = FuncView::over(func);
@@ -215,7 +241,7 @@ impl SystemVStackFrame {
     }
 
     #[inline]
-    fn align_stack_for(&mut self, align: usize) {
+    fn align_stack_for(&mut self, align: usize) -> bool {
         debug_assert!(align.is_power_of_two());
 
         // if we haven't allocated anything then stack isn't properly aligned,
@@ -224,18 +250,28 @@ impl SystemVStackFrame {
         //
         // note that we don't do this if we will emit a frame pointer, because
         // the prologue would do `push rbp` and add an extra 8
-        if self.stack_size == 0 && !self.metadata.is_leaf && !self.metadata.has_alloca {
-            self.stack_size += 8;
+        if self.stack_size == 0 {
+            if self.will_omit_fp() && !self.metadata.is_leaf {
+                self.unaligned_by = 0;
+                self.stack_size += 8;
 
-            // almost every type only has <= 16-byte alignment here, once we've added
-            // to get us back to 16 byte alignment we're good to go
-            if align <= 16 {
-                return;
+                // almost every type only has <= 8-byte alignment here, once we've added
+                // to get us back to 16 byte alignment we're good to go. we can just use
+                // that stack space we just "allocated"
+                if align <= 8 {
+                    return true;
+                }
+            } else {
+                // `push rbp` will get us back to being properly aligned
+                self.unaligned_by = 0;
             }
         }
 
-        // align our stack by adding the remainder between the size and `alignof(T)`
+        // keep track of how far off 16-byte alignment we are so we can adjust in the prologue
         self.stack_size += self.stack_size & (align - 1);
+        self.unaligned_by = (self.unaligned_by + align) % 16;
+
+        return false;
     }
 
     #[inline]
@@ -261,6 +297,7 @@ impl SystemVStackFrame {
             // if relative to rsp we need to add since the stack grows upwards
             VariableLocation::RelativeToSP(
                 i32::try_from(self.stack_size - distance).expect("stack offset exceeds i32 limit"),
+                self.stack_size,
             )
         } else {
             // if relative to rbp we need to subtract since the stack grows downwards
@@ -356,7 +393,7 @@ impl StackFrame<X86_64> for SystemVStackFrame {
 
                 greedy_isel::zeroing_mov(result, RegMemImm::Reg(reg), def.dfg.ty(param), ctx);
 
-                ctx.end_caller_defined_fixed_interval(reg.as_preg().unwrap());
+                ctx.end_caller_defined_fixed_interval(reg.as_preg().unwrap(), 0);
             }
             ParamLocation::RelativeToFP(offset) => {
                 let loc = self.fp_relative_offset_into_indirect_address(offset, ctx);
@@ -375,34 +412,40 @@ impl StackFrame<X86_64> for SystemVStackFrame {
     }
 
     fn lower_ret(&mut self, ret: &ir::RetInst, (def, ctx): FramelessCtx<'_, '_, '_, X86_64>) {
-        if let Some(val) = ret.value() {
-            let ty = def.dfg.ty(val);
+        match ret.value() {
+            Some(val) => {
+                let ty = def.dfg.ty(val);
 
-            match ty.unpack() {
-                UType::Float(_) | UType::Int(_) | UType::Bool(_) | UType::Ptr(_) => {
-                    let reg = self.signature_abi.ret[0];
-                    let result = ctx.result_reg(val, reg.class());
+                match ty.unpack() {
+                    UType::Float(_) | UType::Int(_) | UType::Bool(_) | UType::Ptr(_) => {
+                        let reg = self.signature_abi.ret[0];
+                        let result = ctx.result_reg(val, reg.class());
 
-                    ctx.begin_fixed_interval(&[reg]);
+                        ctx.begin_fixed_interval(reg);
 
-                    greedy_isel::zeroing_mov(
-                        WriteableReg::from_reg(Reg::from_preg(reg)),
-                        RegMemImm::Reg(result),
-                        ty,
-                        ctx,
-                    );
+                        greedy_isel::zeroing_mov(
+                            WriteableReg::from_reg(Reg::from_preg(reg)),
+                            RegMemImm::Reg(result),
+                            ty,
+                            ctx,
+                        );
 
-                    ctx.emit(Inst::Ret(Ret {}));
-                    ctx.end_fixed_interval(&[reg]);
+                        ctx.emit(Inst::Ret(Ret {}));
+                        ctx.end_fixed_interval(reg, 0);
+                    }
+                    _ => todo!("aggregates that fit in registers"),
                 }
-                _ => todo!("aggregates that fit in registers"),
+            }
+            None => {
+                ctx.emit(Inst::Ret(Ret {}));
             }
         }
     }
 
     fn spill_slot(&mut self, bytes: usize) -> VariableLocation {
-        self.align_stack_for(bytes);
-        self.stack_size += bytes;
+        if !self.align_stack_for(bytes) {
+            self.stack_size += bytes;
+        }
 
         // we give the register allocator spill locations near the bottom of the stack
         // if we omit the frame pointer, this way we make it so that the old stack offsets
@@ -413,22 +456,34 @@ impl StackFrame<X86_64> for SystemVStackFrame {
     fn preserved_reg_used(&mut self, reg: PReg) {
         if !self.preserved_regs_used.contains(&reg) {
             self.preserved_regs_used.push(reg);
+
+            if !self.align_stack_for(8) {
+                self.stack_size += 8;
+            }
         }
     }
 
-    fn register_use_def_call(&mut self, call: Inst, uses: &[PReg], defs: &[PReg]) {
-        todo!()
+    fn register_use_def_call(&mut self, uses: &[PReg], defs: &[PReg]) -> CallUseDefId {
+        let uses_box = Box::from(uses);
+        let defs_box = Box::from(defs);
+
+        self.call_use_defs.insert((uses_box, defs_box))
     }
 
-    fn call_use_defs(&self, call: Inst) -> (&[PReg], &[PReg]) {
-        todo!()
+    fn call_use_defs(&self, id: CallUseDefId) -> (&[PReg], &[PReg]) {
+        let (uses, defs) = &self.call_use_defs[id];
+
+        (uses, defs)
     }
 
-    fn ret_uses(&self, ret: Inst) -> &[PReg] {
+    fn ret_uses(&self) -> &[PReg] {
         &self.signature_abi.ret
     }
 
     fn generate_prologue(&self, out: &mut Vec<Inst>) {
+        // some of our 'stack space' is from pushing preserved registers
+        let real_size = self.stack_size - (self.preserved_regs_used.len() * 8);
+
         // push any preserved registers if needed
         for &reg in self.preserved_regs_used.iter() {
             out.push(Inst::Push(Push {
@@ -452,16 +507,18 @@ impl StackFrame<X86_64> for SystemVStackFrame {
             }));
         }
 
-        if self.stack_size != 0 {
+        if real_size != 0 {
             // sub rsp, stack_size
-            manipulate_rsp!(self, out, ALUOpcode::Sub);
+            manipulate_rsp!(real_size + self.unaligned_by, out, ALUOpcode::Sub);
         }
     }
 
     fn generate_epilogue(&self, out: &mut Vec<Inst>) {
-        if self.stack_size != 0 {
+        let real_size = self.stack_size - (self.preserved_regs_used.len() * 8);
+
+        if real_size != 0 {
             // add rsp, stack_size
-            manipulate_rsp!(self, out, ALUOpcode::Add);
+            manipulate_rsp!(real_size + self.unaligned_by, out, ALUOpcode::Add);
         }
 
         if !self.will_omit_fp() {
@@ -482,15 +539,6 @@ impl StackFrame<X86_64> for SystemVStackFrame {
     }
 
     fn registers(&self) -> AvailableRegisters {
-        const CALLEE_PRESERVED: [PReg; 6] = [
-            X86_64::RBX,
-            X86_64::R12,
-            X86_64::R13,
-            X86_64::R14,
-            X86_64::R15,
-            X86_64::RBP,
-        ];
-
         // rbp isn't available to allocate at all unless we're omitting the frame pointer,
         // if it isn't available to allocate then we manage rbp and don't have to tell the
         // register allocator to preserve it
@@ -499,18 +547,6 @@ impl StackFrame<X86_64> for SystemVStackFrame {
         } else {
             &CALLEE_PRESERVED[..5]
         };
-
-        const CALLER_PRESERVED: [PReg; 9] = [
-            X86_64::RAX,
-            X86_64::RCX,
-            X86_64::RDX,
-            X86_64::RDI,
-            X86_64::RSI,
-            X86_64::R8,
-            X86_64::R9,
-            X86_64::R10,
-            X86_64::R11,
-        ];
 
         const UNAVAILABLE: [PReg; 3] = [X86_64::RIP, X86_64::RSP, X86_64::RBP];
 
@@ -533,27 +569,159 @@ impl StackFrame<X86_64> for SystemVStackFrame {
     fn metadata(&self) -> FunctionMetadata {
         self.metadata
     }
+
+    fn stack_size(&self) -> usize {
+        self.stack_size
+    }
 }
 
 /// Models the System-V calling convention
 pub struct SystemVCallingConv;
+
+impl SystemVCallingConv {
+    fn emit_raw_call(
+        args: &[Value],
+        sig: Sig,
+        result: Option<WriteableReg>,
+        (def, fr, ctx): Ctx<'_, '_, '_, '_, X86_64>,
+        emit_call: impl FnOnce(CallUseDefId, Ctx<'_, '_, '_, '_, X86_64>),
+    ) {
+        let sig = def.dfg.signature(sig);
+        let signature_abi = SignatureABI::classify(sig, args);
+        let mut stack_change = 0usize;
+
+        let used_regs: SmallVec<[PReg; 8]> = signature_abi
+            .params
+            .iter()
+            .filter_map(|(_, loc)| match loc {
+                ParamLocation::InReg(reg) => reg.as_preg(),
+                _ => None,
+            })
+            .collect();
+
+        let eight_byte_count = signature_abi.params.len() - used_regs.len();
+
+        // if we don't push an even number of 8bytes we need to ensure that
+        // the stack will be 16-byte aligned before the `call`
+        if eight_byte_count % 2 != 0 {
+            stack_change += 8;
+
+            ctx.emit(Inst::ALU(ALU {
+                opc: ALUOpcode::Sub,
+                lhs: WriteableReg::from_reg(Reg::from_preg(X86_64::RSP)),
+                rhs: RegMemImm::Imm(8),
+                width: Width::Qword,
+            }));
+        }
+
+        // we iterate backwards so we can push in the correct order
+        for &arg in args.iter().rev() {
+            let value = ctx.result_reg(arg, greedy_isel::val_class(arg, def));
+            let ty = def.dfg.ty(arg);
+
+            match signature_abi.params.get(&arg).unwrap() {
+                &ParamLocation::InReg(reg) => {
+                    ctx.begin_fixed_interval(reg.as_preg().unwrap());
+
+                    greedy_isel::zeroing_mov(
+                        WriteableReg::from_reg(reg),
+                        RegMemImm::Reg(value),
+                        ty,
+                        ctx,
+                    );
+                }
+                ParamLocation::RelativeToFP(_) => {
+                    // all arguments are promoted to 8 bytes, so we push a quad word
+                    ctx.emit(Inst::Push(Push {
+                        value,
+                        width: Width::Qword,
+                    }));
+
+                    stack_change += 8;
+                }
+                ParamLocation::LeaFromFP(_) => unreachable!(),
+            }
+        }
+
+        // any remaining preserved registers, we mark them with fixed intervals
+        // that only overlap the call instruction and any `mov`s after it
+        for &reg in CALLER_PRESERVED
+            .iter()
+            .filter(|&preg| !used_regs.contains(preg))
+        {
+            ctx.begin_fixed_interval(reg);
+        }
+
+        let id = fr.register_use_def_call(&used_regs, &CALLER_PRESERVED);
+
+        emit_call(id, (def, fr, ctx));
+
+        // end the intervals for all the registers EXCEPT the return value, including params and preserved.
+        //
+        // if we change the stack or have a return value, we'll have an extra inst (or two), so we need to record that
+        let following_count = result.is_some() as usize + (stack_change != 0) as usize;
+        debug_assert_eq!(CALLER_PRESERVED[0], X86_64::RAX);
+        ctx.end_fixed_intervals(&CALLER_PRESERVED[1..], following_count);
+
+        if let Some(result) = result {
+            ctx.emit(Inst::Mov(Mov {
+                width: Width::Byte,
+                src: RegMemImm::Reg(Reg::from_preg(X86_64::RAX)),
+                dest: result,
+            }));
+        }
+
+        // restore stack to what it was before the call happened
+        if stack_change != 0 {
+            ctx.emit(Inst::ALU(ALU {
+                opc: ALUOpcode::Add,
+                lhs: WriteableReg::from_reg(Reg::from_preg(X86_64::RSP)),
+                rhs: RegMemImm::Imm(stack_change as i32),
+                width: Width::Qword,
+            }));
+        }
+    }
+}
 
 impl CallingConv<X86_64> for SystemVCallingConv {
     fn lower_call(
         &self,
         call: &ir::CallInst,
         result: Option<WriteableReg>,
-        context: Ctx<'_, '_, '_, '_, X86_64>,
+        (def, fr, ctx): Ctx<'_, '_, '_, '_, X86_64>,
     ) {
-        todo!()
+        SystemVCallingConv::emit_raw_call(
+            call.args(),
+            call.sig(),
+            result,
+            (def, fr, ctx),
+            |id, (_, _, ctx)| {
+                let f = ctx.reference_external_func(call.callee());
+
+                ctx.emit(Inst::Call(Call { func: f, id }));
+            },
+        );
     }
 
     fn lower_indirect_call(
         &self,
         call: &ir::IndirectCallInst,
         result: Option<WriteableReg>,
-        context: Ctx<'_, '_, '_, '_, X86_64>,
+        (def, fr, ctx): Ctx<'_, '_, '_, '_, X86_64>,
     ) {
-        todo!()
+        let callee = ctx.result_reg(call.callee(), RegClass::Int);
+
+        SystemVCallingConv::emit_raw_call(
+            call.args(),
+            call.sig(),
+            result,
+            (def, fr, ctx),
+            |id, (_, _, ctx)| {
+                ctx.emit(Inst::IndirectCall(IndirectCall {
+                    func: RegMemImm::Reg(callee),
+                    id,
+                }));
+            },
+        );
     }
 }

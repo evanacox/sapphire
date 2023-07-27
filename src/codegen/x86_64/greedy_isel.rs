@@ -92,7 +92,6 @@ fn icmp_into_cc(op: ICmpOp) -> ConditionCode {
     }
 }
 
-/// Emits a `mov` that zeroes the upper bits of a register if necessary
 #[inline]
 pub(in crate::codegen::x86_64) fn zeroing_mov(
     dest: WriteableReg,
@@ -104,6 +103,17 @@ pub(in crate::codegen::x86_64) fn zeroing_mov(
 
     // we emit it as a `mov` for dwords so that the entire register is cleared
     ctx.emit(Inst::Mov(Mov { width, src, dest }));
+}
+
+#[inline]
+pub(in crate::codegen::x86_64) fn val_class(val: Value, def: &FunctionDefinition) -> RegClass {
+    match def.dfg.ty(val).unpack() {
+        UType::Float(_) => RegClass::Float,
+        UType::Int(_) | UType::Bool(_) | UType::Ptr(_) => RegClass::Int,
+        UType::Array(_) | UType::Struct(_) => {
+            panic!("unable to put array or structure in physical register")
+        }
+    }
 }
 
 impl<'module, 'target, 'ctx> GreedyISel
@@ -173,7 +183,7 @@ where
             };
         }
 
-        RegMem::Reg(ctx.result_reg(rhs, self.val_class(rhs, def)))
+        RegMem::Reg(ctx.result_reg(rhs, val_class(rhs, def)))
     }
 
     // performs right-hand operand folding for immediates
@@ -182,7 +192,7 @@ where
             // if we get any imm8/imm32s, we fold it right in
             Some(imm32) => RegImm::Imm(imm32),
             // if we don't match anything, we just use the register directly
-            None => RegImm::Reg(ctx.result_reg(rhs, self.val_class(rhs, def))),
+            None => RegImm::Reg(ctx.result_reg(rhs, val_class(rhs, def))),
         }
     }
 
@@ -204,7 +214,7 @@ where
         lhs: Value,
         (def, fr, ctx): Ctx<'_, '_, '_, '_>,
     ) -> WriteableReg {
-        let class = self.val_class(lhs, def);
+        let class = val_class(lhs, def);
         let src = ctx.result_reg(lhs, class);
 
         zeroing_mov(dest, RegMemImm::Reg(src), def.dfg.ty(lhs), ctx);
@@ -222,17 +232,6 @@ where
     }
 
     #[inline]
-    fn val_class(&self, val: Value, def: &'ctx FunctionDefinition) -> RegClass {
-        match def.dfg.ty(val).unpack() {
-            UType::Float(_) => RegClass::Float,
-            UType::Int(_) | UType::Bool(_) | UType::Ptr(_) => RegClass::Int,
-            UType::Array(_) | UType::Struct(_) => {
-                panic!("unable to put array or structure in physical register")
-            }
-        }
-    }
-
-    #[inline]
     fn curr_val(&self, def: &'ctx FunctionDefinition) -> Value {
         def.dfg
             .inst_to_result(self.current)
@@ -246,7 +245,7 @@ where
 
     #[inline]
     fn maybe_curr_result_reg(&self, (def, fr, ctx): Ctx<'_, '_, '_, '_>) -> Option<Reg> {
-        ctx.maybe_result_reg(self.curr_val(def))
+        ctx.maybe_result_reg(def.dfg.inst_to_result(self.current)?)
     }
 
     fn lower_builtin(
@@ -274,7 +273,7 @@ where
         let args = target.args();
 
         for (&arg, &param) in iter::zip(args.iter(), def.dfg.block(bb).params()) {
-            let class = self.val_class(param, def);
+            let class = val_class(param, def);
             let param_reg = ctx.result_reg(param, class);
 
             self.mov(WriteableReg::from_reg(param_reg), arg, (def, fr, ctx));
@@ -297,7 +296,7 @@ where
         let mut width = value_into_width(data.lhs(), (def, fr, ctx));
 
         // this covers the dividend and the quotient/remainder registers
-        ctx.begin_fixed_interval(&[X86_64::RAX, X86_64::RDX]);
+        ctx.begin_fixed_intervals(&[X86_64::RAX, X86_64::RDX]);
 
         // IDIV dividend must be located in AX/EAX/RAX
         ctx.emit(Inst::Mov(Mov {
@@ -349,7 +348,7 @@ where
         let mut width = value_into_width(data.lhs(), (def, fr, ctx));
 
         // this covers the dividend and the quotient/remainder registers
-        ctx.begin_fixed_interval(&[X86_64::RAX, X86_64::RDX]);
+        ctx.begin_fixed_intervals(&[X86_64::RAX, X86_64::RDX]);
 
         // DIV dividend must be located in AX/EAX/RAX
         ctx.emit(Inst::Mov(Mov {
@@ -459,7 +458,7 @@ impl<'mo, 'fr, 'ta, 'ctx> GenericInstVisitor<(), Ctx<'mo, 'fr, 'ta, 'ctx>> for G
 
     fn visit_icmp(&mut self, data: &ICmpInst, (def, fr, ctx): Ctx<'_, '_, '_, '_>) {
         let width = value_into_width(data.lhs(), (def, fr, ctx));
-        let class = self.val_class(data.rhs(), def);
+        let class = val_class(data.rhs(), def);
         let lhs = ctx.result_reg(data.lhs(), class);
         let rhs = self.rhs_operand_rmi(data.rhs(), (def, fr, ctx));
         let maybe_result = self.maybe_curr_result_reg((def, fr, ctx));
@@ -665,7 +664,7 @@ impl<'mo, 'fr, 'ta, 'ctx> GenericInstVisitor<(), Ctx<'mo, 'fr, 'ta, 'ctx>> for G
             dest: WriteableReg::from_reg(dest),
         }));
 
-        ctx.end_fixed_interval(&[X86_64::RAX, X86_64::RDX]);
+        ctx.end_fixed_intervals(&[X86_64::RAX, X86_64::RDX], 0);
     }
 
     fn visit_udiv(&mut self, data: &ArithInst, (def, fr, ctx): Ctx<'_, '_, '_, '_>) {
@@ -678,7 +677,7 @@ impl<'mo, 'fr, 'ta, 'ctx> GenericInstVisitor<(), Ctx<'mo, 'fr, 'ta, 'ctx>> for G
             dest: WriteableReg::from_reg(dest),
         }));
 
-        ctx.end_fixed_interval(&[X86_64::RAX, X86_64::RDX]);
+        ctx.end_fixed_intervals(&[X86_64::RAX, X86_64::RDX], 0);
     }
 
     fn visit_srem(&mut self, data: &ArithInst, (def, fr, ctx): Ctx<'_, '_, '_, '_>) {
@@ -691,7 +690,7 @@ impl<'mo, 'fr, 'ta, 'ctx> GenericInstVisitor<(), Ctx<'mo, 'fr, 'ta, 'ctx>> for G
             dest: WriteableReg::from_reg(dest),
         }));
 
-        ctx.end_fixed_interval(&[X86_64::RAX, X86_64::RDX]);
+        ctx.end_fixed_intervals(&[X86_64::RAX, X86_64::RDX], 0);
     }
 
     fn visit_urem(&mut self, data: &ArithInst, (def, fr, ctx): Ctx<'_, '_, '_, '_>) {
@@ -704,7 +703,7 @@ impl<'mo, 'fr, 'ta, 'ctx> GenericInstVisitor<(), Ctx<'mo, 'fr, 'ta, 'ctx>> for G
             dest: WriteableReg::from_reg(dest),
         }));
 
-        ctx.end_fixed_interval(&[X86_64::RAX, X86_64::RDX]);
+        ctx.end_fixed_intervals(&[X86_64::RAX, X86_64::RDX], 0);
     }
 
     fn visit_fneg(&mut self, data: &FloatUnaryInst, context: Ctx<'_, '_, '_, '_>) {
@@ -736,7 +735,7 @@ impl<'mo, 'fr, 'ta, 'ctx> GenericInstVisitor<(), Ctx<'mo, 'fr, 'ta, 'ctx>> for G
     }
 
     fn visit_load(&mut self, data: &LoadInst, (def, fr, ctx): Ctx<'_, '_, '_, '_>) {
-        let class = self.val_class(self.curr_val(def), def);
+        let class = val_class(self.curr_val(def), def);
         let dest = self.curr_result_reg(class, (def, fr, ctx));
         let rhs = self.rhs_pointer_indirect_address(data.pointer(), (def, fr, ctx));
         let width = type_into_width(data.result_ty().unwrap(), ctx);
@@ -944,15 +943,19 @@ impl<'mo, 'fr, 'ta, 'ctx> GenericInstVisitor<(), Ctx<'mo, 'fr, 'ta, 'ctx>> for G
 
     fn visit_stackslot(&mut self, data: &StackSlotInst, (def, fr, ctx): Ctx<'_, '_, '_, '_>) {
         let dest = self.curr_result_reg(RegClass::Int, (def, fr, ctx));
-        let (reg, offset) = match fr.stack_slot(data.slot(), (def, ctx)) {
+        let address = match fr.stack_slot(data.slot(), (def, ctx)) {
             VariableLocation::InReg(_) => unreachable!(),
-            VariableLocation::RelativeToSP(offset) => (X86_64::RSP, offset),
-            VariableLocation::RelativeToFP(offset) => (X86_64::RBP, offset),
+            VariableLocation::RelativeToSP(offset, stack_size) => {
+                IndirectAddress::stack_offset(offset, stack_size)
+            }
+            VariableLocation::RelativeToFP(offset) => {
+                IndirectAddress::RegOffset(Reg::from_preg(X86_64::RBP), offset)
+            }
         };
 
         ctx.emit(Inst::Lea(Lea {
             dest: WriteableReg::from_reg(dest),
-            src: IndirectAddress::RegOffset(Reg::from_preg(reg), offset),
+            src: address,
         }));
     }
 

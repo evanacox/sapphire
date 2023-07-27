@@ -10,10 +10,11 @@
 
 use crate::arena::{ArenaMap, SecondaryMap, SecondarySet};
 use crate::codegen::*;
-use crate::ir::{Block, Cursor, FuncView, Function, FunctionDefinition, Module, Value};
+use crate::ir::{Block, Cursor, Func, FuncView, Function, FunctionDefinition, Module, Value};
 use crate::transforms::common::has_side_effect;
 use crate::utility::{Packable, Str, StringPool};
 use crate::{analysis, ir};
+use smallvec::{smallvec, SmallVec};
 use std::collections::VecDeque;
 use std::marker::PhantomData;
 
@@ -109,7 +110,7 @@ where
             functions.push(mir);
         }
 
-        MIRModule::new(context.pool, Vec::default(), functions)
+        MIRModule::new(context.pool, context.externals, functions)
     }
 
     fn new() -> Self {
@@ -223,12 +224,13 @@ pub struct LoweringContext<'module, 'target, Arch: Architecture> {
     pub module: &'module Module,
     /// Codegen options, available for instruction selection code to access
     pub options: CodegenOptions,
+    // The string pool being used for various symbols
+    pool: StringPool,
     // this is the final buffer of instructions in program-order
     current: VecDeque<Arch::Inst>,
     // when lowering a single instruction, we push into this. when done with that instruction,
     // this is emptied and pushed into `current` in a way that preserves the program order
     current_linear: Vec<Arch::Inst>,
-    pool: StringPool,
     // maps an ir::Block to its associated MIR block
     block_lookup: SecondaryMap<Block, MIRBlock>,
     // the set of all instructions that have exactly one use
@@ -247,9 +249,10 @@ pub struct LoweringContext<'module, 'target, Arch: Architecture> {
     next_float_vreg_id: usize,
     // a list of fixed intervals, this is not a full live interval yet.
     // it's a tuple (reg, is defined by caller, distance from end, length)
-    fixed_intervals: Vec<(PReg, bool, usize, usize)>,
+    fixed_intervals: SecondaryMap<PReg, SmallVec<[(bool, usize, usize); 2]>>,
     // the current function being lowered
     func: Option<&'module Function>,
+    externals: Vec<(Str, Extern)>,
 }
 
 impl<'module, 'target, Arch: Architecture> LoweringContext<'module, 'target, Arch> {
@@ -273,11 +276,23 @@ impl<'module, 'target, Arch: Architecture> LoweringContext<'module, 'target, Arc
             merged: SecondaryMap::default(),
             colors: SecondaryMap::default(),
             vreg_constraints: SecondaryMap::default(),
-            fixed_intervals: Vec::default(),
+            fixed_intervals: SecondaryMap::default(),
             next_int_vreg_id: 0,
             next_float_vreg_id: 0,
             func: None,
+            externals: Vec::default(),
         }
+    }
+
+    /// Marks that the module references `func` as an external, and then
+    /// returns a [`Str`] that refers to that function's name.
+    pub fn reference_external_func(&mut self, func: Func) -> Str {
+        let function = self.module.function(func);
+        let name = self.pool.insert(function.name());
+
+        self.externals.push((name, Extern::Function));
+
+        name
     }
 
     /// Prepares the [`LoweringContext`] to start having instructions from `func` be emitted.
@@ -356,25 +371,46 @@ impl<'module, 'target, Arch: Architecture> LoweringContext<'module, 'target, Arc
         }
     }
 
+    #[inline]
+    fn begin_fixed_interval_raw(&mut self, reg: PReg, caller_def: bool) {
+        let vec = match self.fixed_intervals.get_mut(reg) {
+            Some(v) => v,
+            None => {
+                self.fixed_intervals.insert(reg, smallvec![]);
+
+                &mut self.fixed_intervals[reg]
+            }
+        };
+
+        // basically what's going on is we're storing
+        //
+        // 1. how many instructions are already in the final buffer (the 'distance from the end')
+        // 2. how many instructions are in the temporary buffer (the amount we need to subtract from our distance later
+        //    when we go to compute how many instructions are in the interval)
+        //
+        // the first one stays permanent, the second one is just a convenient place to store that
+        // value, it is overwritten with a real one in `end_fixed_interval`
+        vec.push((caller_def, self.current.len(), self.current_linear.len()))
+    }
+
     /// Begins creating a fixed interval for each register in `regs`.
     ///
     /// This must be accompanied by a call to [`Self::end_fixed_interval`] once
     /// the instructions included in the interval are emitted.
-    pub fn begin_fixed_interval(&mut self, regs: &[PReg]) {
+    pub fn begin_fixed_interval(&mut self, reg: PReg) {
+        self.begin_fixed_interval_raw(reg, false)
+    }
+
+    /// Begins creating a fixed interval for each register in `regs`.
+    ///
+    /// This must be accompanied by a call to [`Self::end_fixed_interval`] once
+    /// the instructions included in the interval are emitted.
+    pub fn begin_fixed_intervals(&mut self, regs: &[PReg]) {
         // iterate in reverse so we can go forward in `end` and have logic work out
         // basically, for register at regs[i] we make fixed_intervals[len() - i - 1] be
         // the data for calculating that interval later
-        for &reg in regs.iter().rev() {
-            // basically what's going on is we're storing
-            //
-            // 1. how many instructions are already in the final buffer (the 'distance from the end')
-            // 2. how many instructions are in the temporary buffer (the amount we need to subtract from our distance later
-            //    when we go to compute how many instructions are in the interval)
-            //
-            // the first one stays permanent, the second one is just a convenient place to store that
-            // value, it is overwritten with a real one in `end_fixed_interval`
-            self.fixed_intervals
-                .push((reg, false, self.current.len(), self.current_linear.len()))
+        for &reg in regs {
+            self.begin_fixed_interval(reg);
         }
     }
 
@@ -383,8 +419,30 @@ impl<'module, 'target, Arch: Architecture> LoweringContext<'module, 'target, Arc
     ///
     /// Other than that, it works the same way as [`Self::begin_fixed_interval`].
     pub fn begin_caller_defined_fixed_interval(&mut self, reg: PReg) {
-        self.fixed_intervals
-            .push((reg, true, self.current.len(), self.current_linear.len()));
+        self.begin_fixed_interval_raw(reg, true)
+    }
+
+    /// Finishes creating a fixed interval for `reg`.
+    ///
+    /// It is assumed that all the instructions emitted via [`Self::emit`] since
+    /// the call to [`Self::begin_fixed_interval`] are included in the interval.
+    ///
+    /// If there will be **any** instructions emitted after this interval,
+    /// the exact number needs to be given in `insts_after_interval`.
+    ///
+    /// This must be accompanied by a call to [`Self::begin_fixed_interval`] before
+    /// this is called, and that call must have the same registers.
+    pub fn end_fixed_interval(&mut self, reg: PReg, insts_after_interval: usize) {
+        let (_, dist, length) = &mut self.fixed_intervals[reg]
+            .last_mut()
+            .expect("called `end_fixed_interval` without first calling `begin_fixed_interval`");
+
+        // see above, length stores the amount we need to subtract, but we update it properly here
+        // so that it actually is the length of the interval rather than a temporary value.
+        //
+        // if insts_after_interval != 0 we need to increase our distance too
+        *dist += insts_after_interval;
+        *length = self.current_linear.len() - *length;
     }
 
     /// Finishes creating a fixed interval for each register in `regs`.
@@ -392,16 +450,14 @@ impl<'module, 'target, Arch: Architecture> LoweringContext<'module, 'target, Arc
     /// It is assumed that all the instructions emitted via [`Self::emit`] since
     /// the call to [`Self::begin_fixed_interval`] are included in the interval.
     ///
+    /// If there will be **any** instructions emitted after this interval,
+    /// the exact number needs to be given in `insts_after_interval`.
+    ///
     /// This must be accompanied by a call to [`Self::begin_fixed_interval`] before
     /// this is called, and that call must have the same registers.
-    pub fn end_fixed_interval(&mut self, regs: &[PReg]) {
-        for (i, _) in regs.iter().enumerate() {
-            let index = self.fixed_intervals.len() - i - 1;
-            let (_, _, dist, length) = &mut self.fixed_intervals[index];
-            let additional_insts = self.current_linear.len() - *length;
-
-            // see above, length stores the amount we need to subtract, but we update it properly here
-            *length = additional_insts;
+    pub fn end_fixed_intervals(&mut self, regs: &[PReg], insts_after_interval: usize) {
+        for &reg in regs {
+            self.end_fixed_interval(reg, insts_after_interval);
         }
     }
 
@@ -409,8 +465,8 @@ impl<'module, 'target, Arch: Architecture> LoweringContext<'module, 'target, Arc
     /// where the interval needs to start before the function.
     ///
     /// Other than that, it works the same way as [`Self::end_fixed_interval`].
-    pub fn end_caller_defined_fixed_interval(&mut self, reg: PReg) {
-        self.end_fixed_interval(&[reg]);
+    pub fn end_caller_defined_fixed_interval(&mut self, reg: PReg, insts_after_interval: usize) {
+        self.end_fixed_interval(reg, insts_after_interval);
     }
 
     /// Resolves (and possibly inserts) a string in the MIR module's
@@ -669,15 +725,17 @@ impl<'module, 'target, Arch: Architecture> LoweringContext<'module, 'target, Arc
         let mut fixed = FixedIntervals::default();
         let len = self.current.len();
 
-        for &(reg, caller_defined, dist_from_end, length) in self.fixed_intervals.iter() {
-            let end = (self.current.len() - dist_from_end - 1) as u32;
-            let interval = if caller_defined {
-                LiveInterval::defined_before_func(end)
-            } else {
-                LiveInterval::between(end - (length as u32) + 1, end)
-            };
+        for (reg, vec) in self.fixed_intervals.iter() {
+            for &(caller_defined, dist_from_end, length) in vec.iter() {
+                let end = (self.current.len() - dist_from_end) as u32;
+                let interval = if caller_defined {
+                    LiveInterval::defined_before_func(end)
+                } else {
+                    LiveInterval::between(end - (length as u32), end - 1)
+                };
 
-            fixed.add_fixed_interval(reg, interval);
+                fixed.add_fixed_interval(reg, interval);
+            }
         }
 
         fixed

@@ -100,7 +100,7 @@ pub trait MachInst: Copy + Debug + Hash + Sized {
     fn is_ret(&self) -> bool;
 
     /// Rewrites an instruction to change all `Reg` references into `PReg`s.
-    fn rewrite(self, rewrites: &[(Reg, PReg)]) -> Self;
+    fn rewrite(self, rewrites: &[(Reg, PReg)], frame: &dyn StackFrame<Self::Arch>) -> Self;
 }
 
 dense_arena_key! {

@@ -19,6 +19,7 @@ mod mir;
 mod platforms;
 mod sysv;
 mod target;
+mod testing;
 mod win64;
 
 pub use emit::*;
@@ -27,4 +28,5 @@ pub use mir::*;
 pub use platforms::*;
 pub use sysv::*;
 pub use target::*;
+pub use testing::*;
 pub use win64::*;
