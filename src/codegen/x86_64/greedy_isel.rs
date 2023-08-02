@@ -293,7 +293,8 @@ where
         let dest = self.curr_result_reg(RegClass::Int, (def, fr, ctx));
         let lhs = ctx.result_reg(data.lhs(), RegClass::Int);
         let rhs = self.rhs_operand_rm(data.rhs(), (def, fr, ctx));
-        let mut width = value_into_width(data.lhs(), (def, fr, ctx));
+        let original_width = value_into_width(data.lhs(), (def, fr, ctx));
+        let mut width = original_width;
 
         // this covers the dividend and the quotient/remainder registers
         ctx.begin_fixed_intervals(&[X86_64::RAX, X86_64::RDX]);
@@ -334,7 +335,7 @@ where
             divisor: rhs,
         }));
 
-        (dest, width)
+        (dest, original_width)
     }
 
     fn unsigned_division(
@@ -345,7 +346,8 @@ where
         let dest = self.curr_result_reg(RegClass::Int, (def, fr, ctx));
         let lhs = ctx.result_reg(data.lhs(), RegClass::Int);
         let rhs = self.rhs_operand_rm(data.rhs(), (def, fr, ctx));
-        let mut width = value_into_width(data.lhs(), (def, fr, ctx));
+        let original_width = value_into_width(data.lhs(), (def, fr, ctx));
+        let mut width = original_width;
 
         // this covers the dividend and the quotient/remainder registers
         ctx.begin_fixed_intervals(&[X86_64::RAX, X86_64::RDX]);
@@ -357,19 +359,10 @@ where
             dest: WriteableReg::from_reg(Div::DIVIDEND_LO),
         }));
 
-        // if we're dealing with 8-bit operands, we sign-extend them to 16-bit
-        // due to a limitation of how we represent partial registers (can't model AL vs AH)
+        // see signed_division for why this is necessary, we can't deal with partials
         if width == Width::Byte {
-            // this is incredibly evil but technically fine, this doesn't actually modify
-            // the value at all. the compiler will never be relying on the upper bits
-            // when a value is being treated as an i8, and the zero extension won't
-            // modify the lower bits that we do rely on
-            ctx.emit(Inst::Movzx(Movzx {
-                widths: WidthPair::from_widths(Width::Byte, Width::Word),
-                src: RegMemImm::Reg(Div::DIVIDEND_LO),
-                dest: WriteableReg::from_reg(Div::DIVIDEND_LO),
-            }));
-
+            // the upper bits will already be zero, so there's no need to zero-extend or
+            // whatever, unlike in the signed case where we need to sign-extend.
             width = Width::Word;
         }
 
@@ -381,7 +374,7 @@ where
             divisor: rhs,
         }));
 
-        (dest, width)
+        (dest, original_width)
     }
 }
 
@@ -825,17 +818,10 @@ impl<'mo, 'fr, 'ta, 'ctx> GenericInstVisitor<(), Ctx<'mo, 'fr, 'ta, 'ctx>> for G
 
     fn visit_btoi(&mut self, data: &CastInst, (def, fr, ctx): Ctx<'_, '_, '_, '_>) {
         let dest = self.curr_result_reg(RegClass::Int, (def, fr, ctx));
-        let width = width_dword_minimum(type_into_width(data.result_ty().unwrap(), ctx));
 
-        // we're only getting 0 or 1, no need to emit a whole zext. just set the whole register
-        // to that no matter what the width is
+        // the value is already 0 or 1, we just mov to a new register (and assign a result
+        // to the bool in the process, forcing it to be emitted properly)
         self.mov(WriteableReg::from_reg(dest), data.operand(), (def, fr, ctx));
-        ctx.emit(Inst::ALU(ALU {
-            opc: ALUOpcode::And,
-            lhs: WriteableReg::from_reg(dest),
-            rhs: RegMemImm::Imm(1),
-            width,
-        }));
     }
 
     fn visit_sitof(&mut self, data: &CastInst, context: Ctx<'_, '_, '_, '_>) {

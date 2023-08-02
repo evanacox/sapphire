@@ -43,5 +43,5 @@ fn domtree_test(name: &str, contents: &str) -> TestResult {
 }
 
 pub const fn domtree_subtest() -> Subtest {
-    Subtest::new("domtree", domtree_test)
+    Subtest::new(&["domtree"], domtree_test)
 }

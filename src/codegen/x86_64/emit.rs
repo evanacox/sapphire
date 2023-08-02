@@ -341,8 +341,13 @@ impl AsmEmitter {
 
     fn emit_function_name(&mut self, name: &str, defined_by_caller: &[PReg]) {
         let name = match self.mode {
-            X86_64Assembly::GNU | X86_64Assembly::GNUIntel | X86_64Assembly::NASM => {
+            X86_64Assembly::GNU | X86_64Assembly::GNUIntel => {
                 self.state += "    .text\n";
+
+                format!("{name}:")
+            }
+            X86_64Assembly::NASM => {
+                self.state += "    section .text\n";
 
                 format!("{name}:")
             }
@@ -409,8 +414,14 @@ impl AsmEmitter {
             }
         }
 
-        if self.mode == X86_64Assembly::MASM {
-            self.state += "_TEXT ENDS\n"
+        match self.mode {
+            X86_64Assembly::GNU | X86_64Assembly::GNUIntel => {
+                self.state += "    .section \".note.GNU-stack\",\"\",@progbits\n";
+            }
+            X86_64Assembly::NASM => {
+                self.state += "    section \".note.GNU-stack\",\"\",@progbits\n";
+            }
+            X86_64Assembly::MASM => self.state += "_TEXT ENDS\n",
         }
     }
 

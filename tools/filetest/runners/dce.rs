@@ -12,11 +12,8 @@ use crate::runners::optimization_runner::*;
 use crate::subtest::Subtest;
 use sapphire::transforms::AggressiveDCEPass;
 
-runner_for_opt!(
-    dce,
-    FunctionToModulePassAdapter::adapt(AggressiveDCEPass)
-);
+runner_for_opt!(dce, FunctionToModulePassAdapter::adapt(AggressiveDCEPass));
 
 pub const fn dce_subtest() -> Subtest {
-    Subtest::new("dce", dce)
+    Subtest::new(&["dce"], dce)
 }

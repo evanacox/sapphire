@@ -1,0 +1,30 @@
+; STANDARD
+fn void @requires_stack(i32, i32, i32, i32, i32, i32, i32)
+
+fn i32 @rand()
+
+fn i32 @test(i32, i32) {
+entry(i32 %x, i32 %y):
+    %z1 = iadd i32 %x, %y
+    %z2 = iadd i32 %x, %y
+    %z3 = iadd i32 %x, %y
+    %z4 = iadd i32 %x, %y
+    %z5 = iadd i32 %x, %y
+    %z6 = iadd i32 %x, %y
+    %z7 = iadd i32 %x, %y
+    %0 = iconst i32 1
+    %1 = iconst i32 2
+    %2 = iconst i32 3
+    %3 = iconst i32 4
+    %4 = iconst i32 5
+    %5 = iconst i32 6
+    %6 = iconst i32 7
+    call void @requires_stack(i32 %0, i32 %1, i32 %2, i32 %3, i32 %4, i32 %5, i32 %6)
+    %a1 = iadd i32 %z1, %z2
+    %a2 = iadd i32 %z3, %z4
+    %a3 = iadd i32 %z5, %z6
+    %a4 = iadd i32 %a1, %z7
+    %b = call i32 @rand()
+    %c = iadd i32 %b, %x
+    ret i32 %c
+}

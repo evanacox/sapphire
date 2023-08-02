@@ -1,0 +1,29 @@
+; MATCH-SECTION
+;
+; fn i32 @test(i32, i32) {
+; entry(i32 %0, i32 %1):
+;   %2 = iconst i32 128
+;   %3 = iadd i32 %0, %1
+;   %4 = xor i32 %0, %2
+;   %5 = xor i32 %3, %2
+;   %6 = xor i32 %3, %0
+;   br one(i32 %6)
+;
+; one(i32 %7):
+;   %8 = xor i32 %7, %2
+;   ret i32 %8
+; }
+;;
+fn i32 @test(i32, i32) {
+entry(i32 %0, i32 %1):
+  %2 = iconst i32 128
+  %3 = iadd i32 %0, %1
+  %4 = xor i32 %2, %0
+  %5 = xor i32 %2, %3 ; reorders so constant is on rhs despite lower value number
+  %6 = xor i32 %0, %3 ; reorders so phi is on rhs despite lower value number
+  br one(i32 %6)
+
+one(i32 %7):
+  %8 = xor i32 %2, %7 ; reorders so constant is on rhs despite lower value number
+  ret i32 %8
+}

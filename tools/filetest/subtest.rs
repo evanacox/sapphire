@@ -87,51 +87,62 @@ pub enum TestResult {
 pub struct TestDetails {
     pub elapsed: Duration,
     pub output: Result<(), TestFailure>,
+    pub subdir: &'static str,
 }
 
 pub struct Subtest {
-    subdir: &'static str,
+    subdirs: &'static [&'static str],
     runner: fn(&str, &str) -> TestResult,
 }
 
 impl Subtest {
-    pub const fn new(subdir: &'static str, runner: fn(&str, &str) -> TestResult) -> Self {
-        Self { subdir, runner }
+    pub const fn new(
+        subdirs: &'static [&'static str],
+        runner: fn(&str, &str) -> TestResult,
+    ) -> Self {
+        Self { subdirs, runner }
     }
 
-    pub fn subdir(&self) -> &'static str {
-        self.subdir
+    pub fn main_subdir(&self) -> &'static str {
+        self.subdirs[0]
+    }
+
+    pub fn subdirs(&self) -> &'static [&'static str] {
+        self.subdirs
     }
 
     pub fn run(&self, pool: &mut ThreadPool) -> Receiver<(&'static str, TestDetails)> {
         let (send, recv) = mpsc::channel();
 
-        for (name, contents, case) in discovery::cases_in_subdir(self.subdir) {
-            let send = send.clone();
-            let runner = self.runner;
+        for subdir in self.subdirs {
+            for (name, contents, case) in discovery::cases_in_subdir(subdir) {
+                let send = send.clone();
+                let runner = self.runner;
 
-            pool.execute(move || {
-                let start = SystemTime::now();
-                let output = panic::catch_unwind(|| runner(name, contents));
-                let end = SystemTime::now();
+                pool.execute(move || {
+                    let start = SystemTime::now();
+                    let output = panic::catch_unwind(|| runner(name, contents));
+                    let end = SystemTime::now();
 
-                let result = match output {
-                    Ok(out) => case.check(out),
-                    Err(_) => {
-                        let (bt, message) = FAILURE.with(|failure| failure.take().unwrap());
+                    let result = match output {
+                        Ok(out) => case.check(out),
+                        Err(_) => {
+                            let (bt, message) = FAILURE.with(|failure| failure.take().unwrap());
 
-                        Err(TestFailure::Panic(bt, message))
-                    }
-                };
+                            Err(TestFailure::Panic(bt, message))
+                        }
+                    };
 
-                // we want to display the time taken on a per-test basis
-                let details = TestDetails {
-                    elapsed: end.duration_since(start).unwrap(),
-                    output: result,
-                };
+                    // we want to display the time taken on a per-test basis
+                    let details = TestDetails {
+                        elapsed: end.duration_since(start).unwrap(),
+                        output: result,
+                        subdir,
+                    };
 
-                send.send((name.as_str(), details)).expect("unable to send")
-            });
+                    send.send((name.as_str(), details)).expect("unable to send")
+                });
+            }
         }
 
         recv

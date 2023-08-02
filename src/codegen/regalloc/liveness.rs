@@ -8,7 +8,7 @@
 //                                                                           //
 //======---------------------------------------------------------------======//
 
-use crate::arena::{SecondaryMap, SecondarySet};
+use crate::arena::SecondaryMap;
 use crate::codegen::regalloc::allocator::{defs, uses};
 use crate::codegen::{MIRBlock, MIRFunction, MachInst, PReg, ProgramPoint, Reg, StackFrame};
 use smallvec::{smallvec, SmallVec};

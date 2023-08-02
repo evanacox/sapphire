@@ -10,8 +10,7 @@
 
 use crate::codegen::x86_64::{GreedyISel, X86_64};
 use crate::codegen::{
-    x86_64, CodegenOptions, GenericISel, RegisterAllocator, Rewriter, StackRegAlloc, Target,
-    TargetPair,
+    x86_64, GenericISel, LinearScanRegAlloc, RegisterAllocator, Rewriter, Target, TargetPair,
 };
 use crate::codegen::{Architecture, Emitter, MIRModule};
 use crate::ir::Module;
@@ -64,6 +63,21 @@ where
     }
 }
 
+fn allocate<Arch, Alloc>(mut mir: MIRModule<Arch::Inst>) -> MIRModule<Arch::Inst>
+where
+    Arch: Architecture,
+    Alloc: RegisterAllocator<Arch>,
+{
+    for (func, frame) in mir.functions_mut() {
+        let allocation = Alloc::allocate(func, frame.as_mut());
+        let rewriter = Rewriter::with_allocation(allocation);
+
+        rewriter.rewrite(func, frame.as_ref());
+    }
+
+    mir
+}
+
 /// A set of pre-made backend pipelines for various architectures
 /// and ABIs, made for convenience.
 pub struct PresetBackends;
@@ -73,7 +87,6 @@ impl PresetBackends {
     pub fn x86_64_optimized(
         mut module: Module,
         mut target: Target<X86_64>,
-        options: CodegenOptions,
     ) -> Backend<X86_64, x86_64::Emit> {
         let fam = FunctionAnalysisManager::default();
         let mut mam = ModuleAnalysisManager::new();
@@ -95,8 +108,10 @@ impl PresetBackends {
         mpm.add_pass(FunctionToModulePassAdapter::adapt(fpm));
         mpm.run(&mut module, &mut mam);
 
+        let mir = GenericISel::<X86_64, GreedyISel>::lower(&mut target, &module);
+
         Backend {
-            mir: GenericISel::<X86_64, GreedyISel>::lower(&mut target, &module, options),
+            mir: allocate::<X86_64, LinearScanRegAlloc<'_>>(mir),
             _unused: PhantomData::default(),
         }
     }
@@ -105,7 +120,6 @@ impl PresetBackends {
     pub fn x86_64_unoptimized(
         mut module: Module,
         mut target: Target<X86_64>,
-        options: CodegenOptions,
     ) -> Backend<X86_64, x86_64::Emit> {
         let fam = FunctionAnalysisManager::default();
         let mut mam = ModuleAnalysisManager::new();
@@ -120,17 +134,34 @@ impl PresetBackends {
         mpm.add_pass(FunctionToModulePassAdapter::adapt(fpm));
         mpm.run(&mut module, &mut mam);
 
-        let mut mir = GenericISel::<X86_64, GreedyISel>::lower(&mut target, &module, options);
-
-        for (func, frame) in mir.functions_mut() {
-            let allocation = StackRegAlloc::allocate(func, frame.as_mut());
-            let rewriter = Rewriter::with_allocation(allocation);
-
-            rewriter.rewrite(func, frame.as_ref());
-        }
+        let mir = GenericISel::<X86_64, GreedyISel>::lower(&mut target, &module);
 
         Backend {
-            mir,
+            mir: allocate::<X86_64, LinearScanRegAlloc<'_>>(mir),
+            _unused: PhantomData::default(),
+        }
+    }
+
+    /// An "unoptimized" pipeline that doesn't actually perform register allocation
+    pub fn x86_64_debug_no_reg_alloc(
+        mut module: Module,
+        mut target: Target<X86_64>,
+    ) -> Backend<X86_64, x86_64::Emit> {
+        let fam = FunctionAnalysisManager::default();
+        let mut mam = ModuleAnalysisManager::new();
+        let mut fpm = FunctionPassManager::new();
+        let mut mpm = ModulePassManager::new();
+
+        mam.add_analysis(FunctionAnalysisManagerModuleProxy::wrap(fam));
+
+        // split-crit-edges must happen at the end so that SSA deconstruction can happen
+        fpm.add_pass(SplitCriticalEdgesPass);
+
+        mpm.add_pass(FunctionToModulePassAdapter::adapt(fpm));
+        mpm.run(&mut module, &mut mam);
+
+        Backend {
+            mir: GenericISel::<X86_64, GreedyISel>::lower(&mut target, &module),
             _unused: PhantomData::default(),
         }
     }

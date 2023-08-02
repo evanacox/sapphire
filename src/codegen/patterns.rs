@@ -33,7 +33,7 @@
 
 use crate::codegen::*;
 use crate::ir;
-use crate::ir::{BinaryInst, FunctionDefinition, ICmpOp, InstData, Value};
+use crate::ir::{BinaryInst, FunctionDefinition, ICmpOp, InstData, Instruction, Value};
 use paste::paste;
 use std::cell::RefCell;
 use std::marker::PhantomData;
@@ -470,15 +470,17 @@ pub fn imm32<'a, Arch: Architecture + 'a>(
     fn match_if(inst: ir::Inst, val: &RefCell<i32>, def: &FunctionDefinition) -> bool {
         match def.dfg.inst_data(inst) {
             InstData::IConst(iconst) => {
-                let v = iconst.value();
+                let fits = match iconst.result_ty().unwrap().as_int().unwrap().width() {
+                    8 | 16 | 32 => true,
+                    64 => (iconst.value() & u32::MAX as u64) == iconst.value(),
+                    _ => unreachable!(),
+                };
 
-                if let Ok(v) = i32::try_from(v as i64) {
-                    *val.borrow_mut() = v;
-
-                    true
-                } else {
-                    false
+                if fits {
+                    *val.borrow_mut() = iconst.value() as i32;
                 }
+
+                fits
             }
             InstData::Null(_) => {
                 *val.borrow_mut() = 0;
@@ -809,7 +811,7 @@ mod tests {
 
         // two-step base
         {
-            let mut ctx = LoweringContext::<X86_64>::new_for(&mut target, &module, options);
+            let mut ctx = LoweringContext::<X86_64>::new_for(&mut target, &module);
             ctx.prepare_for_func(function);
 
             let matcher = icmp_with(ICmpOp::EQ, any(), iconst());
@@ -823,7 +825,7 @@ mod tests {
 
         // single-step base
         {
-            let mut ctx = LoweringContext::new_for(&mut target, &module, options);
+            let mut ctx = LoweringContext::new_for(&mut target, &module);
             ctx.prepare_for_func(function);
 
             let matcher = icmp_with(ICmpOp::EQ, any(), iconst());
@@ -834,7 +836,7 @@ mod tests {
 
         // two-step operand
         {
-            let mut ctx = LoweringContext::new_for(&mut target, &module, options);
+            let mut ctx = LoweringContext::new_for(&mut target, &module);
             ctx.prepare_for_func(function);
 
             let matcher = iconst();
@@ -848,7 +850,7 @@ mod tests {
 
         // one-step operand
         {
-            let mut ctx = LoweringContext::new_for(&mut target, &module, options);
+            let mut ctx = LoweringContext::new_for(&mut target, &module);
             ctx.prepare_for_func(function);
 
             let matcher = iconst();
@@ -892,7 +894,7 @@ mod tests {
         let v2inst = def.dfg.value_to_inst(v2).unwrap();
         let v3inst = def.dfg.value_to_inst(v3).unwrap();
 
-        let mut ctx = LoweringContext::new_for(&mut target, &module, options);
+        let mut ctx = LoweringContext::new_for(&mut target, &module);
         ctx.prepare_for_func(function);
 
         let matcher = iadd_with(any(), iconst_val(13));
@@ -959,7 +961,7 @@ mod tests {
         let def = function.definition().unwrap();
 
         for val in [v0_yes, v1_yes, v2_yes, v3_yes, v4_yes] {
-            let mut ctx = LoweringContext::new_for(&mut target, &module, options);
+            let mut ctx = LoweringContext::new_for(&mut target, &module);
             ctx.prepare_for_func(function);
 
             let refcell = RefCell::new(0);
@@ -969,7 +971,7 @@ mod tests {
         }
 
         for val in [v5_no, v6_no] {
-            let mut ctx = LoweringContext::new_for(&mut target, &module, options);
+            let mut ctx = LoweringContext::new_for(&mut target, &module);
             ctx.prepare_for_func(function);
 
             let refcell = RefCell::new(0);
@@ -1023,7 +1025,7 @@ mod tests {
         let def = function.definition().unwrap();
 
         for val in [v0, v1, v2, v3, v4] {
-            let mut ctx = LoweringContext::new_for(&mut target, &module, options);
+            let mut ctx = LoweringContext::new_for(&mut target, &module);
             ctx.prepare_for_func(function);
 
             let matcher = super::zero();
@@ -1032,7 +1034,7 @@ mod tests {
         }
 
         {
-            let mut ctx = LoweringContext::new_for(&mut target, &module, options);
+            let mut ctx = LoweringContext::new_for(&mut target, &module);
             ctx.prepare_for_func(function);
 
             let matcher = super::zero();
@@ -1104,7 +1106,7 @@ mod tests {
         let def = function.definition().unwrap();
 
         for val in [v0, v1, v2, v3] {
-            let mut ctx = LoweringContext::new_for(&mut target, &module, options);
+            let mut ctx = LoweringContext::new_for(&mut target, &module);
             ctx.prepare_for_func(function);
 
             let matcher = super::neg1();
@@ -1113,7 +1115,7 @@ mod tests {
         }
 
         for val in [v4_not, v5_not, v6_not] {
-            let mut ctx = LoweringContext::new_for(&mut target, &module, options);
+            let mut ctx = LoweringContext::new_for(&mut target, &module);
             ctx.prepare_for_func(function);
 
             let matcher = super::neg1();

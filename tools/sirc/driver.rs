@@ -146,7 +146,7 @@ fn compile_x86_64(mut module: Module, pair: TargetPair, options: &Options) -> St
         _ => unreachable!(),
     };
 
-    let mut mir = GenericISel::<X86_64, GreedyISel>::lower(&mut target, &module, options.codegen);
+    let mut mir = GenericISel::<X86_64, GreedyISel>::lower(&mut target, &module);
 
     if options.reg_alloc != RegAlloc::None {
         for (func, frame) in mir.functions_mut() {

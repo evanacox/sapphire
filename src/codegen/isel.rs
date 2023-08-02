@@ -90,13 +90,12 @@ where
     pub fn lower(
         target: &'target mut Target<Arch>,
         module: &'module Module,
-        options: CodegenOptions,
     ) -> MIRModule<Arch::Inst> {
         target.prepare_for(module);
 
         let mut isel = Self::new();
         let mut functions = Vec::default();
-        let mut context = LoweringContext::new_for(target, module, options);
+        let mut context = LoweringContext::new_for(target, module);
 
         for func in module.functions() {
             let f = module.function(func);
@@ -259,15 +258,11 @@ impl<'module, 'target, Arch: Architecture> LoweringContext<'module, 'target, Arc
     const CONSTANT_COLOR: u32 = !0;
 
     /// Creates a [`LoweringContext`] prepared for a specific target and module.
-    pub fn new_for(
-        target: &'target mut Target<Arch>,
-        module: &'module Module,
-        options: CodegenOptions,
-    ) -> Self {
+    pub fn new_for(target: &'target mut Target<Arch>, module: &'module Module) -> Self {
         Self {
             target,
             module,
-            options,
+            options: target.options(),
             block_lookup: SecondaryMap::default(),
             pool: StringPool::default(),
             current: VecDeque::default(),
@@ -729,7 +724,7 @@ impl<'module, 'target, Arch: Architecture> LoweringContext<'module, 'target, Arc
             for &(caller_defined, dist_from_end, length) in vec.iter() {
                 let end = (self.current.len() - dist_from_end) as u32;
                 let interval = if caller_defined {
-                    LiveInterval::defined_before_func(end)
+                    LiveInterval::defined_before_func(end - 1)
                 } else {
                     LiveInterval::between(end - (length as u32), end - 1)
                 };

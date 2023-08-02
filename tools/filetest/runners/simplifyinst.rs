@@ -18,5 +18,5 @@ runner_for_opt!(
 );
 
 pub const fn simplifyinst_subtest() -> Subtest {
-    Subtest::new("simplifyinst", simplifyinst)
+    Subtest::new(&["simplifyinst"], simplifyinst)
 }

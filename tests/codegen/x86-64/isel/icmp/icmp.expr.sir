@@ -1,0 +1,22 @@
+; MATCH-SECTION
+;
+; test:
+;     mov vi2, esi
+;     mov vi4, edi
+;     xor vi3, vi3
+;     cmp vi4, 42
+;     sete vi3
+;     mov vi1, vi3
+;     mov vi0, vi1
+;     and vi0, vi2
+;     mov eax, vi0
+;     ret
+;;
+fn i32 @test(i32, i32) {
+entry(i32 %0, i32 %1):
+  %2 = iconst i32 42
+  %3 = icmp eq i32 %0, %2
+  %4 = btoi i32, bool %3
+  %5 = and i32 %4, %1
+  ret i32 %5
+}

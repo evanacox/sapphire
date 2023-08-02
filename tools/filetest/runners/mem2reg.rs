@@ -15,5 +15,5 @@ use sapphire::transforms::Mem2RegPass;
 runner_for_opt!(mem2reg, FunctionToModulePassAdapter::adapt(Mem2RegPass));
 
 pub const fn mem2reg_subtest() -> Subtest {
-    Subtest::new("mem2reg", mem2reg)
+    Subtest::new(&["mem2reg"], mem2reg)
 }

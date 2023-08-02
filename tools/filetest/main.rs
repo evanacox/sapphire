@@ -30,8 +30,6 @@ fn main() {
     #[cfg(windows)]
     ansi_term::enable_ansi_support().expect("unable to enable ANSI");
 
-    std::panic::set_hook(Box::new(subtest::panic_hook));
-
     let jobs = cli::jobs();
     let subtest = subtest();
     let ((subtest, jobs), options) = cli::tool_with(

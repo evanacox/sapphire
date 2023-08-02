@@ -1,0 +1,19 @@
+; MATCH-SECTION
+;
+; test:
+;     mov vi1, edi
+;     mov vi2, 42
+;     mov al, vi1
+;     movsx ax, al
+;     cwd
+;     idiv vi2
+;     mov vi0, dl
+;     mov eax, vi0
+;     ret
+;;
+fn i8 @test(i8) {
+entry(i8 %0):
+  %1 = iconst i8 42
+  %2 = srem i8 %0, %1
+  ret i8 %2
+}

@@ -89,6 +89,21 @@ impl<'f> SimplifyVisitor<'f> {
                     (false, false) => lhs.key_index() > rhs.key_index(),
                 }
             }
+            // if the lhs is a constant and rhs is a phi, we do want to swap
+            (Some(i_lhs), None) => {
+                let i_lhs = self.cursor.inst_data(i_lhs);
+
+                i_lhs.is_constant()
+            }
+            // this is here to prevent an infinite loop of changes. if we previously
+            // moved a constant to rhs and lhs is a phi, we explicitly prevent a change
+            // so we don't get stuck in an infinite loop of switching phis and constants
+            (None, Some(i_rhs)) => {
+                let i_rhs = self.cursor.inst_data(i_rhs);
+
+                !i_rhs.is_constant()
+            }
+            // otherwise, try to move phis to the right
             _ => {
                 // try to keep phi nodes on the right if possible
                 let dfg = self.cursor.dfg();

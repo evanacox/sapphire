@@ -18,5 +18,5 @@ runner_for_opt!(
 );
 
 pub const fn split_crit_edges_subtest() -> Subtest {
-    Subtest::new("split-crit-edges", split_crit_edges)
+    Subtest::new(&["split-crit-edges"], split_crit_edges)
 }

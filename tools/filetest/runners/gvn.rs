@@ -12,11 +12,8 @@ use crate::runners::optimization_runner::*;
 use crate::subtest::Subtest;
 use sapphire::transforms::GVNPass;
 
-runner_for_opt!(
-    gvn,
-    FunctionToModulePassAdapter::adapt(GVNPass)
-);
+runner_for_opt!(gvn, FunctionToModulePassAdapter::adapt(GVNPass));
 
 pub const fn gvn_subtest() -> Subtest {
-    Subtest::new("gvn", gvn)
+    Subtest::new(&["gvn"], gvn)
 }

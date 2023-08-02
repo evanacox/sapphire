@@ -1,0 +1,16 @@
+; STANDARD
+fn i32 @xorrand() {
+entry:
+    %0 = undef i32
+    %1 = undef i32
+    %2 = undef i32
+    %3 = iconst i32 92523
+    %4 = iconst i32 -12
+    %5 = iconst i32 5802391
+    %6 = xor i32 %0, %1
+    %7 = iadd i32 %2, %3
+    %8 = imul i32 %4, %5
+    %9 = xor i32 %6, %7
+    %10 = xor i32 %8, %9
+    ret i32 %10
+}

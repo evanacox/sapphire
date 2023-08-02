@@ -9,22 +9,42 @@
 //======---------------------------------------------------------------======//
 
 use crate::subtest::{Subtest, TestResult};
-use sapphire::analysis;
+use sapphire::codegen::x86_64::X86_64Assembly;
+use sapphire::codegen::{CodegenOptions, PresetBackends, PresetTargets, TargetPair};
 use sapphire::transforms;
 
-fn parser_output(name: &str, content: &str) -> TestResult {
-    match sapphire::parse_sir(name, content) {
+fn isel_greedy_x86_64(name: &str, content: &str) -> TestResult {
+    let module = match sapphire::parse_sir(name, content) {
         Ok(module) => {
             // this also tests the verifier. Every SIR file we parse should
             // also correctly verify, anything that doesn't is a bug.
             transforms::verify_module_panic(&module);
 
-            TestResult::Output(analysis::stringify_module(&module))
+            module
         }
-        Err(err) => TestResult::CompileError(format!("{err}")),
-    }
+        Err(err) => return TestResult::CompileError(format!("{err}")),
+    };
+
+    let target = PresetTargets::linux_x86_64(CodegenOptions::default());
+
+    TestResult::Output(
+        PresetBackends::x86_64_debug_no_reg_alloc(module, target).assembly(
+            X86_64Assembly::GNUIntel,
+            TargetPair::X86_64Linux,
+            false,
+        ),
+    )
 }
 
-pub const fn parse_subtest() -> Subtest {
-    Subtest::new(&["parse"], parser_output)
+pub const fn isel_greedy_x86_subtest() -> Subtest {
+    Subtest::new(
+        &[
+            "codegen/x86-64/isel",
+            "codegen/x86-64/isel/arith",
+            "codegen/x86-64/isel/constants",
+            "codegen/x86-64/isel/icmp",
+            "codegen/x86-64/isel/phi",
+        ],
+        isel_greedy_x86_64,
+    )
 }

@@ -8,14 +8,14 @@
 //                                                                           //
 //======---------------------------------------------------------------======//
 
-use crate::display;
 use crate::runners::*;
 use crate::subtest::Subtest;
+use crate::{display, subtest};
 use std::io;
 use std::time::Duration;
 use threadpool::ThreadPool;
 
-const SUBTESTS: [Subtest; 7] = [
+const SUBTESTS: [Subtest; 8] = [
     parse_subtest(),
     domtree_subtest(),
     dce_subtest(),
@@ -23,6 +23,7 @@ const SUBTESTS: [Subtest; 7] = [
     gvn_subtest(),
     simplifyinst_subtest(),
     split_crit_edges_subtest(),
+    isel_greedy_x86_subtest(),
 ];
 
 fn pool_for_jobs(jobs: Option<usize>) -> ThreadPool {
@@ -37,6 +38,8 @@ fn run_tests(tests: &[Subtest], pool: &mut ThreadPool) -> io::Result<()> {
     let mut total_time = Duration::default();
     let mut failed = Vec::default();
 
+    std::panic::set_hook(Box::new(subtest::panic_hook));
+
     for test in tests {
         display::print_subtest_header(test);
 
@@ -44,7 +47,7 @@ fn run_tests(tests: &[Subtest], pool: &mut ThreadPool) -> io::Result<()> {
             total += 1;
             total_time += result.elapsed;
 
-            if let Some(rest) = display::print_subtest_result(test, file, result) {
+            if let Some(rest) = display::print_subtest_result(file, result) {
                 failed.push(rest);
             }
         }
@@ -81,6 +84,7 @@ pub fn run_subtest(name: &str, jobs: Option<usize>) -> io::Result<()> {
         "gvn" => run_tests(&SUBTESTS[4..5], &mut pool),
         "simplifyinst" => run_tests(&SUBTESTS[5..6], &mut pool),
         "splitcritedges" => run_tests(&SUBTESTS[6..7], &mut pool),
+        "isel-x86" => run_tests(&SUBTESTS[7..8], &mut pool),
         _ => unreachable!(),
     }
 }

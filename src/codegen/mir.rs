@@ -31,6 +31,13 @@ pub struct RegToRegCopy {
     pub from: Reg,
 }
 
+/// An abstract representation of a `jmp` that will always be taken
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Hash)]
+pub struct UnconditionalBranch {
+    /// The destination of the jump
+    pub to: MIRBlock,
+}
+
 /// A collector that can have registers added to it.
 ///
 /// Each register has an associated size (in bytes) that are being used
@@ -83,6 +90,15 @@ pub trait MachInst: Copy + Debug + Hash + Sized {
 
     /// Returns `self` as a [`RegToRegCopy`] if `self` is a register-to-register copy.
     fn as_copy(&self) -> Option<RegToRegCopy>;
+
+    /// Checks if the instruction is an unconditional jump
+    #[inline]
+    fn is_unconditional_jmp(&self) -> bool {
+        self.as_unconditional_jmp().is_some()
+    }
+
+    /// Returns `self` as a [`UnconditionalBranch`] if `self` is an unconditional branch
+    fn as_unconditional_jmp(&self) -> Option<UnconditionalBranch>;
 
     /// Creates a target-specific copy instruction that copies a value of `width` bytes
     /// between two registers.

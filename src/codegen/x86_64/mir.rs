@@ -11,7 +11,7 @@
 use crate::codegen::x86_64::X86_64;
 use crate::codegen::{
     CallUseDefId, MIRBlock, MachInst, PReg, Reg, RegCollector, RegToRegCopy, StackFrame,
-    VariableLocation, WriteableReg,
+    UnconditionalBranch, VariableLocation, WriteableReg,
 };
 use crate::utility::Str;
 use static_assertions::assert_eq_size;
@@ -1086,6 +1086,19 @@ impl MachInst for Inst {
                     to: mov.dest,
                     from: src,
                 }),
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+
+    fn as_unconditional_jmp(&self) -> Option<UnconditionalBranch> {
+        match self {
+            Self::Jump(jmp) => match jmp.target {
+                JumpTarget::Local(block) => jmp
+                    .condition
+                    .is_none()
+                    .then_some(UnconditionalBranch { to: block }),
                 _ => None,
             },
             _ => None,

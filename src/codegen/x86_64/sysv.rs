@@ -24,7 +24,6 @@ use crate::ir::{
 };
 use crate::utility::SaHashMap;
 use smallvec::SmallVec;
-use static_assertions::{const_assert, const_assert_eq};
 use std::iter;
 
 const CALLEE_PRESERVED: [PReg; 6] = [

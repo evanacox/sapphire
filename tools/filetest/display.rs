@@ -18,9 +18,13 @@ use std::time::Duration;
 const PAD_TO_START_OF_LINE: &str = "        ";
 
 pub fn print_subtest_header(subtest: &Subtest) {
-    let files = cases_in_subdir(subtest.subdir()).len();
+    let files = subtest
+        .subdirs()
+        .iter()
+        .fold(0, |count, subdir| count + cases_in_subdir(subdir).len());
+
     let starting = Green.bold().paint("Starting");
-    let name = White.bold().paint(subtest.subdir());
+    let name = White.bold().paint(subtest.main_subdir());
 
     println!("     {starting} subtest '{name}' with {files} total test cases");
 }
@@ -117,12 +121,8 @@ pub fn print_failure(file: String, error: String) {
     );
 }
 
-pub fn print_subtest_result(
-    subtest: &Subtest,
-    file: &'static str,
-    details: TestDetails,
-) -> Option<(String, String)> {
-    let filename = format!("{}/{}", Cyan.paint(subtest.subdir()), Blue.paint(file));
+pub fn print_subtest_result(file: &'static str, details: TestDetails) -> Option<(String, String)> {
+    let filename = format!("{}/{}", Cyan.paint(details.subdir), Blue.paint(file));
     let time = format!("{:11}s", details.elapsed.as_secs_f32());
     let (start, rest) = test_results(&details);
 

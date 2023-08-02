@@ -1,0 +1,19 @@
+; MATCH-SECTION
+;
+; test:
+;     mov vi2, edi
+;     mov vi1, vi2
+;     add vi1, 12
+;     mov vi0, vi1
+;     and vi0, -1
+;     mov eax, vi0
+;     ret
+;;
+fn i32 @test(i32, ptr) {
+entry(i32 %argc, ptr %argv):
+  %0 = iconst i32 12
+  %1 = iconst i32 -1
+  %2 = iadd i32 %argc, %0
+  %3 = and i32 %2, %1
+  ret i32 %3
+}

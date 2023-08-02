@@ -1,0 +1,15 @@
+fn bool @rand()
+
+fn i32 @test() {
+entry:
+  %0 = iconst i32 1
+  br one(i32 %0)
+
+one(i32 %1):
+  %2 = iconst i32 2
+  %3 = call bool @rand()
+  condbr bool %3, exit, one(i32 %2)
+
+exit:
+  ret i32 %1
+}

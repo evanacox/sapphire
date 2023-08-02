@@ -102,7 +102,9 @@ fn find_checks<'data>(name: &str, contents: &'data str) -> Check<'data> {
         return find_individual_checks(rest);
     }
 
-    panic!("test '{name}' did not provide `; <TYPE>` header for `filetest`. got: '{first}'")
+    // we explicitly print out here since the panic handler may have been replaced
+    eprintln!("test '{name}' did not provide `; <TYPE>` header for `filetest`. got: '{first}'");
+    panic!()
 }
 
 fn match_entire_file(output: TestResult, expected: &str) -> Result<(), TestFailure> {

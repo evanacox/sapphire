@@ -45,17 +45,20 @@ impl Rewriter {
         let mut block_intervals = SecondaryMap::default();
         let mut pp = ProgramPoint::key_new(0);
         let mut index = 0u32;
+        let mut program_order_it = function.program_order().iter().peekable();
 
-        for &block in function.program_order() {
+        while let Some(&block) = program_order_it.next() {
             let begin = index;
 
             // if this is the entry block, emit the prologue
             if function.program_order().first() == Some(&block) {
+                let old = out.len();
+
                 frame.generate_prologue(&mut out);
 
                 // we just generated a bunch of instructions, need to include this in the first block.
                 // we haven't emitted anything else before this, so doing `out.len` is fine
-                index += out.len() as u32;
+                index += (out.len() - old) as u32;
             }
 
             for &inst in function.block(block) {
@@ -86,9 +89,31 @@ impl Rewriter {
                     index += (out.len() - old) as u32;
                 }
 
-                // any `%r <- %r` instruction is removed, they are useless but common after
-                // regalloc. anything else is added to the buffer
-                if !rewritten.is_nop_copy() {
+                let mut skip = false;
+
+                // if we have the following construction
+                //
+                //     jmp .L0
+                // .L0:
+                //
+                // we want to not omit the jump, since it's completely useless
+                if let Some(jmp) = rewritten.as_unconditional_jmp() {
+                    if program_order_it
+                        .peek()
+                        .is_some_and(|&&block| block == jmp.to)
+                    {
+                        // skip actually emitting the jump, we can use fallthrough to get
+                        // to the next block since it will be emitted next
+                        skip = true;
+                    }
+                }
+
+                // for any instruction `mov %r, %r` we want to not omit it
+                if rewritten.is_nop_copy() {
+                    skip = true;
+                }
+
+                if !skip {
                     out.push(rewritten);
                     index += 1;
                 }
