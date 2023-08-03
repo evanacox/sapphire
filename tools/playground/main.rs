@@ -146,8 +146,9 @@ fn main() {
 
     // transforms::verify_module_panic(&module);
 
-    let backend = PresetBackends::x86_64_sys_v_unoptimized(module);
-    let string = backend.assembly(X86_64Assembly::GNUIntel);
+    let target = PresetTargets::linux_x86_64(CodegenOptions::default());
+    let backend = PresetBackends::x86_64_unoptimized(module, target);
+    let string = backend.assembly(X86_64Assembly::GNUIntel, TargetPair::X86_64Linux, false);
 
     println!("{string}");
 }
