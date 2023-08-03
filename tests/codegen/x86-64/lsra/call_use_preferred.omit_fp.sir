@@ -1,0 +1,17 @@
+; MATCH-SECTION
+;
+; test:
+;     push rbx
+;     mov ebx, edi
+;     call clobber
+;     mov eax, ebx
+;     pop rbx
+;     ret
+;;
+fn void @clobber()
+
+fn i32 @test(i32) {
+entry(i32 %0):
+  call void @clobber()
+  ret i32 %0
+}

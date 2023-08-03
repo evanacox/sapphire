@@ -11,8 +11,8 @@
 use crate::arena::{ArenaMap, SecondaryMap};
 use crate::codegen::x86_64::greedy_isel::zeroing_mov;
 use crate::codegen::x86_64::{
-    greedy_isel, ALUOpcode, Call, IndirectAddress, IndirectCall, Inst, Lea, Mov, Pop, Push,
-    RegMemImm, Ret, Width, ALU, X86_64,
+    ALUOpcode, Call, IndirectAddress, IndirectCall, Inst, Lea, Mov, Pop, Push, RegMemImm, Ret,
+    Width, ALU, X86_64,
 };
 use crate::codegen::{
     AvailableRegisters, CallUseDefId, CallingConv, CodegenOptions, Ctx, FramelessCtx,
@@ -404,14 +404,14 @@ impl StackFrame<X86_64> for SystemVStackFrame {
             ParamLocation::InReg(reg) => {
                 ctx.begin_caller_defined_fixed_interval(reg.as_preg().unwrap());
 
-                greedy_isel::zeroing_mov(result, RegMemImm::Reg(reg), def.dfg.ty(param), ctx);
+                zeroing_mov(result, RegMemImm::Reg(reg), def.dfg.ty(param), ctx);
 
                 ctx.end_caller_defined_fixed_interval(reg.as_preg().unwrap(), 0);
             }
             ParamLocation::RelativeToFP(offset) => {
                 let loc = self.fp_relative_offset_into_indirect_address(offset, ctx);
 
-                greedy_isel::zeroing_mov(result, RegMemImm::Mem(loc), def.dfg.ty(param), ctx);
+                zeroing_mov(result, RegMemImm::Mem(loc), def.dfg.ty(param), ctx);
             }
             ParamLocation::LeaFromFP(offset) => {
                 let loc = self.fp_relative_offset_into_indirect_address(offset, ctx);
@@ -436,7 +436,7 @@ impl StackFrame<X86_64> for SystemVStackFrame {
 
                         ctx.begin_fixed_interval(reg);
 
-                        greedy_isel::zeroing_mov(
+                        zeroing_mov(
                             WriteableReg::from_reg(Reg::from_preg(reg)),
                             RegMemImm::Reg(result),
                             ty,
@@ -631,12 +631,7 @@ impl SystemVCallingConv {
                 &ParamLocation::InReg(reg) => {
                     ctx.begin_fixed_interval(reg.as_preg().unwrap());
 
-                    greedy_isel::zeroing_mov(
-                        WriteableReg::from_reg(reg),
-                        RegMemImm::Reg(value),
-                        ty,
-                        ctx,
-                    );
+                    zeroing_mov(WriteableReg::from_reg(reg), RegMemImm::Reg(value), ty, ctx);
                 }
                 ParamLocation::RelativeToFP(_) => {
                     // all arguments are promoted to 8 bytes, so we push a quad word
@@ -679,6 +674,8 @@ impl SystemVCallingConv {
                 ctx,
             );
         }
+
+        ctx.end_fixed_interval(X86_64::RAX, (stack_change != 0) as usize);
 
         // restore stack to what it was before the call happened
         if stack_change != 0 {

@@ -1,0 +1,21 @@
+; MATCH-SECTION
+;
+; test:
+;     mov r8d, edx
+;     mov eax, ecx
+;     cdq
+;     idiv r8d
+;     xor eax, edi
+;     xor eax, esi
+;     ret
+;;
+fn i32 @test(i32, i32, i32, i32) {
+entry(i32 %0, i32 %1, i32 %2, i32 %3):
+  ; this forces idiv edx, ecx, but `idiv` requires
+  ; the first operand be in `edx:eax` so the register allocator
+  ; needs to know to move `edx` into another register, i.e. `r8d`
+  %4 = sdiv i32 %3, %2
+  %5 = xor i32 %4, %0
+  %6 = xor i32 %5, %1
+  ret i32 %6
+}

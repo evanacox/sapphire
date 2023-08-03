@@ -496,17 +496,20 @@ impl RegisterPool {
             registers.high_priority_temporaries,
         ];
 
-        // if we're a leaf function, prefer clobbered registers over preserved registers.
-        // 0 => clobbered priority value, 1 => preserved priority value,
-        // 2 => high priority priority value
-        let priorities = if metadata.is_leaf {
-            [200, 100, 1000]
-        } else {
-            [100, 200, 1000]
-        };
+        // we preferred clobbered registers over preserved registers, even in non-leaf
+        // functions. the register pool will automatically consider fixed intervals for calls,
+        // and the register won't be picked if it overlaps any of them, so clobbered are
+        // still better in the general case.
+        //
+        // preserved will be picked when no clobbered are actually possible to use.
+        //
+        // order is [clobbered, preserved, high_priority]
+        let priorities = [500, 100, 1000];
 
         for (i, &register_subset) in order.iter().enumerate() {
             for (j, &preg) in register_subset.iter().enumerate().rev() {
+                // each register gets a relative priority within its own array, so
+                // putting the register first makes the allocator prefer it.
                 priority.insert(preg, (priorities[i] - j) as i32);
                 register_queue.push(preg);
             }

@@ -1,0 +1,16 @@
+; MATCH-SECTION
+;
+; test:
+;     add di, si
+;     add di, si
+;     mov eax, edi
+;     ret
+;;
+fn i16 @test(i16, i16) {
+entry(i16 %0, i16 %1):
+  %2 = iadd i16 %0, %1
+  ; %3 is lowered as `mov vi0, <%2>` and `add vi0, <%1>`
+  ; %2 ends with a copy to vi0, want to make sure its chained properly
+  %3 = iadd i16 %2, %1
+  ret i16 %3
+}

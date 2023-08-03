@@ -48,8 +48,9 @@ pub const fn isel_greedy_x86_subtest() -> Subtest {
             "codegen/x86-64/isel/constants",
             "codegen/x86-64/isel/icmp",
             "codegen/x86-64/isel/memory",
-            "codegen/x86-64/isel/stack",
             "codegen/x86-64/isel/phi",
+            "codegen/x86-64/isel/stack",
+            "codegen/x86-64/isel/system-v",
         ],
         isel_greedy_x86_64,
     )
