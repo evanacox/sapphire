@@ -24,6 +24,6 @@ pub struct SimplifyCFGPass;
 
 impl FunctionTransformPass for SimplifyCFGPass {
     fn run(&mut self, func: &mut Function, am: &mut FunctionAnalysisManager) -> PreservedAnalyses {
-       todo!()
+        todo!()
     }
 }
