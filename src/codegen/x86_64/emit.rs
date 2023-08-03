@@ -16,8 +16,8 @@ use crate::codegen::{
 use crate::ir::{FloatFormat, UType};
 use crate::utility::{SaHashMap, StringPool};
 use smallvec::SmallVec;
-use std::iter;
 use std::str::FromStr;
+use std::{iter, mem};
 
 /// Different assembly formats for x86-64
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Debug, Hash)]
@@ -228,6 +228,7 @@ impl Emitter<X86_64> for Emit {
             mac_os: matches!(target, TargetPair::X86_64macOS),
             state: String::default(),
             pool: module.symbols().clone(),
+            label_count: 0,
             fixed_interval_comments,
         };
 
@@ -244,6 +245,7 @@ struct AsmEmitter {
     mac_os: bool,
     state: String,
     pool: StringPool,
+    label_count: usize,
     fixed_interval_comments: bool,
 }
 
@@ -390,18 +392,17 @@ impl AsmEmitter {
 
         self.emit_function_name(name, &defined_by_caller);
 
-        for (count, &block) in function
-            .program_order()
-            .iter()
-            .skip(1) // skip 1, we don't want to put a label on the first block
-            .enumerate()
-        {
-            block_names.insert(block, format!(".L{count}"));
+        // skip 1, we don't want to put a label on the first block
+        for &block in function.program_order().iter().skip(1) {
+            let curr = self.label_count;
+            let next = mem::replace(&mut self.label_count, curr + 1);
+
+            block_names.insert(block, format!(".L{next}"));
         }
 
         for &block in function.program_order().iter() {
-            if block_names.contains(block) {
-                self.state += &block_names[block];
+            if let Some(name) = block_names.get(block) {
+                self.state += name;
                 self.state += ":\n";
             }
 
@@ -585,20 +586,26 @@ impl AsmEmitter {
                 let emit = self.emit_reg(Reg::from_preg(X86_64::RSP), Width::Qword);
 
                 if self.mode == X86_64Assembly::GNU {
-                    format!("__stackoffset {offset}({emit})")
+                    format!("__pseudo_stackoffset {offset}({emit})")
                 } else if offset >= 0 {
-                    format!("__stackoffset [{emit} + {offset}]")
+                    format!("__pseudo_stackoffset [{emit} + {offset}]")
                 } else {
                     let abs = offset.abs();
 
-                    format!("__stackoffset [{emit} - {abs}]")
+                    format!("__pseudo_stackoffset [{emit} - {abs}]")
                 }
             }
             IndirectAddress::RegOffset(reg, offset) => {
                 let emit = self.emit_reg(reg, Width::Qword);
 
                 if self.mode == X86_64Assembly::GNU {
-                    format!("{offset}({emit})")
+                    if offset != 0 {
+                        format!("{offset}({emit})")
+                    } else {
+                        format!("({emit})")
+                    }
+                } else if offset == 0 {
+                    format!("[{emit}]")
                 } else if offset >= 0 {
                     format!("[{emit} + {offset}]")
                 } else {

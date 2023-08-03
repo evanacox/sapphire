@@ -1,0 +1,11 @@
+; MATCH-SECTION
+;
+; test:
+;     mov eax, vi0
+;     ret
+;;
+fn i32 @test() {
+entry:
+    %0 = undef i32
+    ret i32 %0
+}

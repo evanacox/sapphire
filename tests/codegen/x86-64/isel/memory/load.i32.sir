@@ -1,0 +1,13 @@
+; MATCH-SECTION
+;
+; test:
+;     mov vi1, rdi
+;     mov vi0, dword ptr [vi1]
+;     mov eax, vi0
+;     ret
+;;
+fn i32 @test(ptr) {
+entry(ptr %0):
+    %1 = load i32, ptr %0
+    ret i32 %1
+}

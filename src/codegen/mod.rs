@@ -24,6 +24,7 @@ mod options;
 pub mod patterns;
 mod regalloc;
 mod rewriter;
+mod ssa;
 mod target;
 pub mod x86_64;
 
@@ -35,4 +36,5 @@ pub use mir::*;
 pub use options::*;
 pub use regalloc::*;
 pub use rewriter::*;
+pub use ssa::*;
 pub use target::*;

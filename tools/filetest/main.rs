@@ -84,3 +84,13 @@ fn test_gvn() {
 fn test_simplifyinst() {
     assert!(matches!(run_subtest("simplifyinst", Some(1)), Ok(())))
 }
+
+#[test]
+fn test_isel_x86() {
+    assert!(matches!(run_subtest("isel-x86", Some(1)), Ok(())))
+}
+
+#[test]
+fn test_lsra_x86() {
+    assert!(matches!(run_subtest("lsra-x86", Some(1)), Ok(())))
+}

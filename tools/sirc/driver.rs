@@ -45,9 +45,10 @@ fn compile_single_file(source: &str, path: &str, options: &Options) -> Result<()
     match sapphire::parse_sir(path, source) {
         Ok(module) => {
             let asm = match options.target {
-                TargetPair::X86_64Linux | TargetPair::X86_64macOS | TargetPair::X86_64Windows => {
-                    compile_x86_64(module, options.target, options)
-                }
+                TargetPair::X86_64Linux
+                | TargetPair::X86_64macOS
+                | TargetPair::X86_64Windows
+                | TargetPair::Debug3Reg => compile_x86_64(module, options.target, options),
                 TargetPair::Aarch64Linux | TargetPair::Arm64macOS | TargetPair::Arm64Windows => {
                     panic!(
                         "native arm codegen is not implemented, specify `--target=x86_64-{{os}}`"
@@ -143,6 +144,7 @@ fn compile_x86_64(mut module: Module, pair: TargetPair, options: &Options) -> St
         TargetPair::X86_64Linux => PresetTargets::linux_x86_64(options.codegen),
         TargetPair::X86_64macOS => PresetTargets::mac_os_x86_64(options.codegen),
         TargetPair::X86_64Windows => PresetTargets::windows_x86_64(options.codegen),
+        TargetPair::Debug3Reg => PresetTargets::debug_3reg(options.codegen),
         _ => unreachable!(),
     };
 

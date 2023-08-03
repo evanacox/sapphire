@@ -9,6 +9,7 @@
 //======---------------------------------------------------------------======//
 
 use crate::arena::{ArenaMap, SecondaryMap};
+use crate::codegen::x86_64::greedy_isel::zeroing_mov;
 use crate::codegen::x86_64::{
     greedy_isel, ALUOpcode, Call, IndirectAddress, IndirectCall, Inst, Lea, Mov, Pop, Push,
     RegMemImm, Ret, Width, ALU, X86_64,
@@ -213,9 +214,10 @@ impl SystemVStackFrame {
         for slot in view.dfg().stack_slots() {
             let data = view.dfg().stack_slot(slot);
             let layout = target.layout_of(data.ty());
-            let sz = layout.size() as usize;
 
-            obj.align_stack_for(layout.align() as usize);
+            if !obj.align_stack_for(layout.align() as usize) {
+                obj.stack_size += layout.size() as usize;
+            }
 
             // we add `layout.size()` because we're getting the address of the FIRST
             // byte, and the stack grows downwards.
@@ -224,7 +226,6 @@ impl SystemVStackFrame {
             //     we want to start at `[rbp - 8]` not `[rbp]`, because the latter
             //     would load the return address
             //
-            obj.stack_size += sz;
             obj.slot_distance_from_rbp.insert(slot, obj.stack_size);
         }
 
@@ -250,7 +251,7 @@ impl SystemVStackFrame {
         // note that we don't do this if we will emit a frame pointer, because
         // the prologue would do `push rbp` and add an extra 8
         if self.stack_size == 0 {
-            if self.will_omit_fp() && !self.metadata.is_leaf {
+            if self.will_omit_fp() {
                 self.unaligned_by = 0;
                 self.stack_size += 8;
 
@@ -304,6 +305,19 @@ impl SystemVStackFrame {
                 -i32::try_from(distance).expect("stack offset exceeds i32 limit"),
             )
         }
+    }
+
+    #[inline]
+    fn need_manipulate_sp(&self) -> Option<usize> {
+        // some of our 'stack space' is from pushing preserved registers
+        let real_size = self.stack_size - (self.preserved_regs_used.len() * 8);
+
+        // if we're unaligned at all AND we aren't a leaf function, we need to manipulate the stack
+        // anyway to make sure that the call is properly aligned.
+        //
+        // otherwise, we only need to manipulate it if the size != 0
+        (real_size != 0 || (self.unaligned_by != 0 && !self.metadata.is_leaf))
+            .then_some(real_size + self.unaligned_by)
     }
 
     fn classify_type(pool: &TypePool, ty: Type, target: &Target<X86_64>) -> SystemVTypeClass {
@@ -480,9 +494,6 @@ impl StackFrame<X86_64> for SystemVStackFrame {
     }
 
     fn generate_prologue(&self, out: &mut Vec<Inst>) {
-        // some of our 'stack space' is from pushing preserved registers
-        let real_size = self.stack_size - (self.preserved_regs_used.len() * 8);
-
         // push any preserved registers if needed
         for &reg in self.preserved_regs_used.iter() {
             out.push(Inst::Push(Push {
@@ -506,18 +517,16 @@ impl StackFrame<X86_64> for SystemVStackFrame {
             }));
         }
 
-        if real_size != 0 {
+        if let Some(by) = self.need_manipulate_sp() {
             // sub rsp, stack_size
-            manipulate_rsp!(real_size + self.unaligned_by, out, ALUOpcode::Sub);
+            manipulate_rsp!(by, out, ALUOpcode::Sub);
         }
     }
 
     fn generate_epilogue(&self, out: &mut Vec<Inst>) {
-        let real_size = self.stack_size - (self.preserved_regs_used.len() * 8);
-
-        if real_size != 0 {
+        if let Some(by) = self.need_manipulate_sp() {
             // add rsp, stack_size
-            manipulate_rsp!(real_size + self.unaligned_by, out, ALUOpcode::Add);
+            manipulate_rsp!(by, out, ALUOpcode::Add);
         }
 
         if !self.will_omit_fp() {
@@ -615,7 +624,7 @@ impl SystemVCallingConv {
 
         // we iterate backwards so we can push in the correct order
         for &arg in args.iter().rev() {
-            let value = ctx.result_reg(arg, greedy_isel::val_class(arg, def));
+            let value = ctx.result_reg(arg, LoweringContext::<X86_64>::val_class(arg, def));
             let ty = def.dfg.ty(arg);
 
             match signature_abi.params.get(&arg).unwrap() {
@@ -663,11 +672,12 @@ impl SystemVCallingConv {
         ctx.end_fixed_intervals(&CALLER_PRESERVED[1..], following_count);
 
         if let Some(result) = result {
-            ctx.emit(Inst::Mov(Mov {
-                width: Width::Byte,
-                src: RegMemImm::Reg(Reg::from_preg(X86_64::RAX)),
-                dest: result,
-            }));
+            zeroing_mov(
+                result,
+                RegMemImm::Reg(Reg::from_preg(X86_64::RAX)),
+                sig.return_ty().unwrap(),
+                ctx,
+            );
         }
 
         // restore stack to what it was before the call happened

@@ -14,9 +14,8 @@ use crate::codegen::x86_64::{Inst, *};
 use crate::codegen::*;
 use crate::ir;
 use crate::ir::*;
-use crate::utility::Packable;
+use crate::utility::{Packable, SaHashMap};
 use std::cell::RefCell;
-use std::iter;
 
 /// An instruction selector for x86-64.
 ///
@@ -105,15 +104,8 @@ pub(in crate::codegen::x86_64) fn zeroing_mov(
     ctx.emit(Inst::Mov(Mov { width, src, dest }));
 }
 
-#[inline]
-pub(in crate::codegen::x86_64) fn val_class(val: Value, def: &FunctionDefinition) -> RegClass {
-    match def.dfg.ty(val).unpack() {
-        UType::Float(_) => RegClass::Float,
-        UType::Int(_) | UType::Bool(_) | UType::Ptr(_) => RegClass::Int,
-        UType::Array(_) | UType::Struct(_) => {
-            panic!("unable to put array or structure in physical register")
-        }
-    }
+fn val_class(val: Value, def: &FunctionDefinition) -> RegClass {
+    LoweringContext::<X86_64>::val_class(val, def)
 }
 
 impl<'module, 'target, 'ctx> GreedyISel
@@ -271,12 +263,39 @@ where
     ) {
         let bb = target.block();
         let args = target.args();
+        let params = def.dfg.block(bb).params();
 
-        for (&arg, &param) in iter::zip(args.iter(), def.dfg.block(bb).params()) {
-            let class = val_class(param, def);
-            let param_reg = ctx.result_reg(param, class);
+        let scheduled = schedule_parallel_copies(params, args, def);
+        let mut mapping = SaHashMap::default();
 
-            self.mov(WriteableReg::from_reg(param_reg), arg, (def, fr, ctx));
+        // a ParallelCopy could be a temporary, we need to make sure
+        // that we both give it a new register on first use AND keep getting the same
+        // register on subsequent uses
+        macro_rules! reg_for_possible_temporary {
+            ($copy:expr, $class:expr, $ctx:expr, $mapping:expr) => {
+                match $copy {
+                    ParallelCopyLocation::Normal(v) => $ctx.result_reg(v, $class),
+                    ParallelCopyLocation::Temporary(id, _) => $mapping
+                        .entry(id)
+                        .or_insert_with(|| $ctx.next_vreg($class))
+                        .clone(),
+                }
+            };
+        }
+
+        for (source, dest) in scheduled {
+            let v = source.associated_val();
+            let ty = def.dfg.ty(v);
+            let class = val_class(v, def);
+            let dest_reg = reg_for_possible_temporary!(dest, class, ctx, mapping);
+            let src_reg = reg_for_possible_temporary!(source, class, ctx, mapping);
+
+            zeroing_mov(
+                WriteableReg::from_reg(dest_reg),
+                RegMemImm::Reg(src_reg),
+                ty,
+                ctx,
+            );
         }
 
         ctx.emit(Inst::Jump(Jump {

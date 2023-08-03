@@ -12,8 +12,8 @@ use crate::arena::{SecondaryMap, SecondarySet};
 use crate::codegen::regalloc::allocator::{defs, uses};
 use crate::codegen::{
     Allocation, Architecture, AvailableRegisters, ConservativeLiveIntervals, FixedIntervals,
-    LiveInterval, MIRFunction, MachInst, PReg, ProgramPointsIterator, Reg, RegisterAllocator,
-    RegisterMapping, SpillReload, StackFrame, VariableLocation,
+    LiveInterval, MIRFunction, MachInst, PReg, ProgramPoint, ProgramPointsIterator, Reg,
+    RegisterAllocator, RegisterMapping, SpillReload, StackFrame, VariableLocation,
 };
 use crate::ir::FunctionMetadata;
 use crate::utility::SaHashMap;
@@ -400,14 +400,39 @@ impl<'a, Arch: Architecture> RegisterAllocator<Arch> for LinearScanRegAlloc<'a> 
         let mut mapping = RegisterMapping::new();
         let mut spills = Vec::default();
         let live = ConservativeLiveIntervals::compute(program, frame);
-        let mut obj = LinearScanRegAlloc::new(
+        let mut lsra = LinearScanRegAlloc::new(
             program.fixed_intervals(),
             live,
             frame.metadata(),
             frame.registers(),
         );
 
-        obj.lsra(frame);
+        lsra.lsra(frame);
+
+        macro_rules! rewrites_for_reg {
+            ($reg:expr, $lsra:expr, $pp:expr) => {{
+                // rewriter expects us to map `%preg` -> `%preg`
+                if let Some(preg) = $reg.as_preg() {
+                    (None, preg)
+                } else {
+                    match $lsra.spills.get(&$reg) {
+                        Some(loc) => {
+                            let current =
+                                RegLivePair::new($reg, LiveInterval::spill($pp.offset_of_next()));
+                            let register = $lsra.mapping.get(&current).copied().unwrap();
+
+                            (Some(*loc), register)
+                        }
+                        None => {
+                            let interval = $lsra.reg_to_pair.get(&$reg).copied().unwrap();
+                            let register = $lsra.mapping.get(&interval).copied().unwrap();
+
+                            (None, register)
+                        }
+                    }
+                }
+            }};
+        }
 
         for (pp, inst) in program.all_instructions().iter().program_points() {
             let mut pairs = smallvec![];
@@ -415,28 +440,7 @@ impl<'a, Arch: Architecture> RegisterAllocator<Arch> for LinearScanRegAlloc<'a> 
             let defs = defs!(inst, frame);
 
             for (reg, _) in uses {
-                let (loc, preg) = {
-                    // rewriter expects us to map `%preg` -> `%preg`
-                    if let Some(preg) = reg.as_preg() {
-                        (None, preg)
-                    } else {
-                        match obj.spills.get(&reg) {
-                            Some(loc) => {
-                                let pair_for_current =
-                                    RegLivePair::new(reg, LiveInterval::spill(pp.offset_of_next()));
-                                let register = obj.mapping.get(&pair_for_current).copied().unwrap();
-
-                                (Some(*loc), register)
-                            }
-                            None => {
-                                let interval = obj.reg_to_pair.get(&reg).copied().unwrap();
-                                let register = obj.mapping.get(&interval).copied().unwrap();
-
-                                (None, register)
-                            }
-                        }
-                    }
-                };
+                let (loc, preg) = rewrites_for_reg!(reg, lsra, pp);
 
                 pairs.push((reg, preg));
 
@@ -452,34 +456,13 @@ impl<'a, Arch: Architecture> RegisterAllocator<Arch> for LinearScanRegAlloc<'a> 
             }
 
             for (reg, _) in defs {
-                let (loc, preg) = {
-                    // rewriter expects us to map `%preg` -> `%preg`
-                    if let Some(preg) = reg.as_preg() {
-                        (None, preg)
-                    } else {
-                        match obj.spills.get(&reg) {
-                            Some(loc) => {
-                                let pair_for_current =
-                                    RegLivePair::new(reg, LiveInterval::spill(pp.offset_of_next()));
-                                let register = obj.mapping.get(&pair_for_current).copied().unwrap();
-
-                                (Some(*loc), register)
-                            }
-                            None => {
-                                let interval = obj.reg_to_pair.get(&reg).copied().unwrap();
-                                let register = obj.mapping.get(&interval).copied().unwrap();
-
-                                (None, register)
-                            }
-                        }
-                    }
-                };
+                let (loc, preg) = rewrites_for_reg!(reg, lsra, pp);
 
                 pairs.push((reg, preg));
 
                 if let Some(loc) = loc {
                     spills.push((
-                        pp,
+                        ProgramPoint::before(pp.offset_of_next() + 1),
                         SpillReload::Spill {
                             from: preg,
                             to: loc,

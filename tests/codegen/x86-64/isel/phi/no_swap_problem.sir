@@ -1,0 +1,39 @@
+; MATCH-SECTION
+;
+; swap_problem:
+;     mov vi6, esi
+;     mov vi5, edi
+;     mov vi1, vi5
+;     mov vi2, vi6
+;     jmp .L0
+; .L0:
+;     call rand_bool
+;     mov vi4, eax
+;     test vi4, vi4
+;     jnz .L2
+;     jmp .L1
+; .L1:
+;     mov vi3, vi1
+;     mov vi1, vi2
+;     mov vi2, vi3
+;     jmp .L0
+; .L2:
+;     mov vi0, vi1
+;     sub vi0, vi2
+;     mov eax, vi0
+;     ret
+;;
+fn bool @rand_bool()
+
+fn i32 @swap_problem(i32, i32) {
+entry(i32 %0, i32 %1):
+  br swap_loop(i32 %0, i32 %1)
+
+swap_loop(i32 %2, i32 %3):
+  %4 = call bool @rand_bool()
+  condbr bool %4, exit, swap_loop(i32 %3, i32 %2)
+
+exit:
+  %5 = isub i32 %2, %3
+  ret i32 %5
+}

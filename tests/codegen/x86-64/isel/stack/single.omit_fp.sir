@@ -1,0 +1,19 @@
+; MATCH-SECTION
+;
+; test:
+;     mov vi2, edi
+;     lea vi1, __pseudo_stackoffset [rsp + 0]
+;     mov dword ptr [vi1], vi2
+;     mov vi0, dword ptr [vi1]
+;     mov eax, vi0
+;     ret
+;;
+fn i32 @test(i32) {
+  $0 = stack i32
+
+entry(i32 %0):
+  %1 = stackslot $0
+  store i32 %0, ptr %1
+  %2 = load i32, ptr %1
+  ret i32 %2
+}

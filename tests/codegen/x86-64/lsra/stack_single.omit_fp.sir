@@ -1,0 +1,19 @@
+; MATCH-SECTION
+;
+; test:
+;     sub rsp, 8
+;     lea rax, [rsp]
+;     mov dword ptr [rax], edi
+;     mov eax, dword ptr [rax]
+;     add rsp, 8
+;     ret
+;;
+fn i32 @test(i32) {
+  $0 = stack i32
+
+entry(i32 %0):
+  %1 = stackslot $0
+  store i32 %0, ptr %1
+  %2 = load i32, ptr %1
+  ret i32 %2
+}

@@ -13,7 +13,11 @@ use sapphire::codegen::x86_64::X86_64Assembly;
 use sapphire::codegen::{CodegenOptions, PresetBackends, PresetTargets, TargetPair};
 use sapphire::transforms;
 
-fn isel_greedy_x86_64(name: &str, content: &str) -> TestResult {
+fn lsra_x86(name: &str, content: &str) -> TestResult {
+    let options = CodegenOptions {
+        omit_frame_pointer: !name.contains("no_omit_fp"),
+    };
+
     let module = match sapphire::parse_sir(name, content) {
         Ok(module) => {
             // this also tests the verifier. Every SIR file we parse should
@@ -25,32 +29,19 @@ fn isel_greedy_x86_64(name: &str, content: &str) -> TestResult {
         Err(err) => return TestResult::CompileError(format!("{err}")),
     };
 
-    let options = CodegenOptions {
-        omit_frame_pointer: !name.contains("no_omit_fp"),
+    let target = if name.contains("3reg") {
+        PresetTargets::debug_3reg(options)
+    } else {
+        PresetTargets::linux_x86_64(options)
     };
 
-    let target = PresetTargets::linux_x86_64(options);
-
-    TestResult::Output(
-        PresetBackends::x86_64_debug_no_reg_alloc(module, target).assembly(
-            X86_64Assembly::GNUIntel,
-            TargetPair::X86_64Linux,
-            false,
-        ),
-    )
+    TestResult::Output(PresetBackends::x86_64_unoptimized(module, target).assembly(
+        X86_64Assembly::GNUIntel,
+        TargetPair::X86_64Linux,
+        false,
+    ))
 }
 
-pub const fn isel_greedy_x86_subtest() -> Subtest {
-    Subtest::new(
-        &[
-            "codegen/x86-64/isel",
-            "codegen/x86-64/isel/arith",
-            "codegen/x86-64/isel/constants",
-            "codegen/x86-64/isel/icmp",
-            "codegen/x86-64/isel/memory",
-            "codegen/x86-64/isel/stack",
-            "codegen/x86-64/isel/phi",
-        ],
-        isel_greedy_x86_64,
-    )
+pub const fn lsra_x86_subtest() -> Subtest {
+    Subtest::new(&["codegen/x86-64/lsra"], lsra_x86)
 }

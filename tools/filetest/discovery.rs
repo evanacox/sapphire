@@ -73,5 +73,10 @@ fn recursive_build(out: &mut DirectoryContents, curr_key: String, current_dir: P
 }
 
 pub fn cases_in_subdir(path: &'static str) -> &'static [(String, String, FileTestCase)] {
+    assert!(
+        ALL_TEST_CASES.contains_key(path),
+        "no files found for path `{path}`"
+    );
+
     &ALL_TEST_CASES[path]
 }

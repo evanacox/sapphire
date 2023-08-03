@@ -9,7 +9,9 @@
 //======---------------------------------------------------------------======//
 
 use crate::arena::ArenaKey;
-use crate::codegen::x86_64::{LinuxX86_64, MacOSX86_64, WindowsX86_64, X86_64};
+use crate::codegen::x86_64::{
+    Debug3RegLinuxX86_64, LinuxX86_64, MacOSX86_64, WindowsX86_64, X86_64,
+};
 use crate::codegen::{CallingConv, CodegenOptions, MachInst, StackFrame};
 use crate::ir::{FloatFormat, Function, Module, Type, TypePool, UType};
 use crate::utility::SaHashMap;
@@ -43,6 +45,10 @@ pub enum TargetPair {
     Arm64macOS,
     /// 64-bit arm Windows
     Arm64Windows,
+    /// A test 3-register target that is identical to [`Self::X86_64Linux`] in every
+    /// way observable, except that only the registers `r8`, `r9`, and `r10` are
+    /// available for the register allocator to use.
+    Debug3Reg,
 }
 
 impl FromStr for TargetPair {
@@ -56,8 +62,9 @@ impl FromStr for TargetPair {
             "aarch64-linux" => Ok(TargetPair::Aarch64Linux),
             "arm64-mac" => Ok(TargetPair::Arm64macOS),
             "arm64-win" => Ok(TargetPair::Arm64Windows),
+            "debug3reg" => Ok(TargetPair::Debug3Reg),
             _ => {
-                Err("the available targets are `x86_64-linux`, `x86_64-mac`, `x86_64-win`, `aarch64-linux`, `arm64-mac`, `arm64-win`")
+                Err("the available targets are `x86_64-linux`, `x86_64-mac`, `x86_64-win`, `aarch64-linux`, `arm64-mac`, `arm64-win`, `debug3reg`")
             }
         }
     }
@@ -72,6 +79,7 @@ impl fmt::Display for TargetPair {
             TargetPair::Aarch64Linux => write!(f, "aarch64-linux"),
             TargetPair::Arm64macOS => write!(f, "arm64-mac"),
             TargetPair::Arm64Windows => write!(f, "arm64-win"),
+            TargetPair::Debug3Reg => write!(f, "debug4reg"),
         }
     }
 }
@@ -528,6 +536,17 @@ impl PresetTargets {
         Target {
             options,
             platform: Box::new(WindowsX86_64),
+            aggregate_type_layouts: SaHashMap::default(),
+            _unused: PhantomData::default(),
+        }
+    }
+
+    /// Returns a [`Target`] that is configured for the 3-register debugging target.
+    #[inline]
+    pub fn debug_3reg(options: CodegenOptions) -> Target<X86_64> {
+        Target {
+            options,
+            platform: Box::new(Debug3RegLinuxX86_64),
             aggregate_type_layouts: SaHashMap::default(),
             _unused: PhantomData::default(),
         }

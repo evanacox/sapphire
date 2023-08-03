@@ -15,13 +15,20 @@ use crate::codegen::{
 };
 use crate::ir::{FunctionMetadata, RetInst, StackSlot, Value};
 
-/// A debug stack frame setup that only makes 2 registers available for
+/// A debug stack frame setup that only makes 3 registers available for
 /// the register allocator.
-pub struct Debug2RegStackFrame {
+pub struct Debug3RegStackFrame {
     frame: SystemVStackFrame,
 }
 
-impl StackFrame<X86_64> for Debug2RegStackFrame {
+impl Debug3RegStackFrame {
+    /// Creates a new debug stack frame that wraps `frame`]
+    pub fn wrap(frame: SystemVStackFrame) -> Self {
+        Self { frame }
+    }
+}
+
+impl StackFrame<X86_64> for Debug3RegStackFrame {
     fn stack_slot(
         &mut self,
         stack: StackSlot,
@@ -74,8 +81,8 @@ impl StackFrame<X86_64> for Debug2RegStackFrame {
     fn registers(&self) -> AvailableRegisters {
         AvailableRegisters {
             preserved: &[],
-            clobbered: &[X86_64::R10, X86_64::R11],
-            unavailable: &[],
+            clobbered: &[X86_64::R8, X86_64::R9, X86_64::R10],
+            unavailable: &[X86_64::RIP, X86_64::RSP, X86_64::RBP],
             high_priority_temporaries: &[],
         }
     }

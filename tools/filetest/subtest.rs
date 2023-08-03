@@ -115,6 +115,8 @@ impl Subtest {
         let (send, recv) = mpsc::channel();
 
         for subdir in self.subdirs {
+            panic::set_hook(Box::new(panic_hook));
+
             for (name, contents, case) in discovery::cases_in_subdir(subdir) {
                 let send = send.clone();
                 let runner = self.runner;
@@ -143,6 +145,8 @@ impl Subtest {
                     send.send((name.as_str(), details)).expect("unable to send")
                 });
             }
+
+            let _ = panic::take_hook();
         }
 
         recv

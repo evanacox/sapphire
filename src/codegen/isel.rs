@@ -10,7 +10,9 @@
 
 use crate::arena::{ArenaMap, SecondaryMap, SecondarySet};
 use crate::codegen::*;
-use crate::ir::{Block, Cursor, Func, FuncView, Function, FunctionDefinition, Module, Value};
+use crate::ir::{
+    Block, Cursor, Func, FuncView, Function, FunctionDefinition, Module, UType, Value,
+};
 use crate::transforms::common::has_side_effect;
 use crate::utility::{Packable, Str, StringPool};
 use crate::{analysis, ir};
@@ -601,6 +603,18 @@ impl<'module, 'target, Arch: Architecture> LoweringContext<'module, 'target, Arc
     #[inline]
     pub fn is_merged(&self, inst: ir::Inst) -> bool {
         self.merged.contains(inst)
+    }
+
+    /// Gets the [`RegClass`] that a given [`Value`](ir::Value) can go in.
+    #[inline]
+    pub fn val_class(val: Value, def: &FunctionDefinition) -> RegClass {
+        match def.dfg.ty(val).unpack() {
+            UType::Float(_) => RegClass::Float,
+            UType::Int(_) | UType::Bool(_) | UType::Ptr(_) => RegClass::Int,
+            UType::Array(_) | UType::Struct(_) => {
+                panic!("unable to put array or structure in physical register")
+            }
+        }
     }
 
     // builds an arena mapping MIR blocks to their intervals in the resulting instruction buffer.
