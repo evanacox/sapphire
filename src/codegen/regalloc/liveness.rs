@@ -126,17 +126,6 @@ impl LiveInterval {
         }
     }
 
-    /// Checks if a [`ProgramPoint`] is within the live range denoted by `self`.
-    #[inline]
-    pub fn within(self, pp: ProgramPoint) -> bool {
-        if let Some(begin) = self.first_defined_after() {
-            // if begin == offset_of_next then pp points at the instruction **before** the interval
-            begin < pp.offset_of_next() && pp.offset_of_next() <= self.last_used_by()
-        } else {
-            pp.offset_of_next() <= self.last_used_by()
-        }
-    }
-
     /// Returns whether or not `self` stops being live before `other` begins.
     #[inline]
     pub fn ends_before(self, other: LiveInterval) -> bool {
@@ -393,10 +382,5 @@ mod tests {
 
         // (1, 1) overlaps (1, 1)
         assert!(LiveInterval::spill(1).overlaps(LiveInterval::spill(1)));
-    }
-
-    #[test]
-    fn test_within() {
-        assert!(LiveInterval::spill(1).within(ProgramPoint::before(1)));
     }
 }

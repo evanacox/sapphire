@@ -470,14 +470,21 @@ pub fn imm32<'a, Arch: Architecture + 'a>(
     fn match_if(inst: ir::Inst, val: &RefCell<i32>, def: &FunctionDefinition) -> bool {
         match def.dfg.inst_data(inst) {
             InstData::IConst(iconst) => {
-                let fits = match iconst.result_ty().unwrap().as_int().unwrap().width() {
-                    8 | 16 | 32 => true,
-                    64 => (iconst.value() & u32::MAX as u64) == iconst.value(),
+                let (fits, as_u32) = match iconst.result_ty().unwrap().as_int().unwrap().width() {
+                    8 | 16 | 32 => (true, iconst.value() as u32),
+                    64 => {
+                        let result = i32::try_from(iconst.value() as i64);
+
+                        match result {
+                            Ok(val) => (true, val as u32),
+                            Err(e) => (false, 0),
+                        }
+                    }
                     _ => unreachable!(),
                 };
 
                 if fits {
-                    *val.borrow_mut() = iconst.value() as i32;
+                    *val.borrow_mut() = as_u32 as i32;
                 }
 
                 fits

@@ -12,7 +12,7 @@ use crate::ir::{FunctionDefinition, Value};
 
 /// A location used in parallel copy scheduling.
 ///
-/// This is either just a reference to a [`Value`](ir::Value) or
+/// This is either just a reference to a [`Value`](crate::ir::Value) or
 /// it's an anonymous temporary identified by the `u32` it holds.
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Hash)]
 pub enum ParallelCopyLocation {
