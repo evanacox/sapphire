@@ -243,8 +243,7 @@ impl<'a> LinearScanRegAlloc<'a> {
             }
         };
 
-        self
-            .pool
+        self.pool
             .try_take_specific_register(preferred, pair.live(), self.fixed)
     }
 
