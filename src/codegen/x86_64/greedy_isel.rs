@@ -464,8 +464,12 @@ impl<'mo, 'fr, 'ta, 'ctx> GenericInstVisitor<(), Ctx<'mo, 'fr, 'ta, 'ctx>> for G
         convention.lower_call(data, result.map(WriteableReg::from_reg), (def, fr, ctx));
     }
 
-    fn visit_indirectcall(&mut self, data: &IndirectCallInst, context: Ctx<'_, '_, '_, '_>) {
-        todo!()
+    fn visit_indirectcall(&mut self, data: &IndirectCallInst, (def, fr, ctx): Ctx<'_, '_, '_, '_>) {
+        let result = self.maybe_curr_result_reg((def, fr, ctx));
+        let cc = def.dfg.signature(data.sig()).calling_conv();
+        let convention = calling_conv(cc, ctx);
+
+        convention.lower_indirect_call(data, result.map(WriteableReg::from_reg), (def, fr, ctx));
     }
 
     fn visit_icmp(&mut self, data: &ICmpInst, (def, fr, ctx): Ctx<'_, '_, '_, '_>) {

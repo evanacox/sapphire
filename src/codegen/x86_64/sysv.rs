@@ -494,14 +494,6 @@ impl StackFrame<X86_64> for SystemVStackFrame {
     }
 
     fn generate_prologue(&self, out: &mut Vec<Inst>) {
-        // push any preserved registers if needed
-        for &reg in self.preserved_regs_used.iter() {
-            out.push(Inst::Push(Push {
-                value: Reg::from_preg(reg),
-                width: Width::Qword,
-            }));
-        }
-
         if !self.will_omit_fp() {
             // push rbp
             out.push(Inst::Push(Push {
@@ -513,6 +505,14 @@ impl StackFrame<X86_64> for SystemVStackFrame {
             out.push(Inst::Mov(Mov {
                 src: RegMemImm::Reg(Reg::from_preg(X86_64::RSP)),
                 dest: WriteableReg::from_reg(Reg::from_preg(X86_64::RBP)),
+                width: Width::Qword,
+            }));
+        }
+
+        // push any preserved registers if needed
+        for &reg in self.preserved_regs_used.iter() {
+            out.push(Inst::Push(Push {
+                value: Reg::from_preg(reg),
                 width: Width::Qword,
             }));
         }
@@ -529,18 +529,18 @@ impl StackFrame<X86_64> for SystemVStackFrame {
             manipulate_rsp!(by, out, ALUOpcode::Add);
         }
 
-        if !self.will_omit_fp() {
-            // pop rbp
-            out.push(Inst::Pop(Pop {
-                dest: WriteableReg::from_reg(Reg::from_preg(X86_64::RBP)),
-                width: Width::Qword,
-            }));
-        }
-
         // pop any preserved registers if needed
         for &reg in self.preserved_regs_used.iter().rev() {
             out.push(Inst::Pop(Pop {
                 dest: WriteableReg::from_reg(Reg::from_preg(reg)),
+                width: Width::Qword,
+            }));
+        }
+
+        if !self.will_omit_fp() {
+            // pop rbp
+            out.push(Inst::Pop(Pop {
+                dest: WriteableReg::from_reg(Reg::from_preg(X86_64::RBP)),
                 width: Width::Qword,
             }));
         }

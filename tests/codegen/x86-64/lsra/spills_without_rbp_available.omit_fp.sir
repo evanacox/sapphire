@@ -1,0 +1,41 @@
+; MATCH-SECTION
+;
+; test:
+;     push rbx
+;     push r12
+;     push r13
+;     push r14
+;     push r15
+;     push rbp
+;     sub rsp, 8
+;     mov ebx, r9d
+;     mov r12d, r8d
+;     mov r13d, ecx
+;     mov r14d, edx
+;     mov r15d, esi
+;     mov ebp, edi
+;     call clobber
+;     mov r9d, ebx
+;     mov r8d, r12d
+;     mov ecx, r13d
+;     mov edx, r14d
+;     mov esi, r15d
+;     mov edi, ebp
+;     call test
+;     add rsp, 8
+;     pop rbp
+;     pop r15
+;     pop r14
+;     pop r13
+;     pop r12
+;     pop rbx
+;     ret
+;;
+fn void @clobber()
+
+fn i32 @test(i32, i32, i32, i32, i32, i32) {
+entry(i32 %0, i32 %1, i32 %2, i32 %3, i32 %4, i32 %5):
+    call void @clobber()
+    %6 = call i32 @test(i32 %0, i32 %1, i32 %2, i32 %3, i32 %4, i32 %5)
+    ret i32 %6
+}
