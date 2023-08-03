@@ -166,7 +166,7 @@ impl LiveInterval {
             None => 0..=self.last_used_by(),
         };
 
-        iter.map(|x| ProgramPoint::before(x))
+        iter.map(ProgramPoint::before)
     }
 
     /// A "spill interval" is an interval of the form `(x, x)`. If this

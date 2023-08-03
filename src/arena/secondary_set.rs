@@ -61,7 +61,7 @@ impl<K: ArenaKey> SecondarySet<K> {
         Self {
             bits: SmallBitVec::default(),
             cardinality: 0,
-            _unused: PhantomData::default(),
+            _unused: PhantomData,
         }
     }
 
@@ -78,7 +78,7 @@ impl<K: ArenaKey> SecondarySet<K> {
         Self {
             bits: sbvec![false; cap],
             cardinality: 0,
-            _unused: PhantomData::default(),
+            _unused: PhantomData,
         }
     }
 
@@ -131,7 +131,7 @@ impl<K: ArenaKey> SecondarySet<K> {
         Self {
             bits,
             cardinality,
-            _unused: PhantomData::default(),
+            _unused: PhantomData,
         }
     }
 
@@ -388,7 +388,7 @@ impl<K: ArenaKey> IntoIterator for SecondarySet<K> {
 
         SecondarySetIntoIter {
             inner: self.bits.into_iter().enumerate().filter(filter).map(mapper),
-            _unused: PhantomData::default(),
+            _unused: PhantomData,
         }
     }
 }
@@ -483,7 +483,7 @@ impl<'de, K: ArenaKey> Visitor<'de> for SecondarySetVisitor<K> {
         Ok(SecondarySet {
             bits,
             cardinality,
-            _unused: PhantomData::default(),
+            _unused: PhantomData,
         })
     }
 }
@@ -494,7 +494,7 @@ impl<'de, K: ArenaKey> Deserialize<'de> for SecondarySet<K> {
     where
         D: Deserializer<'de>,
     {
-        deserializer.deserialize_map(SecondarySetVisitor(PhantomData::default()))
+        deserializer.deserialize_map(SecondarySetVisitor(PhantomData))
     }
 }
 

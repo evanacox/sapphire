@@ -164,6 +164,8 @@ impl SignatureABI {
     }
 }
 
+type UseDefPair = (Box<[PReg]>, Box<[PReg]>);
+
 /// An implementation of [`StackFrame`] for the System-V ABI.
 ///
 /// This ABI is for x86-64 on most Unix platforms (Linux, macOS, BSD).
@@ -176,7 +178,7 @@ pub struct SystemVStackFrame {
     slot_distance_from_rbp: SecondaryMap<StackSlot, usize>,
     preserved_regs_used: SmallVec<[PReg; 8]>,
     signature_abi: SignatureABI,
-    call_use_defs: ArenaMap<CallUseDefId, (Box<[PReg]>, Box<[PReg]>)>,
+    call_use_defs: ArenaMap<CallUseDefId, UseDefPair>,
 }
 
 macro_rules! manipulate_rsp {
@@ -271,7 +273,7 @@ impl SystemVStackFrame {
         self.stack_size += self.stack_size & (align - 1);
         self.unaligned_by = (self.unaligned_by + align) % 16;
 
-        return false;
+        false
     }
 
     #[inline]

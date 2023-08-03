@@ -513,7 +513,7 @@ impl PresetTargets {
             options,
             platform: Box::new(LinuxX86_64),
             aggregate_type_layouts: SaHashMap::default(),
-            _unused: PhantomData::default(),
+            _unused: PhantomData,
         }
     }
 
@@ -525,7 +525,7 @@ impl PresetTargets {
             options,
             platform: Box::new(MacOSX86_64),
             aggregate_type_layouts: SaHashMap::default(),
-            _unused: PhantomData::default(),
+            _unused: PhantomData,
         }
     }
 
@@ -537,7 +537,7 @@ impl PresetTargets {
             options,
             platform: Box::new(WindowsX86_64),
             aggregate_type_layouts: SaHashMap::default(),
-            _unused: PhantomData::default(),
+            _unused: PhantomData,
         }
     }
 
@@ -548,7 +548,7 @@ impl PresetTargets {
             options,
             platform: Box::new(Debug3RegLinuxX86_64),
             aggregate_type_layouts: SaHashMap::default(),
-            _unused: PhantomData::default(),
+            _unused: PhantomData,
         }
     }
 }

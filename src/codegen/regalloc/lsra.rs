@@ -243,9 +243,9 @@ impl<'a> LinearScanRegAlloc<'a> {
             }
         };
 
-        return self
+        self
             .pool
-            .try_take_specific_register(preferred, pair.live(), self.fixed);
+            .try_take_specific_register(preferred, pair.live(), self.fixed)
     }
 
     fn expire_old_intervals<Arch: Architecture>(

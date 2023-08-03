@@ -117,7 +117,7 @@ where
     fn new() -> Self {
         Self {
             selector: Selector::new(),
-            _unused: PhantomData::default(),
+            _unused: PhantomData,
         }
     }
 
@@ -214,6 +214,9 @@ where
     }
 }
 
+// a tuple (is defined by caller, distance from end, length)
+type FixedIntervalData = (bool, usize, usize);
+
 /// The "context" of a specific lowering.
 ///
 /// This is given to a specific selector when its asked to lower an instruction,
@@ -250,7 +253,7 @@ pub struct LoweringContext<'module, 'target, Arch: Architecture> {
     next_float_vreg_id: usize,
     // a list of fixed intervals, this is not a full live interval yet.
     // it's a tuple (reg, is defined by caller, distance from end, length)
-    fixed_intervals: SecondaryMap<PReg, SmallVec<[(bool, usize, usize); 2]>>,
+    fixed_intervals: SecondaryMap<PReg, SmallVec<[FixedIntervalData; 2]>>,
     // the current function being lowered
     func: Option<&'module Function>,
     externals: Vec<(Str, Extern)>,

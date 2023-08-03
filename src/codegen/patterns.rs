@@ -227,7 +227,7 @@ where
             operand_matcher: self.operand_matcher.clone(),
             base_merger: self.base_merger.clone(),
             operand_merger: self.operand_merger.clone(),
-            _unused: PhantomData::default(),
+            _unused: PhantomData,
         }
     }
 }
@@ -298,7 +298,7 @@ struct ISelMergeAnyMatcher<Arch: Architecture> {
 impl<Arch: Architecture> Clone for ISelMergeAnyMatcher<Arch> {
     fn clone(&self) -> Self {
         Self {
-            _unused: PhantomData::default(),
+            _unused: PhantomData,
         }
     }
 }
@@ -334,7 +334,7 @@ struct ISelMergePhiMatcher<Arch: Architecture> {
 impl<Arch: Architecture> Clone for ISelMergePhiMatcher<Arch> {
     fn clone(&self) -> Self {
         Self {
-            _unused: PhantomData::default(),
+            _unused: PhantomData,
         }
     }
 }
@@ -384,7 +384,7 @@ impl<Arch: Architecture> ISelMergeMatcher<Arch> for ISelMergePhiMatcher<Arch> {
 #[inline(always)]
 pub fn any<Arch: Architecture>() -> impl ISelMergeMatcher<Arch> + Copy {
     ISelMergeAnyMatcher {
-        _unused: PhantomData::default(),
+        _unused: PhantomData,
     }
 }
 
@@ -409,7 +409,7 @@ pub fn any<Arch: Architecture>() -> impl ISelMergeMatcher<Arch> + Copy {
 #[inline(always)]
 pub fn phi<Arch: Architecture>() -> impl ISelMergeMatcher<Arch> + Copy {
     ISelMergePhiMatcher {
-        _unused: PhantomData::default(),
+        _unused: PhantomData,
     }
 }
 
@@ -423,7 +423,7 @@ pub fn load<Arch: Architecture>() -> impl ISelMergeMatcher<Arch> + Copy {
         operand_merger: |inst, base, (_, ctx)| {
             ctx.mark_merged_with(inst, base);
         },
-        _unused: PhantomData::default(),
+        _unused: PhantomData,
     }
 }
 
@@ -437,7 +437,7 @@ pub fn iconst<Arch: Architecture>() -> impl ISelMergeMatcher<Arch> + Copy {
         operand_merger: |inst, base, (_, ctx)| {
             ctx.mark_merged_with(inst, base);
         },
-        _unused: PhantomData::default(),
+        _unused: PhantomData,
     }
 }
 
@@ -457,7 +457,7 @@ pub fn iconst_val<Arch: Architecture>(val: u64) -> impl ISelMergeMatcher<Arch> +
         operand_merger: |inst, base, (_, ctx)| {
             ctx.mark_merged_with(inst, base);
         },
-        _unused: PhantomData::default(),
+        _unused: PhantomData,
     }
 }
 
@@ -505,7 +505,7 @@ pub fn imm32<'a, Arch: Architecture + 'a>(
         operand_merger: |inst, base, (_, ctx)| {
             ctx.mark_merged_with(inst, base);
         },
-        _unused: PhantomData::default(),
+        _unused: PhantomData,
     }
 }
 
@@ -581,7 +581,7 @@ pub fn iconst_of<'a, Arch: Architecture + 'a>(
         operand_merger: |inst, base, (_, ctx)| {
             ctx.mark_merged_with(inst, base);
         },
-        _unused: PhantomData::default(),
+        _unused: PhantomData,
     }
 }
 
@@ -705,7 +705,7 @@ pub fn icmp<Arch: Architecture>() -> impl ISelMergeMatcher<Arch> + Copy {
         operand_merger: |inst, base, (_, ctx)| {
             ctx.mark_merged_with(inst, base);
         },
-        _unused: PhantomData::default(),
+        _unused: PhantomData,
     }
 }
 
@@ -776,7 +776,7 @@ where
             ctx.mark_merged_with(inst, base);
             merge(inst, base, lhs, rhs, (def, ctx));
         },
-        _unused: PhantomData::default(),
+        _unused: PhantomData,
     }
 }
 

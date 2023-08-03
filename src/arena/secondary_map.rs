@@ -91,7 +91,7 @@ impl<K: ArenaKey, V> SecondaryMap<K, V> {
             slots: Vec::default(),
             initialized: SmallBitVec::default(),
             len: 0,
-            _unused: PhantomData::default(),
+            _unused: PhantomData,
         }
     }
 
@@ -115,7 +115,7 @@ impl<K: ArenaKey, V> SecondaryMap<K, V> {
             slots: Vec::from_iter(it),
             initialized: sbvec![false; cap],
             len: 0,
-            _unused: PhantomData::default(),
+            _unused: PhantomData,
         }
     }
 
@@ -170,7 +170,7 @@ impl<K: ArenaKey, V> SecondaryMap<K, V> {
             slots,
             initialized,
             len: primary.len(),
-            _unused: PhantomData::default(),
+            _unused: PhantomData,
         }
     }
 
@@ -227,7 +227,7 @@ impl<K: ArenaKey, V> SecondaryMap<K, V> {
             slots,
             initialized,
             len: count,
-            _unused: PhantomData::default(),
+            _unused: PhantomData,
         }
     }
 
@@ -251,7 +251,7 @@ impl<K: ArenaKey, V> SecondaryMap<K, V> {
             slots,
             initialized,
             len: upto.key_index(),
-            _unused: PhantomData::default(),
+            _unused: PhantomData,
         }
     }
 
@@ -661,7 +661,7 @@ where
             slots: Vec::with_capacity(self.slots.len()),
             initialized: self.initialized.clone(),
             len: self.len(),
-            _unused: PhantomData::default(),
+            _unused: PhantomData,
         };
 
         for (slot, init) in iter::zip(self.slots.iter(), self.initialized.iter()) {
@@ -874,7 +874,7 @@ where
             slots,
             initialized,
             len,
-            _unused: PhantomData::default(),
+            _unused: PhantomData,
         })
     }
 }
@@ -888,7 +888,7 @@ where
     where
         D: Deserializer<'de>,
     {
-        deserializer.deserialize_map(SecondaryMapVisitor(PhantomData::default()))
+        deserializer.deserialize_map(SecondaryMapVisitor(PhantomData))
     }
 }
 

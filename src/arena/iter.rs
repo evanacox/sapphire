@@ -142,7 +142,7 @@ impl<K: ArenaKey> Keys<K> {
         Self {
             pos: 0,
             reverse_pos: len,
-            _unused: PhantomData::default(),
+            _unused: PhantomData,
         }
     }
 }

@@ -240,6 +240,12 @@ impl Emitter<X86_64> for Emit {
     }
 }
 
+type FixedBeginEndAndCallerDefined = (
+    SaHashMap<usize, SmallVec<[PReg; 2]>>,
+    SaHashMap<usize, SmallVec<[PReg; 2]>>,
+    Vec<PReg>,
+);
+
 struct AsmEmitter {
     mode: X86_64Assembly,
     mac_os: bool,
@@ -426,14 +432,7 @@ impl AsmEmitter {
         }
     }
 
-    fn fixed_begin_end(
-        &mut self,
-        function: &MIRFunction<Inst>,
-    ) -> (
-        SaHashMap<usize, SmallVec<[PReg; 2]>>,
-        SaHashMap<usize, SmallVec<[PReg; 2]>>,
-        Vec<PReg>,
-    ) {
+    fn fixed_begin_end(&mut self, function: &MIRFunction<Inst>) -> FixedBeginEndAndCallerDefined {
         let mut fixed_begin_at = SaHashMap::<usize, SmallVec<[PReg; 2]>>::default();
         let mut fixed_end_at = SaHashMap::<usize, SmallVec<[PReg; 2]>>::default();
         let mut defined_by_caller = Vec::<PReg>::default();

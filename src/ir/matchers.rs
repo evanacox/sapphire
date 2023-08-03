@@ -126,7 +126,7 @@ where
 {
     BasicInstMatcher {
         matcher: |inst, dfg| lhs.matches_inst(inst, dfg) && rhs.matches_inst(inst, dfg),
-        data: PhantomData::default(),
+        data: PhantomData,
     }
 }
 
@@ -143,7 +143,7 @@ where
 {
     BasicInstMatcher {
         matcher: |inst, dfg| lhs.matches_inst(inst, dfg) || rhs.matches_inst(inst, dfg),
-        data: PhantomData::default(),
+        data: PhantomData,
     }
 }
 
@@ -151,7 +151,7 @@ where
 pub fn val<'a>() -> impl IRMatcher<'a> {
     BasicValMatcher {
         matcher: move |_, _| true,
-        data: PhantomData::default(),
+        data: PhantomData,
     }
 }
 
@@ -159,7 +159,7 @@ pub fn val<'a>() -> impl IRMatcher<'a> {
 pub fn val_of_ty<'a>(ty: Type) -> impl IRMatcher<'a> {
     BasicValMatcher {
         matcher: move |val, dfg| dfg.ty(val) == ty,
-        data: PhantomData::default(),
+        data: PhantomData,
     }
 }
 
@@ -167,7 +167,7 @@ pub fn val_of_ty<'a>(ty: Type) -> impl IRMatcher<'a> {
 pub fn block_param<'a>() -> impl IRMatcher<'a> {
     BasicValMatcher {
         matcher: move |val, dfg| dfg.is_block_param(val),
-        data: PhantomData::default(),
+        data: PhantomData,
     }
 }
 
@@ -175,7 +175,7 @@ pub fn block_param<'a>() -> impl IRMatcher<'a> {
 pub fn block_param_of_ty<'a>(ty: Type) -> impl IRMatcher<'a> {
     BasicValMatcher {
         matcher: move |val, dfg| dfg.is_block_param(val) && dfg.ty(val) == ty,
-        data: PhantomData::default(),
+        data: PhantomData,
     }
 }
 
@@ -183,7 +183,7 @@ pub fn block_param_of_ty<'a>(ty: Type) -> impl IRMatcher<'a> {
 pub fn iconst<'a>() -> impl IRMatcher<'a> {
     BasicInstMatcher {
         matcher: move |inst, dfg| matches!(dfg.inst_data(inst), InstData::IConst(_)),
-        data: PhantomData::default(),
+        data: PhantomData,
     }
 }
 
@@ -194,7 +194,7 @@ pub fn iconst_val<'a>(value: u64) -> impl IRMatcher<'a> {
             InstData::IConst(iconst) => iconst.value() == value,
             _ => false,
         },
-        data: PhantomData::default(),
+        data: PhantomData,
     }
 }
 
@@ -205,7 +205,7 @@ pub fn iconst_ty<'a>(ty: Type) -> impl IRMatcher<'a> {
             InstData::IConst(iconst) => iconst.result_ty().unwrap() == ty,
             _ => false,
         },
-        data: PhantomData::default(),
+        data: PhantomData,
     }
 }
 
@@ -219,7 +219,7 @@ pub fn iconst_ty_val<'a>(ty: Type, value: u64) -> impl IRMatcher<'a> {
             }
             _ => false,
         },
-        data: PhantomData::default(),
+        data: PhantomData,
     }
 }
 
@@ -230,7 +230,7 @@ pub fn power_of_two<'a>() -> impl IRMatcher<'a> {
             InstData::IConst(iconst) => iconst.value().is_power_of_two(),
             _ => false,
         },
-        data: PhantomData::default(),
+        data: PhantomData,
     }
 }
 
@@ -238,7 +238,7 @@ pub fn power_of_two<'a>() -> impl IRMatcher<'a> {
 pub fn fconst<'a>() -> impl IRMatcher<'a> {
     BasicInstMatcher {
         matcher: move |inst, dfg| matches!(dfg.inst_data(inst), InstData::FConst(_)),
-        data: PhantomData::default(),
+        data: PhantomData,
     }
 }
 
@@ -249,7 +249,7 @@ pub fn fconst_ty<'a>(ty: Type) -> impl IRMatcher<'a> {
             InstData::FConst(fconst) => fconst.result_ty().unwrap() == ty,
             _ => false,
         },
-        data: PhantomData::default(),
+        data: PhantomData,
     }
 }
 
@@ -257,7 +257,7 @@ pub fn fconst_ty<'a>(ty: Type) -> impl IRMatcher<'a> {
 pub fn null<'a>() -> impl IRMatcher<'a> {
     BasicInstMatcher {
         matcher: move |inst, dfg| matches!(dfg.inst_data(inst), InstData::Null(_)),
-        data: PhantomData::default(),
+        data: PhantomData,
     }
 }
 
@@ -268,7 +268,7 @@ pub fn null_ty<'a>(ty: Type) -> impl IRMatcher<'a> {
             InstData::Null(null) => null.result_ty().unwrap() == ty,
             _ => false,
         },
-        data: PhantomData::default(),
+        data: PhantomData,
     }
 }
 
@@ -279,7 +279,7 @@ pub fn null_int<'a>() -> impl IRMatcher<'a> {
             InstData::Null(null) => null.result_ty().unwrap().is_int(),
             _ => false,
         },
-        data: PhantomData::default(),
+        data: PhantomData,
     }
 }
 
@@ -294,7 +294,7 @@ pub fn null_integral<'a>() -> impl IRMatcher<'a> {
             }
             _ => false,
         },
-        data: PhantomData::default(),
+        data: PhantomData,
     }
 }
 
@@ -305,7 +305,7 @@ pub fn null_float<'a>() -> impl IRMatcher<'a> {
             InstData::Null(null) => null.result_ty().unwrap().is_float(),
             _ => false,
         },
-        data: PhantomData::default(),
+        data: PhantomData,
     }
 }
 
@@ -313,7 +313,7 @@ pub fn null_float<'a>() -> impl IRMatcher<'a> {
 pub fn undef<'a>() -> impl IRMatcher<'a> {
     BasicInstMatcher {
         matcher: move |inst, dfg| matches!(dfg.inst_data(inst), InstData::Undef(_)),
-        data: PhantomData::default(),
+        data: PhantomData,
     }
 }
 
@@ -321,7 +321,7 @@ pub fn undef<'a>() -> impl IRMatcher<'a> {
 pub fn bconst<'a>() -> impl IRMatcher<'a> {
     BasicInstMatcher {
         matcher: move |inst, dfg| matches!(dfg.inst_data(inst), InstData::BConst(_)),
-        data: PhantomData::default(),
+        data: PhantomData,
     }
 }
 
@@ -332,7 +332,7 @@ pub fn bconst_val<'a>(value: bool) -> impl IRMatcher<'a> {
             InstData::BConst(bconst) => bconst.value() == value,
             _ => false,
         },
-        data: PhantomData::default(),
+        data: PhantomData,
     }
 }
 
@@ -340,7 +340,7 @@ pub fn bconst_val<'a>(value: bool) -> impl IRMatcher<'a> {
 pub fn stackslot<'a>() -> impl IRMatcher<'a> {
     BasicInstMatcher {
         matcher: move |inst, dfg| matches!(dfg.inst_data(inst), InstData::StackSlot(_)),
-        data: PhantomData::default(),
+        data: PhantomData,
     }
 }
 
@@ -348,7 +348,7 @@ pub fn stackslot<'a>() -> impl IRMatcher<'a> {
 pub fn load<'a>() -> impl IRMatcher<'a> {
     BasicInstMatcher {
         matcher: move |inst, dfg| matches!(dfg.inst_data(inst), InstData::Load(_)),
-        data: PhantomData::default(),
+        data: PhantomData,
     }
 }
 
@@ -447,7 +447,7 @@ pub fn binary<'a>(out: &'a mut Option<&'a (dyn BinaryInst + 'a)>) -> impl IRMatc
 
             out.is_some()
         },
-        data: PhantomData::default(),
+        data: PhantomData,
     }
 }
 
@@ -493,7 +493,7 @@ pub fn binary_with<'a>(
 
             out.is_some()
         },
-        data: PhantomData::default(),
+        data: PhantomData,
     }
 }
 

@@ -137,7 +137,7 @@ fn compile_x86_64(mut module: Module, pair: TargetPair, options: &Options) -> St
         &mut module,
         options,
         |fpm| fpm.add_pass(SplitCriticalEdgesPass),
-        |_| return,
+        |_| {},
     );
 
     let mut target = match pair {

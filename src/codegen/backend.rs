@@ -39,7 +39,7 @@ where
     pub fn from_mir(mir: MIRModule<Arch::Inst>) -> Self {
         Backend {
             mir,
-            _unused: PhantomData::default(),
+            _unused: PhantomData,
         }
     }
 
@@ -112,7 +112,7 @@ impl PresetBackends {
 
         Backend {
             mir: allocate::<X86_64, LinearScanRegAlloc<'_>>(mir),
-            _unused: PhantomData::default(),
+            _unused: PhantomData,
         }
     }
 
@@ -138,7 +138,7 @@ impl PresetBackends {
 
         Backend {
             mir: allocate::<X86_64, LinearScanRegAlloc<'_>>(mir),
-            _unused: PhantomData::default(),
+            _unused: PhantomData,
         }
     }
 
@@ -162,7 +162,7 @@ impl PresetBackends {
 
         Backend {
             mir: GenericISel::<X86_64, GreedyISel>::lower(&mut target, &module),
-            _unused: PhantomData::default(),
+            _unused: PhantomData,
         }
     }
 }
