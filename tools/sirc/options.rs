@@ -151,19 +151,20 @@ fn default_target() -> TargetPair {
     use std::ffi::CStr;
     use std::mem::MaybeUninit;
 
-    let (arch, os) = unsafe {
+    let uname = unsafe {
         let mut data = MaybeUninit::uninit();
-        let uname = {
-            assert_eq!(
-                libc::uname(data.as_mut_ptr()),
-                0,
-                "unknown host config, please use `--target=` explicitly"
-            );
+        let result = libc::uname(data.as_mut_ptr());
 
-            // libc::uname initialized the data
-            data.assume_init()
-        };
+        assert_eq!(
+            result, 0,
+            "unknown host config, please use `--target=` explicitly"
+        );
 
+        // libc::uname initialized the data
+        data.assume_init()
+    };
+
+    let (arch, os) = unsafe {
         // this is guaranteed to be populated by `libc::uname`,
         // POSIX guarantees a null terminator
         (
@@ -180,7 +181,7 @@ fn default_target() -> TargetPair {
         ("x86_64", "Darwin") => TargetPair::X86_64macOS,
         ("aarch64", i) if i.contains("linux") || i.contains("Linux") => TargetPair::Aarch64Linux,
         ("x86_64", i) if i.contains("linux") || i.contains("Linux") => TargetPair::X86_64Linux,
-        _ => panic!("unknown `uname` hardware configuration, use `--target` explicitly"),
+        _ => panic!("unknown `uname` hardware configuration, use `--target` explicitly. got arch = `{arch_str}`, os = `{os_str}`"),
     }
 }
 
