@@ -20,37 +20,31 @@ use crate::utility::SaHashMap;
 use smallvec::{smallvec, SmallVec};
 use std::cmp::{Ordering, Reverse};
 use std::collections::BinaryHeap;
+use std::mem;
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
 struct RegLivePair {
-    /* raw: u128, */
-    reg: Reg,
-    live: LiveInterval,
+    raw: u128,
 }
 
 impl RegLivePair {
     #[inline]
     fn new(reg: Reg, live: LiveInterval) -> Self {
-        /* let (reg, live): (u32, u64) = unsafe { (mem::transmute(reg), mem::transmute(live)) };
+        let (reg, live): (u32, u64) = unsafe { (mem::transmute(reg), mem::transmute(live)) };
 
         Self {
             raw: (reg as u128) << 64 | (live as u128),
         }
-        */
-
-        Self { reg, live }
     }
 
     #[inline]
     fn reg(self) -> Reg {
-        /* unsafe { mem::transmute((self.raw >> 64) as u32) } */
-        self.reg
+        unsafe { mem::transmute((self.raw >> 64) as u32) }
     }
 
     #[inline]
     fn live(self) -> LiveInterval {
-        /* unsafe { mem::transmute(self.raw as u64) } */
-        self.live
+        unsafe { mem::transmute(self.raw as u64) }
     }
 }
 
