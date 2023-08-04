@@ -544,6 +544,87 @@
 <a href="#541" id="541">541</a>
 <a href="#542" id="542">542</a>
 <a href="#543" id="543">543</a>
+<a href="#544" id="544">544</a>
+<a href="#545" id="545">545</a>
+<a href="#546" id="546">546</a>
+<a href="#547" id="547">547</a>
+<a href="#548" id="548">548</a>
+<a href="#549" id="549">549</a>
+<a href="#550" id="550">550</a>
+<a href="#551" id="551">551</a>
+<a href="#552" id="552">552</a>
+<a href="#553" id="553">553</a>
+<a href="#554" id="554">554</a>
+<a href="#555" id="555">555</a>
+<a href="#556" id="556">556</a>
+<a href="#557" id="557">557</a>
+<a href="#558" id="558">558</a>
+<a href="#559" id="559">559</a>
+<a href="#560" id="560">560</a>
+<a href="#561" id="561">561</a>
+<a href="#562" id="562">562</a>
+<a href="#563" id="563">563</a>
+<a href="#564" id="564">564</a>
+<a href="#565" id="565">565</a>
+<a href="#566" id="566">566</a>
+<a href="#567" id="567">567</a>
+<a href="#568" id="568">568</a>
+<a href="#569" id="569">569</a>
+<a href="#570" id="570">570</a>
+<a href="#571" id="571">571</a>
+<a href="#572" id="572">572</a>
+<a href="#573" id="573">573</a>
+<a href="#574" id="574">574</a>
+<a href="#575" id="575">575</a>
+<a href="#576" id="576">576</a>
+<a href="#577" id="577">577</a>
+<a href="#578" id="578">578</a>
+<a href="#579" id="579">579</a>
+<a href="#580" id="580">580</a>
+<a href="#581" id="581">581</a>
+<a href="#582" id="582">582</a>
+<a href="#583" id="583">583</a>
+<a href="#584" id="584">584</a>
+<a href="#585" id="585">585</a>
+<a href="#586" id="586">586</a>
+<a href="#587" id="587">587</a>
+<a href="#588" id="588">588</a>
+<a href="#589" id="589">589</a>
+<a href="#590" id="590">590</a>
+<a href="#591" id="591">591</a>
+<a href="#592" id="592">592</a>
+<a href="#593" id="593">593</a>
+<a href="#594" id="594">594</a>
+<a href="#595" id="595">595</a>
+<a href="#596" id="596">596</a>
+<a href="#597" id="597">597</a>
+<a href="#598" id="598">598</a>
+<a href="#599" id="599">599</a>
+<a href="#600" id="600">600</a>
+<a href="#601" id="601">601</a>
+<a href="#602" id="602">602</a>
+<a href="#603" id="603">603</a>
+<a href="#604" id="604">604</a>
+<a href="#605" id="605">605</a>
+<a href="#606" id="606">606</a>
+<a href="#607" id="607">607</a>
+<a href="#608" id="608">608</a>
+<a href="#609" id="609">609</a>
+<a href="#610" id="610">610</a>
+<a href="#611" id="611">611</a>
+<a href="#612" id="612">612</a>
+<a href="#613" id="613">613</a>
+<a href="#614" id="614">614</a>
+<a href="#615" id="615">615</a>
+<a href="#616" id="616">616</a>
+<a href="#617" id="617">617</a>
+<a href="#618" id="618">618</a>
+<a href="#619" id="619">619</a>
+<a href="#620" id="620">620</a>
+<a href="#621" id="621">621</a>
+<a href="#622" id="622">622</a>
+<a href="#623" id="623">623</a>
+<a href="#624" id="624">624</a>
 </pre></div><pre class="rust"><code><span class="comment">//======---------------------------------------------------------------======//
 //                                                                           //
 // Copyright 2022-2023 Evan Cox &lt;evanacox00@gmail.com&gt;. All rights reserved. //
@@ -668,6 +749,17 @@
         <span class="self">self</span>.layout()
             .block_last_inst(block)
             .and_then(|inst| <span class="self">self</span>.dfg().branch_info(inst))
+    }
+
+    <span class="doccomment">/// Tries to get the terminator of the current block. If there is no current block
+    /// or the current block&#39;s last instruction is not a terminator, returns `None`.
+    </span><span class="kw">fn </span>current_block_terminator(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;Inst&gt; {
+        <span class="kw">let </span>block = <span class="kw">match </span><span class="self">self</span>.current_block() {
+            <span class="prelude-val">Some</span>(bb) =&gt; bb,
+            <span class="prelude-val">None </span>=&gt; <span class="kw">return </span><span class="prelude-val">None</span>,
+        };
+
+        <span class="self">self</span>.layout().block_last_inst(block)
     }
 
     <span class="doccomment">/// Gets the debuginfo associated with the current instruction
@@ -833,7 +925,7 @@
 
     <span class="doccomment">/// Gets the data defining a given instruction
     </span><span class="kw">fn </span>inst_data(<span class="kw-2">&amp;</span><span class="self">self</span>, inst: Inst) -&gt; <span class="kw-2">&amp;</span>InstData {
-        <span class="self">self</span>.def().dfg.data(inst)
+        <span class="self">self</span>.def().dfg.inst_data(inst)
     }
 
     <span class="doccomment">/// Gets the block that an instruction is defined in
@@ -880,7 +972,7 @@
 
     <span class="kw">fn </span>build(<span class="self">self</span>, data: InstData, debug: DebugInfo) -&gt; (Inst, <span class="prelude-ty">Option</span>&lt;Value&gt;) {
         <span class="macro">debug_assert_eq!</span>(
-            <span class="self">self</span>.def.dfg.data(<span class="self">self</span>.pos).result_ty(),
+            <span class="self">self</span>.def.dfg.inst_data(<span class="self">self</span>.pos).result_ty(),
             data.result_ty(),
             <span class="string">&quot;cannot replace inst with inst of different result&quot;
         </span>);
@@ -917,6 +1009,9 @@
 </span><span class="kw">pub trait </span>CursorMut: Cursor {
     <span class="doccomment">/// Gets a mutable reference to the function&#39;s definition.
     </span><span class="kw">fn </span>def_mut(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;mut </span>FunctionDefinition;
+
+    <span class="doccomment">/// Gets a mutable reference to the function itself
+    </span><span class="kw">fn </span>func_mut(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;mut </span>Function;
 
     <span class="doccomment">/// Returns an instruction builder that replaces the current instruction.
     </span><span class="kw">fn </span>replace(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; ReplaceBuilder&lt;<span class="lifetime">&#39;_</span>&gt; {
@@ -1016,6 +1111,69 @@
     </span><span class="kw">fn </span>remove_stack_slot(<span class="kw-2">&amp;mut </span><span class="self">self</span>, slot: StackSlot) {
         <span class="self">self</span>.def_mut().dfg.remove_stack_slot(slot);
     }
+
+    <span class="doccomment">/// Creates a single basic block and returns it. This block is appended to
+    /// the end of the block list.
+    ///
+    /// Note that this does not switch the cursor to operate on that block,
+    /// you still need to call `goto_before` or similar.
+    </span><span class="kw">fn </span>create_block(<span class="kw-2">&amp;mut </span><span class="self">self</span>, name: <span class="kw-2">&amp;</span>str) -&gt; Block {
+        <span class="kw">let </span>string = {
+            <span class="kw">let </span><span class="kw-2">mut </span>strings = <span class="self">self</span>.func_mut().ctx().strings_mut();
+
+            strings.insert(name)
+        };
+
+        <span class="kw">let </span>block = <span class="self">self</span>.def_mut().dfg.create_block(string);
+
+        <span class="self">self</span>.def_mut().layout.append_block(block);
+
+        block
+    }
+
+    <span class="doccomment">/// Equivalent to [`Self::create_block`], except it inserts the block before `before`
+    /// instead of appending it.
+    </span><span class="kw">fn </span>create_block_before(<span class="kw-2">&amp;mut </span><span class="self">self</span>, name: <span class="kw-2">&amp;</span>str, before: Block) -&gt; Block {
+        <span class="kw">let </span>string = {
+            <span class="kw">let </span><span class="kw-2">mut </span>strings = <span class="self">self</span>.func_mut().ctx().strings_mut();
+
+            strings.insert(name)
+        };
+
+        <span class="kw">let </span>block = <span class="self">self</span>.def_mut().dfg.create_block(string);
+
+        <span class="self">self</span>.def_mut().layout.insert_block_before(block, before);
+
+        block
+    }
+
+    <span class="doccomment">/// Equivalent to [`Self::create_block`], except it inserts the block after `after`
+    /// instead of appending it.
+    </span><span class="kw">fn </span>create_block_after(<span class="kw-2">&amp;mut </span><span class="self">self</span>, name: <span class="kw-2">&amp;</span>str, after: Block) -&gt; Block {
+        <span class="kw">let </span>string = {
+            <span class="kw">let </span><span class="kw-2">mut </span>strings = <span class="self">self</span>.func_mut().ctx().strings_mut();
+
+            strings.insert(name)
+        };
+
+        <span class="kw">let </span>block = <span class="self">self</span>.def_mut().dfg.create_block(string);
+
+        <span class="self">self</span>.def_mut().layout.insert_block_after(block, after);
+
+        block
+    }
+
+    <span class="doccomment">/// Rewrites the branch at the end of the current block that targets `to` to
+    /// instead branch to `new` (with the args associated with `new`).
+    ///
+    /// Returns the old branch target so you can re-use the arguments.
+    </span><span class="kw">fn </span>rewrite_branch_target(<span class="kw-2">&amp;mut </span><span class="self">self</span>, to: Block, new: BlockWithParams) -&gt; BlockWithParams {
+        <span class="kw">let </span>inst = <span class="self">self
+            </span>.current_block_terminator()
+            .expect(<span class="string">&quot;should have terminator&quot;</span>);
+
+        <span class="self">self</span>.def_mut().dfg.rewrite_branch_target(inst, to, new)
+    }
 }
 
 <span class="doccomment">/// Effectively a [`FuncCursor`] without any of the operations
@@ -1085,6 +1243,10 @@
 <span class="kw">impl</span>&lt;<span class="lifetime">&#39;f</span>&gt; CursorMut <span class="kw">for </span>FuncCursor&lt;<span class="lifetime">&#39;f</span>&gt; {
     <span class="kw">fn </span>def_mut(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;mut </span>FunctionDefinition {
         <span class="self">self</span>.func.definition_mut().unwrap()
+    }
+
+    <span class="kw">fn </span>func_mut(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;mut </span>Function {
+        <span class="self">self</span>.func
     }
 }
 </code></pre></div></section></main><script>

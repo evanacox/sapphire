@@ -20,12 +20,9 @@
 <a href="#17" id="17">17</a>
 <a href="#18" id="18">18</a>
 <a href="#19" id="19">19</a>
-<a href="#20" id="20">20</a>
-<a href="#21" id="21">21</a>
-<a href="#22" id="22">22</a>
 </pre></div><pre class="rust"><code><span class="comment">//======---------------------------------------------------------------======//
 //                                                                           //
-// Copyright 2022 Evan Cox &lt;evanacox00@gmail.com&gt;. All rights reserved.      //
+// Copyright 2022-2023 Evan Cox &lt;evanacox00@gmail.com&gt;. All rights reserved. //
 //                                                                           //
 // Use of this source code is governed by a BSD-style license that can be    //
 // found in the LICENSE.txt file at the root of this project, or at the      //
@@ -34,16 +31,13 @@
 //======---------------------------------------------------------------======//
 
 </span><span class="kw">use </span><span class="kw">crate</span>::runners::optimization_runner::<span class="kw-2">*</span>;
-<span class="kw">use </span><span class="kw">crate</span>::subtest::{Subtest, TestResult};
-<span class="kw">use </span>sapphire::transforms::DeadCodeEliminationPass;
+<span class="kw">use </span><span class="kw">crate</span>::subtest::Subtest;
+<span class="kw">use </span>sapphire::transforms::AggressiveDCEPass;
 
-<span class="macro">runner_for_opt!</span>(
-    dce,
-    FunctionToModulePassAdapter::adapt(DeadCodeEliminationPass)
-);
+<span class="macro">runner_for_opt!</span>(dce, FunctionToModulePassAdapter::adapt(AggressiveDCEPass));
 
 <span class="kw">pub const fn </span>dce_subtest() -&gt; Subtest {
-    Subtest::new(<span class="string">&quot;dce&quot;</span>, dce)
+    Subtest::new(<span class="kw-2">&amp;</span>[<span class="string">&quot;dce&quot;</span>], dce)
 }
 </code></pre></div></section></main><script>
 renderMathInElement(document.body, {

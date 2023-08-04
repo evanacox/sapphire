@@ -1457,6 +1457,47 @@
 <a href="#1454" id="1454">1454</a>
 <a href="#1455" id="1455">1455</a>
 <a href="#1456" id="1456">1456</a>
+<a href="#1457" id="1457">1457</a>
+<a href="#1458" id="1458">1458</a>
+<a href="#1459" id="1459">1459</a>
+<a href="#1460" id="1460">1460</a>
+<a href="#1461" id="1461">1461</a>
+<a href="#1462" id="1462">1462</a>
+<a href="#1463" id="1463">1463</a>
+<a href="#1464" id="1464">1464</a>
+<a href="#1465" id="1465">1465</a>
+<a href="#1466" id="1466">1466</a>
+<a href="#1467" id="1467">1467</a>
+<a href="#1468" id="1468">1468</a>
+<a href="#1469" id="1469">1469</a>
+<a href="#1470" id="1470">1470</a>
+<a href="#1471" id="1471">1471</a>
+<a href="#1472" id="1472">1472</a>
+<a href="#1473" id="1473">1473</a>
+<a href="#1474" id="1474">1474</a>
+<a href="#1475" id="1475">1475</a>
+<a href="#1476" id="1476">1476</a>
+<a href="#1477" id="1477">1477</a>
+<a href="#1478" id="1478">1478</a>
+<a href="#1479" id="1479">1479</a>
+<a href="#1480" id="1480">1480</a>
+<a href="#1481" id="1481">1481</a>
+<a href="#1482" id="1482">1482</a>
+<a href="#1483" id="1483">1483</a>
+<a href="#1484" id="1484">1484</a>
+<a href="#1485" id="1485">1485</a>
+<a href="#1486" id="1486">1486</a>
+<a href="#1487" id="1487">1487</a>
+<a href="#1488" id="1488">1488</a>
+<a href="#1489" id="1489">1489</a>
+<a href="#1490" id="1490">1490</a>
+<a href="#1491" id="1491">1491</a>
+<a href="#1492" id="1492">1492</a>
+<a href="#1493" id="1493">1493</a>
+<a href="#1494" id="1494">1494</a>
+<a href="#1495" id="1495">1495</a>
+<a href="#1496" id="1496">1496</a>
+<a href="#1497" id="1497">1497</a>
 </pre></div><pre class="rust"><code><span class="comment">//======---------------------------------------------------------------======//
 //                                                                           //
 // Copyright 2022-2023 Evan Cox &lt;evanacox00@gmail.com&gt;. All rights reserved. //
@@ -1578,6 +1619,36 @@
     }
 }
 
+<span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>stringify_ret_attribute_space(attribute: RetAttributes) -&gt; <span class="kw-2">&amp;</span><span class="lifetime">&#39;static </span>str {
+    <span class="kw">if </span>attribute.is_noalias() &amp;&amp; attribute.is_nonnull() {
+        <span class="string">&quot;noalias nonnull &quot;
+    </span>} <span class="kw">else if </span>attribute.is_noalias() {
+        <span class="string">&quot;noalias &quot;
+    </span>} <span class="kw">else if </span>attribute.is_nonnull() {
+        <span class="string">&quot;nonnull &quot;
+    </span>} <span class="kw">else </span>{
+        <span class="string">&quot;&quot;
+    </span>}
+}
+
+<span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>stringify_param_attributes_space(attributes: ParamAttributes) -&gt; String {
+    <span class="kw">let </span><span class="kw-2">mut </span>buf = String::with_capacity(<span class="number">20</span>);
+
+    <span class="kw">if </span>attributes.is_noalias() {
+        buf += <span class="string">&quot;noalias &quot;</span>;
+    }
+
+    <span class="kw">if </span>attributes.is_nonnull() {
+        buf += <span class="string">&quot;nonnull &quot;</span>;
+    }
+
+    <span class="kw">if let </span><span class="prelude-val">Some</span>(n) = attributes.byval_size() {
+        buf += <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">&quot;byval({n}) &quot;</span>);
+    }
+
+    buf
+}
+
 <span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>stringify_ty(ctx: <span class="kw-2">&amp;</span>TypePool, ty: Type) -&gt; String {
     <span class="kw">match </span>ty.unpack() {
         UType::Bool(<span class="kw">_</span>) =&gt; <span class="string">&quot;bool&quot;</span>.to_owned(),
@@ -1621,9 +1692,14 @@
     }
 }
 
-<span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>stringify_return_ty(ctx: <span class="kw-2">&amp;</span>TypePool, ty: <span class="prelude-ty">Option</span>&lt;Type&gt;) -&gt; String {
+<span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>stringify_return_ty(ctx: <span class="kw-2">&amp;</span>TypePool, ty: <span class="prelude-ty">Option</span>&lt;(Type, RetAttributes)&gt;) -&gt; String {
     <span class="kw">match </span>ty {
-        <span class="prelude-val">Some</span>(ty) =&gt; stringify_ty(ctx, ty),
+        <span class="prelude-val">Some</span>((ty, attributes)) =&gt; {
+            <span class="kw">let </span>ty_string = stringify_ty(ctx, ty);
+            <span class="kw">let </span>attributes = stringify_ret_attribute_space(attributes);
+
+            <span class="macro">format!</span>(<span class="string">&quot;{attributes}{ty_string}&quot;</span>)
+        }
         <span class="prelude-val">None </span>=&gt; <span class="string">&quot;void&quot;</span>.to_owned(),
     }
 }
@@ -1633,7 +1709,8 @@
 
     <span class="kw">let </span><span class="kw-2">mut </span>it = sig.params().iter().peekable();
 
-    <span class="kw">while let </span><span class="prelude-val">Some</span>((ty, <span class="kw">_</span>)) = it.next() {
+    <span class="kw">while let </span><span class="prelude-val">Some</span>((ty, attributes)) = it.next() {
+        <span class="kw-2">*</span>buf += <span class="kw-2">&amp;</span>stringify_param_attributes_space(<span class="kw-2">*</span>attributes);
         <span class="kw-2">*</span>buf += <span class="kw-2">&amp;</span>stringify_ty(ctx, <span class="kw-2">*</span>ty);
 
         <span class="kw">if </span>it.peek().is_some() {
@@ -1655,7 +1732,7 @@
 }
 
 <span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>stringify_signature(ctx: <span class="kw-2">&amp;</span>TypePool, sig: <span class="kw-2">&amp;</span>Signature) -&gt; String {
-    <span class="kw">let </span><span class="kw-2">mut </span>buf = stringify_return_ty(ctx, sig.return_ty());
+    <span class="kw">let </span><span class="kw-2">mut </span>buf = stringify_return_ty(ctx, sig.return_complete());
 
     buf += <span class="string">&quot; &quot;</span>;
 
@@ -1667,7 +1744,8 @@
 <span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>stringify_abi(abi: CallConv) -&gt; <span class="kw-2">&amp;</span><span class="lifetime">&#39;static </span>str {
     <span class="kw">match </span>abi {
         CallConv::C =&gt; <span class="string">&quot;ccc&quot;</span>,
-        CallConv::Fast =&gt; <span class="string">&quot;fastcc&quot;</span>,
+        CallConv::SysV =&gt; <span class="string">&quot;sysv&quot;</span>,
+        CallConv::Win64 =&gt; <span class="string">&quot;win64&quot;</span>,
     }
 }
 
@@ -1700,8 +1778,8 @@
         stringify_ty(<span class="kw-2">&amp;</span><span class="self">self</span>.pool_guard, ty)
     }
 
-    <span class="kw">fn </span>ty_void(<span class="kw-2">&amp;</span><span class="self">self</span>, ty: <span class="prelude-ty">Option</span>&lt;Type&gt;) -&gt; String {
-        stringify_return_ty(<span class="kw-2">&amp;</span><span class="self">self</span>.pool_guard, ty)
+    <span class="kw">fn </span>ty_void(<span class="kw-2">&amp;</span><span class="self">self</span>, ret: <span class="prelude-ty">Option</span>&lt;(Type, RetAttributes)&gt;) -&gt; String {
+        stringify_return_ty(<span class="kw-2">&amp;</span><span class="self">self</span>.pool_guard, ret)
     }
 
     <span class="kw">fn </span>param_tys(<span class="kw-2">&amp;</span><span class="self">self</span>, sig: <span class="kw-2">&amp;</span>Signature) -&gt; String {
@@ -1857,7 +1935,7 @@
         {
             <span class="kw">let </span>f = <span class="self">self</span>.module().function(func);
             <span class="kw">let </span>sig = f.signature();
-            <span class="kw">let </span>ty = <span class="self">self</span>.ty_void(sig.return_ty());
+            <span class="kw">let </span>ty = <span class="self">self</span>.ty_void(sig.return_complete());
             <span class="kw">let </span>name = <span class="self">self</span>.func_name(func);
             <span class="kw">let </span>params = <span class="self">self</span>.param_tys(sig);
 
@@ -1966,7 +2044,7 @@
 
         {
             <span class="self">self</span>.state.whole += <span class="string">&quot;  &quot;</span>;
-            <span class="self">self</span>.dispatch_inst(inst, def.dfg.data(inst), def);
+            <span class="self">self</span>.dispatch_inst(inst, def.dfg.inst_data(inst), def);
             <span class="self">self</span>.state.whole += <span class="string">&quot;\n&quot;</span>;
         }
 
@@ -1978,7 +2056,8 @@
     <span class="kw">fn </span>visit_call(<span class="kw-2">&amp;mut </span><span class="self">self</span>, inst: Inst, data: <span class="kw-2">&amp;</span>CallInst, def: <span class="kw-2">&amp;</span>FunctionDefinition) {
         <span class="self">self</span>.result(inst, def);
 
-        <span class="kw">let </span>ret = <span class="self">self</span>.ty_void(data.result_ty());
+        <span class="kw">let </span>sig = def.dfg.signature(data.sig());
+        <span class="kw">let </span>ret = <span class="self">self</span>.ty_void(sig.return_complete());
         <span class="kw">let </span>name = <span class="self">self</span>.func_name(data.callee());
         <span class="kw">let </span>args = <span class="self">self</span>.args(data.args(), def);
 
@@ -1993,7 +2072,8 @@
     ) {
         <span class="self">self</span>.result(inst, def);
 
-        <span class="kw">let </span>ret = <span class="self">self</span>.ty_void(data.result_ty());
+        <span class="kw">let </span>sig = def.dfg.signature(data.sig());
+        <span class="kw">let </span>ret = <span class="self">self</span>.ty_void(sig.return_complete());
         <span class="kw">let </span>signature = def.dfg.signature(data.sig());
         <span class="kw">let </span>sig = stringify_signature_params(<span class="kw-2">&amp;</span><span class="self">self</span>.pool_guard, signature);
         <span class="kw">let </span>callee = <span class="self">self</span>.name_ty(data.callee(), def);
@@ -2187,15 +2267,17 @@
 
         <span class="kw">let </span>ty = <span class="self">self</span>.ty(data.result_ty().unwrap());
         <span class="kw">let </span>val = <span class="self">self</span>.name_ty(data.pointer(), def);
+        <span class="kw">let </span>volatile = <span class="kw">if </span>data.is_volatile() { <span class="string">&quot;volatile &quot; </span>} <span class="kw">else </span>{ <span class="string">&quot;&quot; </span>};
 
-        <span class="self">self</span>.state.whole += <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">&quot;load {ty}, {val}&quot;</span>);
+        <span class="self">self</span>.state.whole += <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">&quot;load {volatile}{ty}, {val}&quot;</span>);
     }
 
     <span class="kw">fn </span>visit_store(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: Inst, data: <span class="kw-2">&amp;</span>StoreInst, def: <span class="kw-2">&amp;</span>FunctionDefinition) {
         <span class="kw">let </span>val = <span class="self">self</span>.name_ty(data.stored(), def);
         <span class="kw">let </span>ptr = <span class="self">self</span>.name_ty(data.pointer(), def);
+        <span class="kw">let </span>volatile = <span class="kw">if </span>data.is_volatile() { <span class="string">&quot;volatile &quot; </span>} <span class="kw">else </span>{ <span class="string">&quot;&quot; </span>};
 
-        <span class="self">self</span>.state.whole += <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">&quot;store {val}, {ptr}&quot;</span>);
+        <span class="self">self</span>.state.whole += <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">&quot;store {volatile}{val}, {ptr}&quot;</span>);
     }
 
     <span class="kw">fn </span>visit_offset(<span class="kw-2">&amp;mut </span><span class="self">self</span>, inst: Inst, data: <span class="kw-2">&amp;</span>OffsetInst, def: <span class="kw-2">&amp;</span>FunctionDefinition) {

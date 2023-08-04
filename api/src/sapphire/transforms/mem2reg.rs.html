@@ -674,9 +674,14 @@
 <a href="#671" id="671">671</a>
 <a href="#672" id="672">672</a>
 <a href="#673" id="673">673</a>
+<a href="#674" id="674">674</a>
+<a href="#675" id="675">675</a>
+<a href="#676" id="676">676</a>
+<a href="#677" id="677">677</a>
+<a href="#678" id="678">678</a>
 </pre></div><pre class="rust"><code><span class="comment">//======---------------------------------------------------------------======//
 //                                                                           //
-// Copyright 2022 Evan Cox &lt;evanacox00@gmail.com&gt;. All rights reserved.      //
+// Copyright 2022-2023 Evan Cox &lt;evanacox00@gmail.com&gt;. All rights reserved. //
 //                                                                           //
 // Use of this source code is governed by a BSD-style license that can be    //
 // found in the LICENSE.txt file at the root of this project, or at the      //
@@ -692,7 +697,9 @@
 <span class="kw">use </span><span class="kw">crate</span>::utility::{IntoTree, SaHashMap, SaHashSet};
 <span class="kw">use </span>smallvec::{smallvec, SmallVec};
 
-<span class="doccomment">/// Promotes stack slots that only have `load`s and `store`s as uses into registers.
+<span class="doccomment">/// A memory to SSA promotion pass.
+///
+/// Promotes stack slots that only have `load`s and `store`s as uses into registers.
 /// This is effectively an SSA construction pass, it promotes memory operations into
 /// SSA values and φ nodes.  
 ///
@@ -878,14 +885,17 @@
                 <span class="kw">if </span>operands.contains(<span class="kw-2">&amp;</span>stackslot) {
                     <span class="kw">match </span>data {
                         InstData::Store(store) =&gt; {
-                            <span class="kw">if </span>store.pointer() != stackslot || <span class="kw-2">*</span>ty != cursor.ty(store.stored()) {
+                            <span class="kw">if </span>store.pointer() != stackslot
+                                || <span class="kw-2">*</span>ty != cursor.ty(store.stored())
+                                || store.is_volatile()
+                            {
                                 not_promotable.push(stackslot);
                             } <span class="kw">else </span>{
                                 defs.push(inst)
                             }
                         }
                         InstData::Load(load) =&gt; {
-                            <span class="kw">if </span>load.result_ty().unwrap() != <span class="kw-2">*</span>ty {
+                            <span class="kw">if </span>load.result_ty().unwrap() != <span class="kw-2">*</span>ty || load.is_volatile() {
                                 not_promotable.push(stackslot);
                             }
                         }

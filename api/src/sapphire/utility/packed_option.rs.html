@@ -816,15 +816,15 @@
         <span class="kw">let </span>none = PackedOption::default();
         <span class="kw">let </span><span class="kw-2">mut </span>some = PackedOption::some(key);
 
-        <span class="macro">assert_eq!</span>(none.is_none(), <span class="bool-val">true</span>);
-        <span class="macro">assert_eq!</span>(none.is_some(), <span class="bool-val">false</span>);
-        <span class="macro">assert_eq!</span>(some.is_none(), <span class="bool-val">false</span>);
-        <span class="macro">assert_eq!</span>(some.is_some(), <span class="bool-val">true</span>);
+        <span class="macro">assert!</span>(none.is_none());
+        <span class="macro">assert!</span>(!none.is_some());
+        <span class="macro">assert!</span>(!some.is_none());
+        <span class="macro">assert!</span>(some.is_some());
 
         some = none;
 
-        <span class="macro">assert_eq!</span>(some.is_none(), <span class="bool-val">true</span>);
-        <span class="macro">assert_eq!</span>(some.is_some(), <span class="bool-val">false</span>);
+        <span class="macro">assert!</span>(some.is_none());
+        <span class="macro">assert!</span>(!some.is_some());
     }
 }
 </code></pre></div></section></main><script>

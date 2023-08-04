@@ -124,11 +124,9 @@
 <a href="#121" id="121">121</a>
 <a href="#122" id="122">122</a>
 <a href="#123" id="123">123</a>
-<a href="#124" id="124">124</a>
-<a href="#125" id="125">125</a>
 </pre></div><pre class="rust"><code><span class="comment">//======---------------------------------------------------------------======//
 //                                                                           //
-// Copyright 2022 Evan Cox &lt;evanacox00@gmail.com&gt;. All rights reserved.      //
+// Copyright 2022-2023 Evan Cox &lt;evanacox00@gmail.com&gt;. All rights reserved. //
 //                                                                           //
 // Use of this source code is governed by a BSD-style license that can be    //
 // found in the LICENSE.txt file at the root of this project, or at the      //
@@ -144,7 +142,7 @@
 <span class="kw">use </span>smallvec::SmallVec;
 <span class="kw">use </span>std::hash::Hash;
 
-<span class="doccomment">/// A simple global value numbering pass.
+<span class="doccomment">/// A simple GVN (global value numbering) pass.
 ///
 /// This pass works best when the code is already canonicalized
 /// and isn&#39;t full of memory operations, so it would be a good idea to
@@ -161,8 +159,6 @@
 
 <span class="doccomment">/// Runs a global value-numbering algorithm over `func` to remove redundant
 /// expressions.
-///
-/// This pass works best
 </span><span class="kw">pub fn </span>gvn(func: <span class="kw-2">&amp;mut </span>Function, domtree: <span class="kw-2">&amp;</span>DominatorTree) {
     <span class="kw">let </span><span class="kw-2">mut </span>tables = ScopedHashMap::new();
     <span class="kw">let </span><span class="kw-2">mut </span>scope_stack = SmallVec::&lt;[Block; <span class="number">16</span>]&gt;::new();

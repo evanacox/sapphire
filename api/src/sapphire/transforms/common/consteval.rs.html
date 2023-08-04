@@ -545,9 +545,11 @@
 <a href="#542" id="542">542</a>
 <a href="#543" id="543">543</a>
 <a href="#544" id="544">544</a>
+<a href="#545" id="545">545</a>
 </pre></div><pre class="rust"><code><span class="comment">//======---------------------------------------------------------------======//
 //                                                                           //
-// Copyright 2022 Evan Cox &lt;evanacox00@gmail.com&gt;. All rights reserved.      //
+// Copyright 2022-2023 Evan Cox &lt;evanacox00@gmail.com&gt;. All rights reserved. //
+
 //                                                                           //
 // Use of this source code is governed by a BSD-style license that can be    //
 // found in the LICENSE.txt file at the root of this project, or at the      //
@@ -601,7 +603,7 @@
         <span class="comment">// TODO: redesign this so we don&#39;t need to clone every single instruction that we even attempt to fold
         </span><span class="kw">let </span><span class="kw-2">mut </span>obj = <span class="self">Self </span>{ cursor, inst };
 
-        obj.dispatch_inst(data).is_some()
+        obj.dispatch_inst(data, ()).is_some()
     }
 
     <span class="kw">fn </span>val_is_constant(<span class="kw-2">&amp;</span><span class="self">self</span>, val: Value) -&gt; bool {
@@ -650,16 +652,16 @@
     };
 }
 
-<span class="kw">impl</span>&lt;<span class="lifetime">&#39;f</span>, <span class="lifetime">&#39;c</span>&gt; GenericInstVisitor&lt;<span class="prelude-ty">Option</span>&lt;()&gt;&gt; <span class="kw">for </span>InPlaceConstantFolder&lt;<span class="lifetime">&#39;f</span>, <span class="lifetime">&#39;c</span>&gt; {
-    <span class="kw">fn </span>visit_call(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;</span>CallInst) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
+<span class="kw">impl</span>&lt;<span class="lifetime">&#39;f</span>, <span class="lifetime">&#39;c</span>&gt; GenericInstVisitor&lt;<span class="prelude-ty">Option</span>&lt;()&gt;, ()&gt; <span class="kw">for </span>InPlaceConstantFolder&lt;<span class="lifetime">&#39;f</span>, <span class="lifetime">&#39;c</span>&gt; {
+    <span class="kw">fn </span>visit_call(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;</span>CallInst, <span class="kw">_</span>: ()) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
         <span class="prelude-val">None
     </span>}
 
-    <span class="kw">fn </span>visit_indirectcall(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;</span>IndirectCallInst) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
+    <span class="kw">fn </span>visit_indirectcall(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;</span>IndirectCallInst, <span class="kw">_</span>: ()) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
         <span class="prelude-val">None
     </span>}
 
-    <span class="kw">fn </span>visit_icmp(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>ICmpInst) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
+    <span class="kw">fn </span>visit_icmp(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>ICmpInst, <span class="kw">_</span>: ()) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
         <span class="kw">let </span>lhs = <span class="self">self</span>.val_as_int_constant(data.lhs())<span class="question-mark">?</span>;
         <span class="kw">let </span>rhs = <span class="self">self</span>.val_as_int_constant(data.rhs())<span class="question-mark">?</span>;
         <span class="kw">let </span>dbg = <span class="self">self</span>.dbg();
@@ -699,11 +701,11 @@
         <span class="prelude-val">Some</span>(())
     }
 
-    <span class="kw">fn </span>visit_fcmp(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;</span>FCmpInst) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
+    <span class="kw">fn </span>visit_fcmp(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;</span>FCmpInst, <span class="kw">_</span>: ()) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
         <span class="prelude-val">None
     </span>}
 
-    <span class="kw">fn </span>visit_sel(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>SelInst) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
+    <span class="kw">fn </span>visit_sel(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>SelInst, <span class="kw">_</span>: ()) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
         <span class="kw">let </span>cond = <span class="self">self</span>.val_as_bool_constant(data.condition())<span class="question-mark">?</span>;
         <span class="kw">let </span>curr = <span class="self">self
             </span>.cursor
@@ -722,23 +724,23 @@
         <span class="prelude-val">Some</span>(())
     }
 
-    <span class="kw">fn </span>visit_br(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;</span>BrInst) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
+    <span class="kw">fn </span>visit_br(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;</span>BrInst, <span class="kw">_</span>: ()) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
         <span class="prelude-val">None
     </span>}
 
-    <span class="kw">fn </span>visit_condbr(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;</span>CondBrInst) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
+    <span class="kw">fn </span>visit_condbr(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;</span>CondBrInst, <span class="kw">_</span>: ()) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
         <span class="prelude-val">None
     </span>}
 
-    <span class="kw">fn </span>visit_unreachable(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;</span>UnreachableInst) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
+    <span class="kw">fn </span>visit_unreachable(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;</span>UnreachableInst, <span class="kw">_</span>: ()) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
         <span class="prelude-val">None
     </span>}
 
-    <span class="kw">fn </span>visit_ret(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;</span>RetInst) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
+    <span class="kw">fn </span>visit_ret(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;</span>RetInst, <span class="kw">_</span>: ()) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
         <span class="prelude-val">None
     </span>}
 
-    <span class="kw">fn </span>visit_and(<span class="kw-2">&amp;mut </span><span class="self">self</span>, and: <span class="kw-2">&amp;</span>CommutativeArithInst) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
+    <span class="kw">fn </span>visit_and(<span class="kw-2">&amp;mut </span><span class="self">self</span>, and: <span class="kw-2">&amp;</span>CommutativeArithInst, <span class="kw">_</span>: ()) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
         <span class="kw">let </span>lhs = <span class="self">self</span>.val_as_int_constant(and.lhs())<span class="question-mark">?</span>;
         <span class="kw">let </span>rhs = <span class="self">self</span>.val_as_int_constant(and.rhs())<span class="question-mark">?</span>;
         <span class="kw">let </span>ty = <span class="self">self</span>.cursor.ty(and.lhs());
@@ -751,7 +753,7 @@
         <span class="prelude-val">Some</span>(())
     }
 
-    <span class="kw">fn </span>visit_or(<span class="kw-2">&amp;mut </span><span class="self">self</span>, or: <span class="kw-2">&amp;</span>CommutativeArithInst) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
+    <span class="kw">fn </span>visit_or(<span class="kw-2">&amp;mut </span><span class="self">self</span>, or: <span class="kw-2">&amp;</span>CommutativeArithInst, <span class="kw">_</span>: ()) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
         <span class="kw">let </span>lhs = <span class="self">self</span>.val_as_int_constant(or.lhs())<span class="question-mark">?</span>;
         <span class="kw">let </span>rhs = <span class="self">self</span>.val_as_int_constant(or.rhs())<span class="question-mark">?</span>;
         <span class="kw">let </span>ty = <span class="self">self</span>.cursor.ty(or.lhs());
@@ -764,7 +766,7 @@
         <span class="prelude-val">Some</span>(())
     }
 
-    <span class="kw">fn </span>visit_xor(<span class="kw-2">&amp;mut </span><span class="self">self</span>, xor: <span class="kw-2">&amp;</span>CommutativeArithInst) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
+    <span class="kw">fn </span>visit_xor(<span class="kw-2">&amp;mut </span><span class="self">self</span>, xor: <span class="kw-2">&amp;</span>CommutativeArithInst, <span class="kw">_</span>: ()) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
         <span class="kw">let </span>lhs = <span class="self">self</span>.val_as_int_constant(xor.lhs())<span class="question-mark">?</span>;
         <span class="kw">let </span>rhs = <span class="self">self</span>.val_as_int_constant(xor.rhs())<span class="question-mark">?</span>;
         <span class="kw">let </span>ty = <span class="self">self</span>.cursor.ty(xor.lhs());
@@ -777,7 +779,7 @@
         <span class="prelude-val">Some</span>(())
     }
 
-    <span class="kw">fn </span>visit_shl(<span class="kw-2">&amp;mut </span><span class="self">self</span>, shl: <span class="kw-2">&amp;</span>ArithInst) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
+    <span class="kw">fn </span>visit_shl(<span class="kw-2">&amp;mut </span><span class="self">self</span>, shl: <span class="kw-2">&amp;</span>ArithInst, <span class="kw">_</span>: ()) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
         <span class="kw">let </span>lhs = <span class="self">self</span>.val_as_int_constant(shl.lhs())<span class="question-mark">?</span>;
         <span class="kw">let </span>rhs = <span class="self">self</span>.val_as_int_constant(shl.rhs())<span class="question-mark">?</span>;
         <span class="kw">let </span>ty = <span class="self">self</span>.cursor.ty(shl.lhs());
@@ -790,7 +792,7 @@
         <span class="prelude-val">Some</span>(())
     }
 
-    <span class="kw">fn </span>visit_ashr(<span class="kw-2">&amp;mut </span><span class="self">self</span>, ashr: <span class="kw-2">&amp;</span>ArithInst) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
+    <span class="kw">fn </span>visit_ashr(<span class="kw-2">&amp;mut </span><span class="self">self</span>, ashr: <span class="kw-2">&amp;</span>ArithInst, <span class="kw">_</span>: ()) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
         <span class="kw">let </span>lhs = <span class="self">self</span>.val_as_int_constant(ashr.lhs())<span class="question-mark">?</span>;
         <span class="kw">let </span>rhs = <span class="self">self</span>.val_as_int_constant(ashr.rhs())<span class="question-mark">?</span>;
         <span class="kw">let </span>ty = <span class="self">self</span>.cursor.ty(ashr.lhs());
@@ -806,7 +808,7 @@
         <span class="prelude-val">Some</span>(())
     }
 
-    <span class="kw">fn </span>visit_lshr(<span class="kw-2">&amp;mut </span><span class="self">self</span>, lshr: <span class="kw-2">&amp;</span>ArithInst) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
+    <span class="kw">fn </span>visit_lshr(<span class="kw-2">&amp;mut </span><span class="self">self</span>, lshr: <span class="kw-2">&amp;</span>ArithInst, <span class="kw">_</span>: ()) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
         <span class="kw">let </span>lhs = <span class="self">self</span>.val_as_int_constant(lshr.lhs())<span class="question-mark">?</span>;
         <span class="kw">let </span>rhs = <span class="self">self</span>.val_as_int_constant(lshr.rhs())<span class="question-mark">?</span>;
         <span class="kw">let </span>ty = <span class="self">self</span>.cursor.ty(lshr.lhs());
@@ -820,7 +822,7 @@
         <span class="prelude-val">Some</span>(())
     }
 
-    <span class="kw">fn </span>visit_iadd(<span class="kw-2">&amp;mut </span><span class="self">self</span>, iadd: <span class="kw-2">&amp;</span>CommutativeArithInst) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
+    <span class="kw">fn </span>visit_iadd(<span class="kw-2">&amp;mut </span><span class="self">self</span>, iadd: <span class="kw-2">&amp;</span>CommutativeArithInst, <span class="kw">_</span>: ()) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
         <span class="kw">let </span>lhs = <span class="self">self</span>.val_as_int_constant(iadd.lhs())<span class="question-mark">?</span>;
         <span class="kw">let </span>rhs = <span class="self">self</span>.val_as_int_constant(iadd.rhs())<span class="question-mark">?</span>;
         <span class="kw">let </span>ty = <span class="self">self</span>.cursor.ty(iadd.lhs());
@@ -833,7 +835,7 @@
         <span class="prelude-val">Some</span>(())
     }
 
-    <span class="kw">fn </span>visit_isub(<span class="kw-2">&amp;mut </span><span class="self">self</span>, isub: <span class="kw-2">&amp;</span>ArithInst) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
+    <span class="kw">fn </span>visit_isub(<span class="kw-2">&amp;mut </span><span class="self">self</span>, isub: <span class="kw-2">&amp;</span>ArithInst, <span class="kw">_</span>: ()) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
         <span class="kw">let </span>lhs = <span class="self">self</span>.val_as_int_constant(isub.lhs())<span class="question-mark">?</span>;
         <span class="kw">let </span>rhs = <span class="self">self</span>.val_as_int_constant(isub.rhs())<span class="question-mark">?</span>;
         <span class="kw">let </span>ty = <span class="self">self</span>.cursor.ty(isub.lhs());
@@ -846,7 +848,7 @@
         <span class="prelude-val">Some</span>(())
     }
 
-    <span class="kw">fn </span>visit_imul(<span class="kw-2">&amp;mut </span><span class="self">self</span>, imul: <span class="kw-2">&amp;</span>CommutativeArithInst) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
+    <span class="kw">fn </span>visit_imul(<span class="kw-2">&amp;mut </span><span class="self">self</span>, imul: <span class="kw-2">&amp;</span>CommutativeArithInst, <span class="kw">_</span>: ()) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
         <span class="kw">let </span>lhs = <span class="self">self</span>.val_as_int_constant(imul.lhs())<span class="question-mark">?</span>;
         <span class="kw">let </span>rhs = <span class="self">self</span>.val_as_int_constant(imul.rhs())<span class="question-mark">?</span>;
         <span class="kw">let </span>ty = <span class="self">self</span>.cursor.ty(imul.lhs());
@@ -859,7 +861,7 @@
         <span class="prelude-val">Some</span>(())
     }
 
-    <span class="kw">fn </span>visit_sdiv(<span class="kw-2">&amp;mut </span><span class="self">self</span>, sdiv: <span class="kw-2">&amp;</span>ArithInst) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
+    <span class="kw">fn </span>visit_sdiv(<span class="kw-2">&amp;mut </span><span class="self">self</span>, sdiv: <span class="kw-2">&amp;</span>ArithInst, <span class="kw">_</span>: ()) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
         <span class="kw">let </span>lhs = <span class="self">self</span>.val_as_int_constant(sdiv.lhs())<span class="question-mark">?</span>;
         <span class="kw">let </span>rhs = <span class="self">self</span>.val_as_int_constant(sdiv.rhs())<span class="question-mark">?</span>;
 
@@ -879,7 +881,7 @@
         <span class="prelude-val">Some</span>(())
     }
 
-    <span class="kw">fn </span>visit_udiv(<span class="kw-2">&amp;mut </span><span class="self">self</span>, udiv: <span class="kw-2">&amp;</span>ArithInst) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
+    <span class="kw">fn </span>visit_udiv(<span class="kw-2">&amp;mut </span><span class="self">self</span>, udiv: <span class="kw-2">&amp;</span>ArithInst, <span class="kw">_</span>: ()) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
         <span class="kw">let </span>lhs = <span class="self">self</span>.val_as_int_constant(udiv.lhs())<span class="question-mark">?</span>;
         <span class="kw">let </span>rhs = <span class="self">self</span>.val_as_int_constant(udiv.rhs())<span class="question-mark">?</span>;
         <span class="kw">let </span>ty = <span class="self">self</span>.cursor.ty(udiv.lhs());
@@ -892,7 +894,7 @@
         <span class="prelude-val">Some</span>(())
     }
 
-    <span class="kw">fn </span>visit_srem(<span class="kw-2">&amp;mut </span><span class="self">self</span>, srem: <span class="kw-2">&amp;</span>ArithInst) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
+    <span class="kw">fn </span>visit_srem(<span class="kw-2">&amp;mut </span><span class="self">self</span>, srem: <span class="kw-2">&amp;</span>ArithInst, <span class="kw">_</span>: ()) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
         <span class="kw">let </span>lhs = <span class="self">self</span>.val_as_int_constant(srem.lhs())<span class="question-mark">?</span>;
         <span class="kw">let </span>rhs = <span class="self">self</span>.val_as_int_constant(srem.rhs())<span class="question-mark">?</span>;
 
@@ -912,7 +914,7 @@
         <span class="prelude-val">Some</span>(())
     }
 
-    <span class="kw">fn </span>visit_urem(<span class="kw-2">&amp;mut </span><span class="self">self</span>, urem: <span class="kw-2">&amp;</span>ArithInst) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
+    <span class="kw">fn </span>visit_urem(<span class="kw-2">&amp;mut </span><span class="self">self</span>, urem: <span class="kw-2">&amp;</span>ArithInst, <span class="kw">_</span>: ()) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
         <span class="kw">let </span>lhs = <span class="self">self</span>.val_as_int_constant(urem.lhs())<span class="question-mark">?</span>;
         <span class="kw">let </span>rhs = <span class="self">self</span>.val_as_int_constant(urem.rhs())<span class="question-mark">?</span>;
         <span class="kw">let </span>ty = <span class="self">self</span>.cursor.ty(urem.lhs());
@@ -925,71 +927,71 @@
         <span class="prelude-val">Some</span>(())
     }
 
-    <span class="kw">fn </span>visit_fneg(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;</span>FloatUnaryInst) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
+    <span class="kw">fn </span>visit_fneg(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;</span>FloatUnaryInst, <span class="kw">_</span>: ()) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
         <span class="prelude-val">None
     </span>}
 
-    <span class="kw">fn </span>visit_fadd(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;</span>CommutativeArithInst) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
+    <span class="kw">fn </span>visit_fadd(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;</span>CommutativeArithInst, <span class="kw">_</span>: ()) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
         <span class="prelude-val">None
     </span>}
 
-    <span class="kw">fn </span>visit_fsub(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;</span>ArithInst) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
+    <span class="kw">fn </span>visit_fsub(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;</span>ArithInst, <span class="kw">_</span>: ()) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
         <span class="prelude-val">None
     </span>}
 
-    <span class="kw">fn </span>visit_fmul(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;</span>CommutativeArithInst) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
+    <span class="kw">fn </span>visit_fmul(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;</span>CommutativeArithInst, <span class="kw">_</span>: ()) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
         <span class="prelude-val">None
     </span>}
 
-    <span class="kw">fn </span>visit_fdiv(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;</span>ArithInst) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
+    <span class="kw">fn </span>visit_fdiv(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;</span>ArithInst, <span class="kw">_</span>: ()) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
         <span class="prelude-val">None
     </span>}
 
-    <span class="kw">fn </span>visit_frem(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;</span>ArithInst) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
+    <span class="kw">fn </span>visit_frem(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;</span>ArithInst, <span class="kw">_</span>: ()) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
         <span class="prelude-val">None
     </span>}
 
-    <span class="kw">fn </span>visit_alloca(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;</span>AllocaInst) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
+    <span class="kw">fn </span>visit_alloca(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;</span>AllocaInst, <span class="kw">_</span>: ()) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
         <span class="prelude-val">None
     </span>}
 
-    <span class="kw">fn </span>visit_load(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;</span>LoadInst) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
+    <span class="kw">fn </span>visit_load(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;</span>LoadInst, <span class="kw">_</span>: ()) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
         <span class="prelude-val">None
     </span>}
 
-    <span class="kw">fn </span>visit_store(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;</span>StoreInst) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
+    <span class="kw">fn </span>visit_store(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;</span>StoreInst, <span class="kw">_</span>: ()) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
         <span class="prelude-val">None
     </span>}
 
-    <span class="kw">fn </span>visit_offset(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;</span>OffsetInst) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
+    <span class="kw">fn </span>visit_offset(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;</span>OffsetInst, <span class="kw">_</span>: ()) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
         <span class="prelude-val">None
     </span>}
 
-    <span class="kw">fn </span>visit_extract(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;</span>ExtractInst) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
+    <span class="kw">fn </span>visit_extract(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;</span>ExtractInst, <span class="kw">_</span>: ()) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
         <span class="prelude-val">None
     </span>}
 
-    <span class="kw">fn </span>visit_insert(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;</span>InsertInst) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
+    <span class="kw">fn </span>visit_insert(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;</span>InsertInst, <span class="kw">_</span>: ()) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
         <span class="prelude-val">None
     </span>}
 
-    <span class="kw">fn </span>visit_elemptr(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;</span>ElemPtrInst) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
+    <span class="kw">fn </span>visit_elemptr(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;</span>ElemPtrInst, <span class="kw">_</span>: ()) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
         <span class="prelude-val">None
     </span>}
 
-    <span class="kw">fn </span>visit_sext(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;</span>CastInst) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
+    <span class="kw">fn </span>visit_sext(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;</span>CastInst, <span class="kw">_</span>: ()) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
         <span class="prelude-val">None
     </span>}
 
-    <span class="kw">fn </span>visit_zext(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;</span>CastInst) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
+    <span class="kw">fn </span>visit_zext(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;</span>CastInst, <span class="kw">_</span>: ()) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
         <span class="prelude-val">None
     </span>}
 
-    <span class="kw">fn </span>visit_trunc(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;</span>CastInst) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
+    <span class="kw">fn </span>visit_trunc(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;</span>CastInst, <span class="kw">_</span>: ()) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
         <span class="prelude-val">None
     </span>}
 
-    <span class="kw">fn </span>visit_itob(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>CastInst) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
+    <span class="kw">fn </span>visit_itob(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>CastInst, <span class="kw">_</span>: ()) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
         <span class="kw">let </span>val = <span class="self">self</span>.val_as_int_constant(data.operand())<span class="question-mark">?</span>;
         <span class="kw">let </span>dbg = <span class="self">self</span>.dbg();
 
@@ -998,7 +1000,7 @@
         <span class="prelude-val">Some</span>(())
     }
 
-    <span class="kw">fn </span>visit_btoi(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>CastInst) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
+    <span class="kw">fn </span>visit_btoi(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>CastInst, <span class="kw">_</span>: ()) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
         <span class="kw">let </span>val = <span class="self">self</span>.val_as_bool_constant(data.operand())<span class="question-mark">?</span>;
         <span class="kw">let </span>dbg = <span class="self">self</span>.dbg();
 
@@ -1009,31 +1011,31 @@
         <span class="prelude-val">Some</span>(())
     }
 
-    <span class="kw">fn </span>visit_sitof(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;</span>CastInst) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
+    <span class="kw">fn </span>visit_sitof(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;</span>CastInst, <span class="kw">_</span>: ()) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
         <span class="prelude-val">None
     </span>}
 
-    <span class="kw">fn </span>visit_uitof(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;</span>CastInst) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
+    <span class="kw">fn </span>visit_uitof(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;</span>CastInst, <span class="kw">_</span>: ()) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
         <span class="prelude-val">None
     </span>}
 
-    <span class="kw">fn </span>visit_ftosi(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;</span>CastInst) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
+    <span class="kw">fn </span>visit_ftosi(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;</span>CastInst, <span class="kw">_</span>: ()) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
         <span class="prelude-val">None
     </span>}
 
-    <span class="kw">fn </span>visit_ftoui(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;</span>CastInst) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
+    <span class="kw">fn </span>visit_ftoui(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;</span>CastInst, <span class="kw">_</span>: ()) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
         <span class="prelude-val">None
     </span>}
 
-    <span class="kw">fn </span>visit_fext(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;</span>CastInst) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
+    <span class="kw">fn </span>visit_fext(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;</span>CastInst, <span class="kw">_</span>: ()) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
         <span class="prelude-val">None
     </span>}
 
-    <span class="kw">fn </span>visit_ftrunc(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;</span>CastInst) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
+    <span class="kw">fn </span>visit_ftrunc(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;</span>CastInst, <span class="kw">_</span>: ()) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
         <span class="prelude-val">None
     </span>}
 
-    <span class="kw">fn </span>visit_itop(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>CastInst) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
+    <span class="kw">fn </span>visit_itop(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>CastInst, <span class="kw">_</span>: ()) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
         <span class="kw">let </span>val = <span class="self">self</span>.val_as_int_constant(data.operand())<span class="question-mark">?</span>;
 
         <span class="kw">if </span>val == <span class="number">0 </span>{
@@ -1047,7 +1049,7 @@
         </span>}
     }
 
-    <span class="kw">fn </span>visit_ptoi(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>CastInst) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
+    <span class="kw">fn </span>visit_ptoi(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>CastInst, <span class="kw">_</span>: ()) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
         <span class="kw">if </span><span class="self">self</span>.val_is_nullptr(data.operand()) {
             <span class="kw">let </span>dbg = <span class="self">self</span>.dbg();
 
@@ -1061,31 +1063,31 @@
         </span>}
     }
 
-    <span class="kw">fn </span>visit_iconst(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;</span>IConstInst) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
+    <span class="kw">fn </span>visit_iconst(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;</span>IConstInst, <span class="kw">_</span>: ()) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
         <span class="prelude-val">None
     </span>}
 
-    <span class="kw">fn </span>visit_fconst(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;</span>FConstInst) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
+    <span class="kw">fn </span>visit_fconst(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;</span>FConstInst, <span class="kw">_</span>: ()) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
         <span class="prelude-val">None
     </span>}
 
-    <span class="kw">fn </span>visit_bconst(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;</span>BConstInst) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
+    <span class="kw">fn </span>visit_bconst(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;</span>BConstInst, <span class="kw">_</span>: ()) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
         <span class="prelude-val">None
     </span>}
 
-    <span class="kw">fn </span>visit_undef(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;</span>UndefConstInst) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
+    <span class="kw">fn </span>visit_undef(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;</span>UndefConstInst, <span class="kw">_</span>: ()) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
         <span class="prelude-val">None
     </span>}
 
-    <span class="kw">fn </span>visit_null(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;</span>NullConstInst) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
+    <span class="kw">fn </span>visit_null(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;</span>NullConstInst, <span class="kw">_</span>: ()) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
         <span class="prelude-val">None
     </span>}
 
-    <span class="kw">fn </span>visit_stackslot(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;</span>StackSlotInst) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
+    <span class="kw">fn </span>visit_stackslot(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;</span>StackSlotInst, <span class="kw">_</span>: ()) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
         <span class="prelude-val">None
     </span>}
 
-    <span class="kw">fn </span>visit_globaladdr(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;</span>GlobalAddrInst) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
+    <span class="kw">fn </span>visit_globaladdr(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;</span>GlobalAddrInst, <span class="kw">_</span>: ()) -&gt; <span class="prelude-ty">Option</span>&lt;()&gt; {
         <span class="prelude-val">None
     </span>}
 }

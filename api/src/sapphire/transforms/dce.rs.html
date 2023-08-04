@@ -122,7 +122,7 @@
 <a href="#119" id="119">119</a>
 </pre></div><pre class="rust"><code><span class="comment">//======---------------------------------------------------------------======//
 //                                                                           //
-// Copyright 2022 Evan Cox &lt;evanacox00@gmail.com&gt;. All rights reserved.      //
+// Copyright 2022-2023 Evan Cox &lt;evanacox00@gmail.com&gt;. All rights reserved. //
 //                                                                           //
 // Use of this source code is governed by a BSD-style license that can be    //
 // found in the LICENSE.txt file at the root of this project, or at the      //
@@ -139,15 +139,15 @@
 <span class="kw">use </span><span class="kw">crate</span>::transforms::common::{has_side_effect, rewrite_and_remove_block_param};
 <span class="kw">use </span>smallvec::SmallVec;
 
-<span class="doccomment">/// Aggressive dead code elimination.
+<span class="doccomment">/// An aggressive dead code elimination pass.
 ///
 /// This algorithm iterates over a function in postorder, and sees all uses
 /// before definitions. It assumes everything (that can&#39;t cause side effects)
-/// is dead until proven otherwise. It removes everything that it decides is dead.
+/// is dead until proven otherwise. It removes everything that it cannot prove
+/// is alive.
 ///
-/// This will also remove dead φ nodes from basic blocks, and will remove unreachable
-/// blocks entirely.
-</span><span class="kw">pub struct </span>DeadCodeEliminationPass;
+/// This will also remove dead φ nodes from basic blocks.
+</span><span class="kw">pub struct </span>AggressiveDCEPass;
 
 <span class="doccomment">/// Scans over an entire function and removes dead instructions and φ nodes.
 ///
@@ -229,7 +229,7 @@
     }
 }
 
-<span class="kw">impl </span>FunctionTransformPass <span class="kw">for </span>DeadCodeEliminationPass {
+<span class="kw">impl </span>FunctionTransformPass <span class="kw">for </span>AggressiveDCEPass {
     <span class="kw">fn </span>run(<span class="kw-2">&amp;mut </span><span class="self">self</span>, func: <span class="kw-2">&amp;mut </span>Function, am: <span class="kw-2">&amp;mut </span>FunctionAnalysisManager) -&gt; PreservedAnalyses {
         <span class="kw">let </span>cfg = am.get::&lt;ControlFlowGraphAnalysis&gt;(func);
         <span class="kw">let </span>domtree = am.get::&lt;DominatorTreeAnalysis&gt;(func);

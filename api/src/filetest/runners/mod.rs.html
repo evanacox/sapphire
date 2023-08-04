@@ -27,6 +27,12 @@
 <a href="#24" id="24">24</a>
 <a href="#25" id="25">25</a>
 <a href="#26" id="26">26</a>
+<a href="#27" id="27">27</a>
+<a href="#28" id="28">28</a>
+<a href="#29" id="29">29</a>
+<a href="#30" id="30">30</a>
+<a href="#31" id="31">31</a>
+<a href="#32" id="32">32</a>
 </pre></div><pre class="rust"><code><span class="comment">//======---------------------------------------------------------------======//
 //                                                                           //
 // Copyright 2022-2023 Evan Cox &lt;evanacox00@gmail.com&gt;. All rights reserved. //
@@ -41,18 +47,24 @@
 <span class="kw">mod </span>domtree;
 <span class="kw">mod </span>flowgraph;
 <span class="kw">mod </span>gvn;
+<span class="kw">mod </span>isel_x86;
+<span class="kw">mod </span>lsra_x86;
 <span class="kw">mod </span>mem2reg;
 <span class="kw">mod </span>optimization_runner;
 <span class="kw">mod </span>parse;
 <span class="kw">mod </span>simplifyinst;
+<span class="kw">mod </span>split_crit_edges;
 
 <span class="kw">pub use </span>dce::<span class="kw-2">*</span>;
 <span class="kw">pub use </span>domtree::<span class="kw-2">*</span>;
 <span class="kw">pub use </span>flowgraph::<span class="kw-2">*</span>;
 <span class="kw">pub use </span>gvn::<span class="kw-2">*</span>;
+<span class="kw">pub use </span>isel_x86::<span class="kw-2">*</span>;
+<span class="kw">pub use </span>lsra_x86::<span class="kw-2">*</span>;
 <span class="kw">pub use </span>mem2reg::<span class="kw-2">*</span>;
 <span class="kw">pub use </span>parse::<span class="kw-2">*</span>;
 <span class="kw">pub use </span>simplifyinst::<span class="kw-2">*</span>;
+<span class="kw">pub use </span>split_crit_edges::<span class="kw-2">*</span>;
 </code></pre></div></section></main><script>
 renderMathInElement(document.body, {
     delimiters: [

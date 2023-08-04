@@ -901,7 +901,7 @@
     </span><span class="kw">pub fn </span>new() -&gt; <span class="self">Self </span>{
         <span class="self">Self </span>{
             slots: Vec::default(),
-            _unused: PhantomData::default(),
+            _unused: PhantomData,
         }
     }
 
@@ -920,7 +920,7 @@
     </span><span class="kw">pub fn </span>with_capacity(capacity: usize) -&gt; <span class="self">Self </span>{
         <span class="self">Self </span>{
             slots: Vec::with_capacity(capacity),
-            _unused: PhantomData::default(),
+            _unused: PhantomData,
         }
     }
 
@@ -1213,7 +1213,7 @@
     <span class="kw">fn </span>from_iter&lt;T: IntoIterator&lt;Item = V&gt;&gt;(iter: T) -&gt; <span class="self">Self </span>{
         <span class="self">Self </span>{
             slots: Vec::from_iter(iter),
-            _unused: PhantomData::default(),
+            _unused: PhantomData,
         }
     }
 }

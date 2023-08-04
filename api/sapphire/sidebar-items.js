@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["parse_sir"],"macro":["analysis_preserved","arena_key","dense_arena_key"],"mod":["analysis","arena","cli","ir","pass","transforms","utility","vm"]};
+window.SIDEBAR_ITEMS = {"fn":["parse_sir","run_passes"],"macro":["analysis_preserved","arena_key","dense_arena_key"],"mod":["analysis","arena","cli","codegen","ir","pass","transforms","utility","vm"]};

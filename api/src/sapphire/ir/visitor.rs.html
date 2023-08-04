@@ -580,6 +580,11 @@
 <a href="#577" id="577">577</a>
 <a href="#578" id="578">578</a>
 <a href="#579" id="579">579</a>
+<a href="#580" id="580">580</a>
+<a href="#581" id="581">581</a>
+<a href="#582" id="582">582</a>
+<a href="#583" id="583">583</a>
+<a href="#584" id="584">584</a>
 </pre></div><pre class="rust"><code><span class="comment">//======---------------------------------------------------------------======//
 //                                                                           //
 // Copyright 2022-2023 Evan Cox &lt;evanacox00@gmail.com&gt;. All rights reserved. //
@@ -623,7 +628,8 @@
 
     <span class="doccomment">/// Called whenever an individual function is visited.
     </span><span class="kw">fn </span>visit_func(<span class="kw-2">&amp;mut </span><span class="self">self</span>, func: Func) {
-        <span class="kw">let </span>def = <span class="kw">match </span><span class="self">self</span>.module().function(func).definition() {
+        <span class="kw">let </span>function = <span class="self">self</span>.module().function(func);
+        <span class="kw">let </span>def = <span class="kw">match </span>function.definition() {
             <span class="prelude-val">Some</span>(def) =&gt; def,
             <span class="prelude-val">None </span>=&gt; <span class="kw">return</span>,
         };
@@ -708,7 +714,7 @@
 
     <span class="doccomment">/// Called whenever an individual instruction is visited.
     </span><span class="kw">fn </span>visit_inst(<span class="kw-2">&amp;mut </span><span class="self">self</span>, inst: Inst, def: <span class="kw-2">&amp;</span>FunctionDefinition) {
-        <span class="self">self</span>.dispatch_inst(inst, def.dfg.data(inst), def)
+        <span class="self">self</span>.dispatch_inst(inst, def.dfg.inst_data(inst), def)
     }
 
     <span class="doccomment">/// Visits a `call` instruction.
@@ -880,283 +886,287 @@
 <span class="doccomment">/// A trait for a generic &quot;visit an instruction&quot; type. This is the smallest-scale
 /// visitor, as this visitor isn&#39;t even aware of the function that a given instruction
 /// is in.
-</span><span class="kw">pub trait </span>GenericInstVisitor&lt;T&gt; {
+</span><span class="kw">pub trait </span>GenericInstVisitor&lt;T, Context&gt; {
     <span class="doccomment">/// Dispatcher that does the default behavior of calling the most specific visitor
     /// for each instruction.
-    </span><span class="kw">fn </span>dispatch_inst(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>InstData) -&gt; T {
+    </span><span class="kw">fn </span>dispatch_inst(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>InstData, context: Context) -&gt; T {
         <span class="kw">match </span>data {
-            InstData::Call(i) =&gt; <span class="self">self</span>.visit_call(i),
-            InstData::IndirectCall(i) =&gt; <span class="self">self</span>.visit_indirectcall(i),
-            InstData::ICmp(i) =&gt; <span class="self">self</span>.visit_icmp(i),
-            InstData::FCmp(i) =&gt; <span class="self">self</span>.visit_fcmp(i),
-            InstData::Sel(i) =&gt; <span class="self">self</span>.visit_sel(i),
-            InstData::Br(i) =&gt; <span class="self">self</span>.visit_br(i),
-            InstData::CondBr(i) =&gt; <span class="self">self</span>.visit_condbr(i),
-            InstData::Unreachable(i) =&gt; <span class="self">self</span>.visit_unreachable(i),
-            InstData::Ret(i) =&gt; <span class="self">self</span>.visit_ret(i),
-            InstData::And(i) =&gt; <span class="self">self</span>.visit_and(i),
-            InstData::Or(i) =&gt; <span class="self">self</span>.visit_or(i),
-            InstData::Xor(i) =&gt; <span class="self">self</span>.visit_xor(i),
-            InstData::Shl(i) =&gt; <span class="self">self</span>.visit_shl(i),
-            InstData::AShr(i) =&gt; <span class="self">self</span>.visit_ashr(i),
-            InstData::LShr(i) =&gt; <span class="self">self</span>.visit_lshr(i),
-            InstData::IAdd(i) =&gt; <span class="self">self</span>.visit_iadd(i),
-            InstData::ISub(i) =&gt; <span class="self">self</span>.visit_isub(i),
-            InstData::IMul(i) =&gt; <span class="self">self</span>.visit_imul(i),
-            InstData::SDiv(i) =&gt; <span class="self">self</span>.visit_sdiv(i),
-            InstData::UDiv(i) =&gt; <span class="self">self</span>.visit_udiv(i),
-            InstData::SRem(i) =&gt; <span class="self">self</span>.visit_srem(i),
-            InstData::URem(i) =&gt; <span class="self">self</span>.visit_urem(i),
-            InstData::FNeg(i) =&gt; <span class="self">self</span>.visit_fneg(i),
-            InstData::FAdd(i) =&gt; <span class="self">self</span>.visit_fadd(i),
-            InstData::FSub(i) =&gt; <span class="self">self</span>.visit_fsub(i),
-            InstData::FMul(i) =&gt; <span class="self">self</span>.visit_fmul(i),
-            InstData::FDiv(i) =&gt; <span class="self">self</span>.visit_fdiv(i),
-            InstData::FRem(i) =&gt; <span class="self">self</span>.visit_frem(i),
-            InstData::Alloca(i) =&gt; <span class="self">self</span>.visit_alloca(i),
-            InstData::Load(i) =&gt; <span class="self">self</span>.visit_load(i),
-            InstData::Store(i) =&gt; <span class="self">self</span>.visit_store(i),
-            InstData::Offset(i) =&gt; <span class="self">self</span>.visit_offset(i),
-            InstData::Extract(i) =&gt; <span class="self">self</span>.visit_extract(i),
-            InstData::Insert(i) =&gt; <span class="self">self</span>.visit_insert(i),
-            InstData::ElemPtr(i) =&gt; <span class="self">self</span>.visit_elemptr(i),
-            InstData::Sext(i) =&gt; <span class="self">self</span>.visit_sext(i),
-            InstData::Zext(i) =&gt; <span class="self">self</span>.visit_zext(i),
-            InstData::Trunc(i) =&gt; <span class="self">self</span>.visit_trunc(i),
-            InstData::IToB(i) =&gt; <span class="self">self</span>.visit_itob(i),
-            InstData::BToI(i) =&gt; <span class="self">self</span>.visit_btoi(i),
-            InstData::SIToF(i) =&gt; <span class="self">self</span>.visit_sitof(i),
-            InstData::UIToF(i) =&gt; <span class="self">self</span>.visit_uitof(i),
-            InstData::FToSI(i) =&gt; <span class="self">self</span>.visit_ftosi(i),
-            InstData::FToUI(i) =&gt; <span class="self">self</span>.visit_ftoui(i),
-            InstData::FExt(i) =&gt; <span class="self">self</span>.visit_fext(i),
-            InstData::FTrunc(i) =&gt; <span class="self">self</span>.visit_ftrunc(i),
-            InstData::IToP(i) =&gt; <span class="self">self</span>.visit_itop(i),
-            InstData::PToI(i) =&gt; <span class="self">self</span>.visit_ptoi(i),
-            InstData::IConst(i) =&gt; <span class="self">self</span>.visit_iconst(i),
-            InstData::FConst(i) =&gt; <span class="self">self</span>.visit_fconst(i),
-            InstData::BConst(i) =&gt; <span class="self">self</span>.visit_bconst(i),
-            InstData::Undef(i) =&gt; <span class="self">self</span>.visit_undef(i),
-            InstData::Null(i) =&gt; <span class="self">self</span>.visit_null(i),
-            InstData::StackSlot(i) =&gt; <span class="self">self</span>.visit_stackslot(i),
-            InstData::GlobalAddr(i) =&gt; <span class="self">self</span>.visit_globaladdr(i),
+            InstData::Call(i) =&gt; <span class="self">self</span>.visit_call(i, context),
+            InstData::IndirectCall(i) =&gt; <span class="self">self</span>.visit_indirectcall(i, context),
+            InstData::ICmp(i) =&gt; <span class="self">self</span>.visit_icmp(i, context),
+            InstData::FCmp(i) =&gt; <span class="self">self</span>.visit_fcmp(i, context),
+            InstData::Sel(i) =&gt; <span class="self">self</span>.visit_sel(i, context),
+            InstData::Br(i) =&gt; <span class="self">self</span>.visit_br(i, context),
+            InstData::CondBr(i) =&gt; <span class="self">self</span>.visit_condbr(i, context),
+            InstData::Unreachable(i) =&gt; <span class="self">self</span>.visit_unreachable(i, context),
+            InstData::Ret(i) =&gt; <span class="self">self</span>.visit_ret(i, context),
+            InstData::And(i) =&gt; <span class="self">self</span>.visit_and(i, context),
+            InstData::Or(i) =&gt; <span class="self">self</span>.visit_or(i, context),
+            InstData::Xor(i) =&gt; <span class="self">self</span>.visit_xor(i, context),
+            InstData::Shl(i) =&gt; <span class="self">self</span>.visit_shl(i, context),
+            InstData::AShr(i) =&gt; <span class="self">self</span>.visit_ashr(i, context),
+            InstData::LShr(i) =&gt; <span class="self">self</span>.visit_lshr(i, context),
+            InstData::IAdd(i) =&gt; <span class="self">self</span>.visit_iadd(i, context),
+            InstData::ISub(i) =&gt; <span class="self">self</span>.visit_isub(i, context),
+            InstData::IMul(i) =&gt; <span class="self">self</span>.visit_imul(i, context),
+            InstData::SDiv(i) =&gt; <span class="self">self</span>.visit_sdiv(i, context),
+            InstData::UDiv(i) =&gt; <span class="self">self</span>.visit_udiv(i, context),
+            InstData::SRem(i) =&gt; <span class="self">self</span>.visit_srem(i, context),
+            InstData::URem(i) =&gt; <span class="self">self</span>.visit_urem(i, context),
+            InstData::FNeg(i) =&gt; <span class="self">self</span>.visit_fneg(i, context),
+            InstData::FAdd(i) =&gt; <span class="self">self</span>.visit_fadd(i, context),
+            InstData::FSub(i) =&gt; <span class="self">self</span>.visit_fsub(i, context),
+            InstData::FMul(i) =&gt; <span class="self">self</span>.visit_fmul(i, context),
+            InstData::FDiv(i) =&gt; <span class="self">self</span>.visit_fdiv(i, context),
+            InstData::FRem(i) =&gt; <span class="self">self</span>.visit_frem(i, context),
+            InstData::Alloca(i) =&gt; <span class="self">self</span>.visit_alloca(i, context),
+            InstData::Load(i) =&gt; <span class="self">self</span>.visit_load(i, context),
+            InstData::Store(i) =&gt; <span class="self">self</span>.visit_store(i, context),
+            InstData::Offset(i) =&gt; <span class="self">self</span>.visit_offset(i, context),
+            InstData::Extract(i) =&gt; <span class="self">self</span>.visit_extract(i, context),
+            InstData::Insert(i) =&gt; <span class="self">self</span>.visit_insert(i, context),
+            InstData::ElemPtr(i) =&gt; <span class="self">self</span>.visit_elemptr(i, context),
+            InstData::Sext(i) =&gt; <span class="self">self</span>.visit_sext(i, context),
+            InstData::Zext(i) =&gt; <span class="self">self</span>.visit_zext(i, context),
+            InstData::Trunc(i) =&gt; <span class="self">self</span>.visit_trunc(i, context),
+            InstData::IToB(i) =&gt; <span class="self">self</span>.visit_itob(i, context),
+            InstData::BToI(i) =&gt; <span class="self">self</span>.visit_btoi(i, context),
+            InstData::SIToF(i) =&gt; <span class="self">self</span>.visit_sitof(i, context),
+            InstData::UIToF(i) =&gt; <span class="self">self</span>.visit_uitof(i, context),
+            InstData::FToSI(i) =&gt; <span class="self">self</span>.visit_ftosi(i, context),
+            InstData::FToUI(i) =&gt; <span class="self">self</span>.visit_ftoui(i, context),
+            InstData::FExt(i) =&gt; <span class="self">self</span>.visit_fext(i, context),
+            InstData::FTrunc(i) =&gt; <span class="self">self</span>.visit_ftrunc(i, context),
+            InstData::IToP(i) =&gt; <span class="self">self</span>.visit_itop(i, context),
+            InstData::PToI(i) =&gt; <span class="self">self</span>.visit_ptoi(i, context),
+            InstData::IConst(i) =&gt; <span class="self">self</span>.visit_iconst(i, context),
+            InstData::FConst(i) =&gt; <span class="self">self</span>.visit_fconst(i, context),
+            InstData::BConst(i) =&gt; <span class="self">self</span>.visit_bconst(i, context),
+            InstData::Undef(i) =&gt; <span class="self">self</span>.visit_undef(i, context),
+            InstData::Null(i) =&gt; <span class="self">self</span>.visit_null(i, context),
+            InstData::StackSlot(i) =&gt; <span class="self">self</span>.visit_stackslot(i, context),
+            InstData::GlobalAddr(i) =&gt; <span class="self">self</span>.visit_globaladdr(i, context),
         }
     }
 
     <span class="doccomment">/// Visits a `call` instruction.
-    </span><span class="kw">fn </span>visit_call(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>CallInst) -&gt; T;
+    </span><span class="kw">fn </span>visit_call(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>CallInst, context: Context) -&gt; T;
 
     <span class="doccomment">/// Visits an `indirectcall` instruction.
-    </span><span class="kw">fn </span>visit_indirectcall(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>IndirectCallInst) -&gt; T;
+    </span><span class="kw">fn </span>visit_indirectcall(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>IndirectCallInst, context: Context) -&gt; T;
 
     <span class="doccomment">/// Visits an `icmp` instruction.
-    </span><span class="kw">fn </span>visit_icmp(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>ICmpInst) -&gt; T;
+    </span><span class="kw">fn </span>visit_icmp(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>ICmpInst, context: Context) -&gt; T;
 
     <span class="doccomment">/// Visits an `fcmp` instruction.
-    </span><span class="kw">fn </span>visit_fcmp(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>FCmpInst) -&gt; T;
+    </span><span class="kw">fn </span>visit_fcmp(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>FCmpInst, context: Context) -&gt; T;
 
     <span class="doccomment">/// Visits a `sel` instruction.
-    </span><span class="kw">fn </span>visit_sel(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>SelInst) -&gt; T;
+    </span><span class="kw">fn </span>visit_sel(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>SelInst, context: Context) -&gt; T;
 
     <span class="doccomment">/// Visits a `br` instruction.
-    </span><span class="kw">fn </span>visit_br(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>BrInst) -&gt; T;
+    </span><span class="kw">fn </span>visit_br(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>BrInst, context: Context) -&gt; T;
 
     <span class="doccomment">/// Visits a `condbr` instruction.
-    </span><span class="kw">fn </span>visit_condbr(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>CondBrInst) -&gt; T;
+    </span><span class="kw">fn </span>visit_condbr(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>CondBrInst, context: Context) -&gt; T;
 
     <span class="doccomment">/// Visits an `unreachable` instruction.
-    </span><span class="kw">fn </span>visit_unreachable(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>UnreachableInst) -&gt; T;
+    </span><span class="kw">fn </span>visit_unreachable(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>UnreachableInst, context: Context) -&gt; T;
 
     <span class="doccomment">/// Visits a `ret` instruction.
-    </span><span class="kw">fn </span>visit_ret(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>RetInst) -&gt; T;
+    </span><span class="kw">fn </span>visit_ret(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>RetInst, context: Context) -&gt; T;
 
     <span class="doccomment">/// Visits an `and` instruction.
-    </span><span class="kw">fn </span>visit_and(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>CommutativeArithInst) -&gt; T;
+    </span><span class="kw">fn </span>visit_and(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>CommutativeArithInst, context: Context) -&gt; T;
 
     <span class="doccomment">/// Visits an `or` instruction.
-    </span><span class="kw">fn </span>visit_or(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>CommutativeArithInst) -&gt; T;
+    </span><span class="kw">fn </span>visit_or(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>CommutativeArithInst, context: Context) -&gt; T;
 
     <span class="doccomment">/// Visits an `xor` instruction.
-    </span><span class="kw">fn </span>visit_xor(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>CommutativeArithInst) -&gt; T;
+    </span><span class="kw">fn </span>visit_xor(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>CommutativeArithInst, context: Context) -&gt; T;
 
     <span class="doccomment">/// Visits a `shl` instruction.
-    </span><span class="kw">fn </span>visit_shl(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>ArithInst) -&gt; T;
+    </span><span class="kw">fn </span>visit_shl(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>ArithInst, context: Context) -&gt; T;
 
     <span class="doccomment">/// Visits an `ashr` instruction.
-    </span><span class="kw">fn </span>visit_ashr(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>ArithInst) -&gt; T;
+    </span><span class="kw">fn </span>visit_ashr(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>ArithInst, context: Context) -&gt; T;
 
     <span class="doccomment">/// Visits a `lshr` instruction.
-    </span><span class="kw">fn </span>visit_lshr(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>ArithInst) -&gt; T;
+    </span><span class="kw">fn </span>visit_lshr(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>ArithInst, context: Context) -&gt; T;
 
     <span class="doccomment">/// Visits an `iadd` instruction.
-    </span><span class="kw">fn </span>visit_iadd(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>CommutativeArithInst) -&gt; T;
+    </span><span class="kw">fn </span>visit_iadd(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>CommutativeArithInst, context: Context) -&gt; T;
 
     <span class="doccomment">/// Visits an `isub` instruction.
-    </span><span class="kw">fn </span>visit_isub(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>ArithInst) -&gt; T;
+    </span><span class="kw">fn </span>visit_isub(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>ArithInst, context: Context) -&gt; T;
 
     <span class="doccomment">/// Visits an `imul` instruction.
-    </span><span class="kw">fn </span>visit_imul(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>CommutativeArithInst) -&gt; T;
+    </span><span class="kw">fn </span>visit_imul(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>CommutativeArithInst, context: Context) -&gt; T;
 
     <span class="doccomment">/// Visits an `sdiv` instruction.
-    </span><span class="kw">fn </span>visit_sdiv(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>ArithInst) -&gt; T;
+    </span><span class="kw">fn </span>visit_sdiv(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>ArithInst, context: Context) -&gt; T;
 
     <span class="doccomment">/// Visits an `udiv` instruction.
-    </span><span class="kw">fn </span>visit_udiv(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>ArithInst) -&gt; T;
+    </span><span class="kw">fn </span>visit_udiv(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>ArithInst, context: Context) -&gt; T;
 
     <span class="doccomment">/// Visits a `srem` instruction.
-    </span><span class="kw">fn </span>visit_srem(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>ArithInst) -&gt; T;
+    </span><span class="kw">fn </span>visit_srem(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>ArithInst, context: Context) -&gt; T;
 
     <span class="doccomment">/// Visits a `urem` instruction.
-    </span><span class="kw">fn </span>visit_urem(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>ArithInst) -&gt; T;
+    </span><span class="kw">fn </span>visit_urem(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>ArithInst, context: Context) -&gt; T;
 
     <span class="doccomment">/// Visits an `fneg` instruction.
-    </span><span class="kw">fn </span>visit_fneg(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>FloatUnaryInst) -&gt; T;
+    </span><span class="kw">fn </span>visit_fneg(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>FloatUnaryInst, context: Context) -&gt; T;
 
     <span class="doccomment">/// Visits an `fadd` instruction.
-    </span><span class="kw">fn </span>visit_fadd(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>CommutativeArithInst) -&gt; T;
+    </span><span class="kw">fn </span>visit_fadd(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>CommutativeArithInst, context: Context) -&gt; T;
 
     <span class="doccomment">/// Visits an `fsub` instruction.
-    </span><span class="kw">fn </span>visit_fsub(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>ArithInst) -&gt; T;
+    </span><span class="kw">fn </span>visit_fsub(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>ArithInst, context: Context) -&gt; T;
 
     <span class="doccomment">/// Visits an `fmul` instruction.
-    </span><span class="kw">fn </span>visit_fmul(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>CommutativeArithInst) -&gt; T;
+    </span><span class="kw">fn </span>visit_fmul(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>CommutativeArithInst, context: Context) -&gt; T;
 
     <span class="doccomment">/// Visits an `fdiv` instruction.
-    </span><span class="kw">fn </span>visit_fdiv(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>ArithInst) -&gt; T;
+    </span><span class="kw">fn </span>visit_fdiv(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>ArithInst, context: Context) -&gt; T;
 
     <span class="doccomment">/// Visits an `frem` instruction.
-    </span><span class="kw">fn </span>visit_frem(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>ArithInst) -&gt; T;
+    </span><span class="kw">fn </span>visit_frem(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>ArithInst, context: Context) -&gt; T;
 
     <span class="doccomment">/// Visits an `alloca` instruction.
-    </span><span class="kw">fn </span>visit_alloca(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>AllocaInst) -&gt; T;
+    </span><span class="kw">fn </span>visit_alloca(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>AllocaInst, context: Context) -&gt; T;
 
     <span class="doccomment">/// Visits a `load` instruction.
-    </span><span class="kw">fn </span>visit_load(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>LoadInst) -&gt; T;
+    </span><span class="kw">fn </span>visit_load(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>LoadInst, context: Context) -&gt; T;
 
     <span class="doccomment">/// Visits a `store` instruction.
-    </span><span class="kw">fn </span>visit_store(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>StoreInst) -&gt; T;
+    </span><span class="kw">fn </span>visit_store(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>StoreInst, context: Context) -&gt; T;
 
     <span class="doccomment">/// Visits an `offset` instruction.
-    </span><span class="kw">fn </span>visit_offset(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>OffsetInst) -&gt; T;
+    </span><span class="kw">fn </span>visit_offset(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>OffsetInst, context: Context) -&gt; T;
 
     <span class="doccomment">/// Visits an `extract` instruction.
-    </span><span class="kw">fn </span>visit_extract(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>ExtractInst) -&gt; T;
+    </span><span class="kw">fn </span>visit_extract(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>ExtractInst, context: Context) -&gt; T;
 
     <span class="doccomment">/// Visits an `insert` instruction.
-    </span><span class="kw">fn </span>visit_insert(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>InsertInst) -&gt; T;
+    </span><span class="kw">fn </span>visit_insert(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>InsertInst, context: Context) -&gt; T;
 
     <span class="doccomment">/// Visits an `elemptr` instruction.
-    </span><span class="kw">fn </span>visit_elemptr(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>ElemPtrInst) -&gt; T;
+    </span><span class="kw">fn </span>visit_elemptr(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>ElemPtrInst, context: Context) -&gt; T;
 
     <span class="doccomment">/// Visits a `sext` instruction.
-    </span><span class="kw">fn </span>visit_sext(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>CastInst) -&gt; T;
+    </span><span class="kw">fn </span>visit_sext(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>CastInst, context: Context) -&gt; T;
 
     <span class="doccomment">/// Visits a `zext` instruction.
-    </span><span class="kw">fn </span>visit_zext(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>CastInst) -&gt; T;
+    </span><span class="kw">fn </span>visit_zext(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>CastInst, context: Context) -&gt; T;
 
     <span class="doccomment">/// Visits a `trunc` instruction.
-    </span><span class="kw">fn </span>visit_trunc(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>CastInst) -&gt; T;
+    </span><span class="kw">fn </span>visit_trunc(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>CastInst, context: Context) -&gt; T;
 
     <span class="doccomment">/// Visits an `itob` instruction.
-    </span><span class="kw">fn </span>visit_itob(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>CastInst) -&gt; T;
+    </span><span class="kw">fn </span>visit_itob(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>CastInst, context: Context) -&gt; T;
 
     <span class="doccomment">/// Visits a `btoi` instruction.
-    </span><span class="kw">fn </span>visit_btoi(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>CastInst) -&gt; T;
+    </span><span class="kw">fn </span>visit_btoi(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>CastInst, context: Context) -&gt; T;
 
     <span class="doccomment">/// Visits a `sitof` instruction.
-    </span><span class="kw">fn </span>visit_sitof(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>CastInst) -&gt; T;
+    </span><span class="kw">fn </span>visit_sitof(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>CastInst, context: Context) -&gt; T;
 
     <span class="doccomment">/// Visits a `uitof` instruction.
-    </span><span class="kw">fn </span>visit_uitof(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>CastInst) -&gt; T;
+    </span><span class="kw">fn </span>visit_uitof(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>CastInst, context: Context) -&gt; T;
 
     <span class="doccomment">/// Visits an `ftosi` instruction.
-    </span><span class="kw">fn </span>visit_ftosi(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>CastInst) -&gt; T;
+    </span><span class="kw">fn </span>visit_ftosi(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>CastInst, context: Context) -&gt; T;
 
     <span class="doccomment">/// Visits an `ftoui` instruction.
-    </span><span class="kw">fn </span>visit_ftoui(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>CastInst) -&gt; T;
+    </span><span class="kw">fn </span>visit_ftoui(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>CastInst, context: Context) -&gt; T;
 
     <span class="doccomment">/// Visits an `fext` instruction.
-    </span><span class="kw">fn </span>visit_fext(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>CastInst) -&gt; T;
+    </span><span class="kw">fn </span>visit_fext(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>CastInst, context: Context) -&gt; T;
 
     <span class="doccomment">/// Visits an `ftrunc` instruction.
-    </span><span class="kw">fn </span>visit_ftrunc(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>CastInst) -&gt; T;
+    </span><span class="kw">fn </span>visit_ftrunc(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>CastInst, context: Context) -&gt; T;
 
     <span class="doccomment">/// Visits an `itop` instruction.
-    </span><span class="kw">fn </span>visit_itop(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>CastInst) -&gt; T;
+    </span><span class="kw">fn </span>visit_itop(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>CastInst, context: Context) -&gt; T;
 
     <span class="doccomment">/// Visits a `ptoi` instruction.
-    </span><span class="kw">fn </span>visit_ptoi(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>CastInst) -&gt; T;
+    </span><span class="kw">fn </span>visit_ptoi(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>CastInst, context: Context) -&gt; T;
 
     <span class="doccomment">/// Visits an `iconst` instruction.
-    </span><span class="kw">fn </span>visit_iconst(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>IConstInst) -&gt; T;
+    </span><span class="kw">fn </span>visit_iconst(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>IConstInst, context: Context) -&gt; T;
 
     <span class="doccomment">/// Visits an `fconst` instruction.
-    </span><span class="kw">fn </span>visit_fconst(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>FConstInst) -&gt; T;
+    </span><span class="kw">fn </span>visit_fconst(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>FConstInst, context: Context) -&gt; T;
 
     <span class="doccomment">/// Visits a `bconst` instruction.
-    </span><span class="kw">fn </span>visit_bconst(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>BConstInst) -&gt; T;
+    </span><span class="kw">fn </span>visit_bconst(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>BConstInst, context: Context) -&gt; T;
 
     <span class="doccomment">/// Visits an `undef` instruction.
-    </span><span class="kw">fn </span>visit_undef(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>UndefConstInst) -&gt; T;
+    </span><span class="kw">fn </span>visit_undef(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>UndefConstInst, context: Context) -&gt; T;
 
     <span class="doccomment">/// Visits a `null` instruction.
-    </span><span class="kw">fn </span>visit_null(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>NullConstInst) -&gt; T;
+    </span><span class="kw">fn </span>visit_null(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>NullConstInst, context: Context) -&gt; T;
 
     <span class="doccomment">/// Visits a `stackslot` instruction.
-    </span><span class="kw">fn </span>visit_stackslot(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>StackSlotInst) -&gt; T;
+    </span><span class="kw">fn </span>visit_stackslot(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>StackSlotInst, context: Context) -&gt; T;
 
     <span class="doccomment">/// Visits a `globaladdr` instruction.
-    </span><span class="kw">fn </span>visit_globaladdr(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>GlobalAddrInst) -&gt; T;
+    </span><span class="kw">fn </span>visit_globaladdr(<span class="kw-2">&amp;mut </span><span class="self">self</span>, data: <span class="kw-2">&amp;</span>GlobalAddrInst, context: Context) -&gt; T;
 }
 
 <span class="doccomment">/// Trait that allows configurable visiting of a single function with a [`CursorMut`].
 ///
 /// This trait is the alternative to [`SIRVisitor`], this is more useful for function
 /// transformations that need to be able to modify the IR while visiting.
-</span><span class="kw">pub trait </span>FunctionCursorVisitor&lt;<span class="lifetime">&#39;a</span>, T, C: CursorMut&gt;: Sized + GenericInstVisitor&lt;T&gt; {
+</span><span class="kw">pub trait </span>FunctionCursorVisitor&lt;<span class="lifetime">&#39;a</span>, T, C, Context&gt;: Sized + GenericInstVisitor&lt;T, Context&gt;
+<span class="kw">where
+    </span>C: CursorMut,
+    Context: Copy,
+{
     <span class="doccomment">/// Gets the module being visited.
     </span><span class="kw">fn </span>cursor(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;mut </span>C;
 
     <span class="doccomment">/// Yields the &quot;result&quot; of the visit, if any exists.
-    </span><span class="kw">fn </span>result(<span class="self">self</span>) -&gt; T;
+    </span><span class="kw">fn </span>result(<span class="self">self</span>, context: Context) -&gt; T;
 
     <span class="doccomment">/// Walks over the module and calls the expected `visit_*` methods
-    </span><span class="kw">fn </span>walk(<span class="kw-2">mut </span><span class="self">self</span>) -&gt; T {
-        <span class="self">self</span>.dispatch_blocks();
+    </span><span class="kw">fn </span>walk(<span class="kw-2">mut </span><span class="self">self</span>, context: Context) -&gt; T {
+        <span class="self">self</span>.dispatch_blocks(context);
 
-        <span class="self">self</span>.result()
+        <span class="self">self</span>.result(context)
     }
 
     <span class="doccomment">/// Dispatcher that does the default walking behavior, going to every block in
     /// program order.
     ///
     /// The cursor will be moved to different blocks but this.
-    </span><span class="kw">fn </span>dispatch_blocks(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
+    </span><span class="kw">fn </span>dispatch_blocks(<span class="kw-2">&amp;mut </span><span class="self">self</span>, context: Context) {
         <span class="kw">while let </span><span class="prelude-val">Some</span>(bb) = <span class="self">self</span>.cursor().next_block() {
-            <span class="self">self</span>.visit_block(bb);
+            <span class="self">self</span>.visit_block(bb, context);
         }
     }
 
     <span class="doccomment">/// Dispatcher that does the default behavior of iterating over every
     /// instruction in a given block in program order.
-    </span><span class="kw">fn </span>dispatch_insts(<span class="kw-2">&amp;mut </span><span class="self">self</span>, block: Block) {
+    </span><span class="kw">fn </span>dispatch_insts(<span class="kw-2">&amp;mut </span><span class="self">self</span>, block: Block, context: Context) {
         <span class="self">self</span>.cursor().goto_before(block);
 
         <span class="kw">while let </span><span class="prelude-val">Some</span>(inst) = <span class="self">self</span>.cursor().next_inst() {
-            <span class="kw">let _ </span>= <span class="self">self</span>.visit_inst(inst);
+            <span class="kw">let _ </span>= <span class="self">self</span>.visit_inst(inst, context);
         }
     }
 
     <span class="doccomment">/// Called whenever an individual block is visited
-    </span><span class="kw">fn </span>visit_block(<span class="kw-2">&amp;mut </span><span class="self">self</span>, block: Block) {
-        <span class="self">self</span>.dispatch_insts(block);
+    </span><span class="kw">fn </span>visit_block(<span class="kw-2">&amp;mut </span><span class="self">self</span>, block: Block, context: Context) {
+        <span class="self">self</span>.dispatch_insts(block, context);
     }
 
     <span class="doccomment">/// Called whenever an individual instruction is visited.
-    </span><span class="kw">fn </span>visit_inst(<span class="kw-2">&amp;mut </span><span class="self">self</span>, inst: Inst) -&gt; T {
-        <span class="kw">let </span>data = <span class="self">self</span>.cursor().dfg().data(inst).clone();
+    </span><span class="kw">fn </span>visit_inst(<span class="kw-2">&amp;mut </span><span class="self">self</span>, inst: Inst, context: Context) -&gt; T {
+        <span class="kw">let </span>data = <span class="self">self</span>.cursor().dfg().inst_data(inst).clone();
 
-        <span class="self">self</span>.dispatch_inst(<span class="kw-2">&amp;</span>data)
+        <span class="self">self</span>.dispatch_inst(<span class="kw-2">&amp;</span>data, context)
     }
 }
 </code></pre></div></section></main><script>

@@ -557,6 +557,23 @@
 <a href="#554" id="554">554</a>
 <a href="#555" id="555">555</a>
 <a href="#556" id="556">556</a>
+<a href="#557" id="557">557</a>
+<a href="#558" id="558">558</a>
+<a href="#559" id="559">559</a>
+<a href="#560" id="560">560</a>
+<a href="#561" id="561">561</a>
+<a href="#562" id="562">562</a>
+<a href="#563" id="563">563</a>
+<a href="#564" id="564">564</a>
+<a href="#565" id="565">565</a>
+<a href="#566" id="566">566</a>
+<a href="#567" id="567">567</a>
+<a href="#568" id="568">568</a>
+<a href="#569" id="569">569</a>
+<a href="#570" id="570">570</a>
+<a href="#571" id="571">571</a>
+<a href="#572" id="572">572</a>
+<a href="#573" id="573">573</a>
 </pre></div><pre class="rust"><code><span class="comment">//======---------------------------------------------------------------======//
 //                                                                           //
 // Copyright 2022-2023 Evan Cox &lt;evanacox00@gmail.com&gt;. All rights reserved. //
@@ -887,20 +904,38 @@
         <span class="self">self</span>.build_result(InstData::Alloca(AllocaInst::new(ty)), debug)
     }
 
-    <span class="doccomment">/// Builds a `load` instruction
+    <span class="doccomment">/// Builds a non-volatile `load` instruction
     </span><span class="kw">fn </span>load(<span class="self">self</span>, ty: Type, ptr: Value, debug: DebugInfo) -&gt; Value {
         <span class="macro">debug_assert_eq!</span>(<span class="self">self</span>.dfg().ty(ptr), Type::ptr());
 
-        <span class="kw">let </span>inst = LoadInst::new(ptr, ty);
+        <span class="kw">let </span>inst = LoadInst::new(ptr, ty, <span class="bool-val">false</span>);
 
         <span class="self">self</span>.build_result(InstData::Load(inst), debug)
     }
 
-    <span class="doccomment">/// Builds a `store` instruction
+    <span class="doccomment">/// Builds a volatile `load` instruction
+    </span><span class="kw">fn </span>load_volatile(<span class="self">self</span>, ty: Type, ptr: Value, debug: DebugInfo) -&gt; Value {
+        <span class="macro">debug_assert_eq!</span>(<span class="self">self</span>.dfg().ty(ptr), Type::ptr());
+
+        <span class="kw">let </span>inst = LoadInst::new(ptr, ty, <span class="bool-val">true</span>);
+
+        <span class="self">self</span>.build_result(InstData::Load(inst), debug)
+    }
+
+    <span class="doccomment">/// Builds a non-volatile `store` instruction
     </span><span class="kw">fn </span>store(<span class="self">self</span>, val: Value, ptr: Value, debug: DebugInfo) -&gt; Inst {
         <span class="macro">debug_assert_eq!</span>(<span class="self">self</span>.dfg().ty(ptr), Type::ptr());
 
-        <span class="kw">let </span>inst = StoreInst::new(ptr, val);
+        <span class="kw">let </span>inst = StoreInst::new(ptr, val, <span class="bool-val">false</span>);
+
+        <span class="self">self</span>.build_inst(InstData::Store(inst), debug)
+    }
+
+    <span class="doccomment">/// Builds a volatile `store` instruction
+    </span><span class="kw">fn </span>store_volatile(<span class="self">self</span>, val: Value, ptr: Value, debug: DebugInfo) -&gt; Inst {
+        <span class="macro">debug_assert_eq!</span>(<span class="self">self</span>.dfg().ty(ptr), Type::ptr());
+
+        <span class="kw">let </span>inst = StoreInst::new(ptr, val, <span class="bool-val">true</span>);
 
         <span class="self">self</span>.build_inst(InstData::Store(inst), debug)
     }
@@ -1071,7 +1106,6 @@
     <span class="doccomment">/// Builds an `iconst` instruction
     </span><span class="kw">fn </span>iconst(<span class="self">self</span>, into: Type, from: u64, debug: DebugInfo) -&gt; Value {
         <span class="macro">debug_assert!</span>(into.is_int());
-        <span class="macro">debug_assert!</span>(into.unwrap_int().mask() &gt;= from);
 
         <span class="self">self</span>.build_result(InstData::IConst(IConstInst::new(into, from)), debug)
     }

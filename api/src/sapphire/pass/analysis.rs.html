@@ -776,17 +776,6 @@
 <a href="#773" id="773">773</a>
 <a href="#774" id="774">774</a>
 <a href="#775" id="775">775</a>
-<a href="#776" id="776">776</a>
-<a href="#777" id="777">777</a>
-<a href="#778" id="778">778</a>
-<a href="#779" id="779">779</a>
-<a href="#780" id="780">780</a>
-<a href="#781" id="781">781</a>
-<a href="#782" id="782">782</a>
-<a href="#783" id="783">783</a>
-<a href="#784" id="784">784</a>
-<a href="#785" id="785">785</a>
-<a href="#786" id="786">786</a>
 </pre></div><pre class="rust"><code><span class="comment">//======---------------------------------------------------------------======//
 //                                                                           //
 // Copyright 2022-2023 Evan Cox &lt;evanacox00@gmail.com&gt;. All rights reserved. //
@@ -797,7 +786,7 @@
 //                                                                           //
 //======---------------------------------------------------------------======//
 
-</span><span class="kw">use </span><span class="kw">crate</span>::analysis::{ControlFlowGraphAnalysis, DominatorTreeAnalysis};
+</span><span class="kw">use </span><span class="kw">crate</span>::analysis::{ControlFlowGraphAnalysis, DominanceFrontierAnalysis, DominatorTreeAnalysis};
 <span class="kw">use </span><span class="kw">crate</span>::arena::{ArenaMap, SecondaryMap};
 <span class="kw">use </span><span class="kw">crate</span>::dense_arena_key;
 <span class="kw">use </span><span class="kw">crate</span>::ir::{Func, Function, Module, ModuleIdentity};
@@ -907,33 +896,13 @@
 </span><span class="macro">macro_rules! </span>analysis_preserved {
     ($(<span class="macro-nonterminal">$t</span>:ty),<span class="kw-2">*</span>) =&gt; {
         {
-            <span class="kw">use </span><span class="macro-nonterminal">$crate::pass::_InitGuard</span>;
-            <span class="kw">use </span>std::any::TypeId;
-            <span class="kw">use </span>std::mem::MaybeUninit;
+            <span class="kw">use </span>std::sync::OnceLock;
 
-            <span class="kw">static </span><span class="kw-2">mut </span>PRESERVED: MaybeUninit&lt;[TypeId; <span class="macro">__analysis_preserved_count!</span>($(<span class="macro-nonterminal">$t</span>)<span class="kw-2">*</span>)]&gt; = MaybeUninit::uninit();
-            <span class="kw">static </span>GUARD: _InitGuard = _InitGuard::__new();
+            <span class="kw">static </span>PRESERVED: OnceLock&lt;[TypeId; <span class="macro">__analysis_preserved_count!</span>($(<span class="macro-nonterminal">$t</span>)<span class="kw-2">*</span>)]&gt; = OnceLock::new();
 
-            <span class="comment">// check if anyone has already initialized this. almost always true
-            </span><span class="kw">if </span>GUARD.__need_try_acquire() {
-                <span class="kw">let </span>array = [
-                    $(
-                        TypeId::of::&lt;<span class="macro-nonterminal">$t</span>&gt;(),
-                    )<span class="kw-2">*</span>];
-
-                <span class="comment">// multiple threads may try to do this at the same time, so __acquire
-                // will wait if this happens and then check that it&#39;s initialized
-                </span><span class="kw">if </span>GUARD.__acquire() {
-                    <span class="kw">unsafe </span>{
-                        PRESERVED = MaybeUninit::new(array);
-
-                        GUARD.__release();
-                    }
-                }
-            }
-
-            <span class="comment">// if we get here we know that we&#39;re initialized
-            </span><span class="kw">unsafe </span>{ PRESERVED.assume_init_ref() }
+            PRESERVED.get_or_init(|| [$(
+                TypeId::of::&lt;<span class="macro-nonterminal">$t</span>&gt;(),
+            )<span class="kw-2">*</span>])
         }
     }
 }
@@ -1403,6 +1372,9 @@
     ///
     /// This manager has no analyses registered, they need to be added with [`Self::add_analysis`]
     /// before they can be used by transform passes.
+    ///
+    /// # Note
+    /// Note that [`Self::default()`] can be used to get all analyses pre-registered.
     </span><span class="attr">#[inline]
     </span><span class="kw">pub fn </span>new() -&gt; <span class="self">Self </span>{
         <span class="kw">let </span><span class="kw-2">mut </span>am = AnalysisManager::new();
@@ -1448,7 +1420,13 @@
 
 <span class="kw">impl </span>Default <span class="kw">for </span>FunctionAnalysisManager {
     <span class="kw">fn </span>default() -&gt; <span class="self">Self </span>{
-        <span class="self">Self</span>::new()
+        <span class="kw">let </span><span class="kw-2">mut </span>fam = <span class="self">Self</span>::new();
+
+        fam.add_analysis(ControlFlowGraphAnalysis);
+        fam.add_analysis(DominatorTreeAnalysis);
+        fam.add_analysis(DominanceFrontierAnalysis);
+
+        fam
     }
 }
 

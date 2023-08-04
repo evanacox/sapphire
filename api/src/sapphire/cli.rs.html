@@ -167,6 +167,49 @@
 <a href="#164" id="164">164</a>
 <a href="#165" id="165">165</a>
 <a href="#166" id="166">166</a>
+<a href="#167" id="167">167</a>
+<a href="#168" id="168">168</a>
+<a href="#169" id="169">169</a>
+<a href="#170" id="170">170</a>
+<a href="#171" id="171">171</a>
+<a href="#172" id="172">172</a>
+<a href="#173" id="173">173</a>
+<a href="#174" id="174">174</a>
+<a href="#175" id="175">175</a>
+<a href="#176" id="176">176</a>
+<a href="#177" id="177">177</a>
+<a href="#178" id="178">178</a>
+<a href="#179" id="179">179</a>
+<a href="#180" id="180">180</a>
+<a href="#181" id="181">181</a>
+<a href="#182" id="182">182</a>
+<a href="#183" id="183">183</a>
+<a href="#184" id="184">184</a>
+<a href="#185" id="185">185</a>
+<a href="#186" id="186">186</a>
+<a href="#187" id="187">187</a>
+<a href="#188" id="188">188</a>
+<a href="#189" id="189">189</a>
+<a href="#190" id="190">190</a>
+<a href="#191" id="191">191</a>
+<a href="#192" id="192">192</a>
+<a href="#193" id="193">193</a>
+<a href="#194" id="194">194</a>
+<a href="#195" id="195">195</a>
+<a href="#196" id="196">196</a>
+<a href="#197" id="197">197</a>
+<a href="#198" id="198">198</a>
+<a href="#199" id="199">199</a>
+<a href="#200" id="200">200</a>
+<a href="#201" id="201">201</a>
+<a href="#202" id="202">202</a>
+<a href="#203" id="203">203</a>
+<a href="#204" id="204">204</a>
+<a href="#205" id="205">205</a>
+<a href="#206" id="206">206</a>
+<a href="#207" id="207">207</a>
+<a href="#208" id="208">208</a>
+<a href="#209" id="209">209</a>
 </pre></div><pre class="rust"><code><span class="comment">//======---------------------------------------------------------------======//
 //                                                                           //
 // Copyright 2022-2023 Evan Cox &lt;evanacox00@gmail.com&gt;. All rights reserved. //
@@ -186,6 +229,7 @@
 
 </span><span class="kw">use </span>bpaf::{construct, OptionParser, Parser};
 <span class="kw">use </span>std::path::PathBuf;
+<span class="kw">use </span>std::str::FromStr;
 
 <span class="kw">const </span>VERSION: <span class="kw-2">&amp;</span>str = <span class="macro">env!</span>(<span class="string">&quot;CARGO_PKG_VERSION&quot;</span>);
 
@@ -199,6 +243,18 @@
     </span>Obj,
 }
 
+<span class="kw">impl </span>FromStr <span class="kw">for </span>MachineFormat {
+    <span class="kw">type </span><span class="prelude-val">Err </span>= <span class="kw-2">&amp;</span><span class="lifetime">&#39;static </span>str;
+
+    <span class="kw">fn </span>from_str(s: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, <span class="self">Self</span>::Err&gt; {
+        <span class="prelude-val">Ok</span>(<span class="kw">match </span>s {
+            <span class="string">&quot;asm&quot; </span>=&gt; MachineFormat::Asm,
+            <span class="string">&quot;obj&quot; </span>=&gt; MachineFormat::Obj,
+            <span class="kw">_ </span>=&gt; <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="string">&quot;format must be one of &#39;asm&#39; or &#39;obj&#39;&quot;</span>),
+        })
+    }
+}
+
 <span class="doccomment">/// The format for a tool emitting SIR to emit in.
 </span><span class="attr">#[derive(Copy, Clone, Eq, PartialEq)]
 </span><span class="kw">pub enum </span>IRFormat {
@@ -207,6 +263,18 @@
     <span class="doccomment">/// A dense binary format that can be serialized and deserialized
     /// quickly and efficiently, and takes up less space on disk.
     </span>Bitcode,
+}
+
+<span class="kw">impl </span>FromStr <span class="kw">for </span>IRFormat {
+    <span class="kw">type </span><span class="prelude-val">Err </span>= <span class="kw-2">&amp;</span><span class="lifetime">&#39;static </span>str;
+
+    <span class="kw">fn </span>from_str(s: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, <span class="self">Self</span>::Err&gt; {
+        <span class="prelude-val">Ok</span>(<span class="kw">match </span>s {
+            <span class="string">&quot;ir&quot; </span>=&gt; IRFormat::IR,
+            <span class="string">&quot;bc&quot; </span>=&gt; IRFormat::Bitcode,
+            <span class="kw">_ </span>=&gt; <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="string">&quot;format must be one of &#39;ir&#39; or &#39;bc&#39;&quot;</span>),
+        })
+    }
 }
 
 <span class="doccomment">/// Basic options that every CLI tool in the suite takes in.
@@ -219,7 +287,7 @@
     </span><span class="kw">pub </span>inputs: Vec&lt;PathBuf&gt;,
 }
 
-<span class="doccomment">/// Returns a [`bpaf::OptionParser`] preconfigured with the standard Sapphire
+<span class="doccomment">/// Returns a [`OptionParser`] preconfigured with the standard Sapphire
 /// options and additional tool-specific options.
 </span><span class="kw">pub fn </span>tool_with&lt;T&gt;(
     description: <span class="kw-2">&amp;</span><span class="lifetime">&#39;static </span>str,
@@ -234,7 +302,7 @@
         .usage(usage)
 }
 
-<span class="doccomment">/// Returns a [`bpaf::OptionParser`] preconfigured with the standard Sapphire
+<span class="doccomment">/// Returns a [`OptionParser`] preconfigured with the standard Sapphire
 /// options and nothing else.
 </span><span class="kw">pub fn </span>tool&lt;T&gt;(description: <span class="kw-2">&amp;</span><span class="lifetime">&#39;static </span>str, usage: <span class="kw-2">&amp;</span><span class="lifetime">&#39;static </span>str) -&gt; OptionParser&lt;BaseOptions&gt; {
     default()
@@ -286,21 +354,8 @@
     bpaf::long(<span class="string">&quot;emit&quot;</span>)
         .short(<span class="string">&#39;e&#39;</span>)
         .help(<span class="string">&quot;the machine format to emit, either &#39;asm&#39; or &#39;obj&#39;&quot;</span>)
-        .argument::&lt;String&gt;(<span class="string">&quot;FORMAT&quot;</span>)
-        .guard(
-            |fmt| fmt == <span class="string">&quot;asm&quot; </span>|| fmt == <span class="string">&quot;obj&quot;</span>,
-            <span class="string">&quot;format must be one of &#39;asm&#39;, &#39;obj&#39;&quot;</span>,
-        )
-        .map(|fmt| <span class="kw">match </span>fmt.as_str() {
-            <span class="string">&quot;asm&quot; </span>=&gt; MachineFormat::Asm,
-            <span class="string">&quot;obj&quot; </span>=&gt; MachineFormat::Obj,
-            <span class="kw">_ </span>=&gt; <span class="macro">unreachable!</span>(),
-        })
-        .optional()
-        .map(|opt| <span class="kw">match </span>opt {
-            <span class="prelude-val">Some</span>(val) =&gt; val,
-            <span class="prelude-val">None </span>=&gt; MachineFormat::Obj,
-        })
+        .argument::&lt;MachineFormat&gt;(<span class="string">&quot;FORMAT&quot;</span>)
+        .fallback(MachineFormat::Obj)
 }
 
 <span class="doccomment">/// Gets the emit format for a tool that emits SIR
@@ -308,21 +363,36 @@
     bpaf::long(<span class="string">&quot;emit&quot;</span>)
         .short(<span class="string">&#39;e&#39;</span>)
         .help(<span class="string">&quot;the SIR format to emit, either &#39;ir&#39; or &#39;bc&#39;&quot;</span>)
-        .argument::&lt;String&gt;(<span class="string">&quot;FORMAT&quot;</span>)
-        .guard(
-            |fmt| fmt == <span class="string">&quot;ir&quot; </span>|| fmt == <span class="string">&quot;bc&quot;</span>,
-            <span class="string">&quot;format must be one of &#39;ir&#39;, &#39;bc&#39;&quot;</span>,
-        )
-        .map(|fmt| <span class="kw">match </span>fmt.as_str() {
-            <span class="string">&quot;ir&quot; </span>=&gt; IRFormat::IR,
-            <span class="string">&quot;bc&quot; </span>=&gt; IRFormat::Bitcode,
-            <span class="kw">_ </span>=&gt; <span class="macro">unreachable!</span>(),
-        })
+        .argument::&lt;IRFormat&gt;(<span class="string">&quot;FORMAT&quot;</span>)
+        .fallback(IRFormat::Bitcode)
+}
+
+<span class="doccomment">/// Option for omitting/leaving the frame pointer
+</span><span class="kw">pub enum </span>FramePointer {
+    <span class="doccomment">/// Omits the frame pointer in any function where it is possible to do so
+    </span>OmitWhenPossible,
+    <span class="doccomment">/// Never omits the frame pointer
+    </span>NeverOmit,
+}
+
+<span class="kw">impl </span>FromStr <span class="kw">for </span>FramePointer {
+    <span class="kw">type </span><span class="prelude-val">Err </span>= <span class="kw-2">&amp;</span><span class="lifetime">&#39;static </span>str;
+
+    <span class="kw">fn </span>from_str(s: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, <span class="self">Self</span>::Err&gt; {
+        <span class="kw">match </span>s {
+            <span class="string">&quot;omit&quot; </span>=&gt; <span class="prelude-val">Ok</span>(FramePointer::OmitWhenPossible),
+            <span class="string">&quot;never-omit&quot; </span>=&gt; <span class="prelude-val">Ok</span>(FramePointer::NeverOmit),
+            <span class="kw">_ </span>=&gt; <span class="prelude-val">Err</span>(<span class="string">&quot;only options are `omit` or `never-omit`&quot;</span>),
+        }
+    }
+}
+
+<span class="doccomment">/// Whether or not to omit the frame pointer
+</span><span class="kw">pub fn </span>frame_pointer() -&gt; <span class="kw">impl </span>Parser&lt;<span class="prelude-ty">Option</span>&lt;FramePointer&gt;&gt; {
+    bpaf::long(<span class="string">&quot;frame-ptr&quot;</span>)
+        .help(<span class="string">&quot;whether to attempt to omit or never omit the frame pointer&quot;</span>)
+        .argument::&lt;FramePointer&gt;(<span class="string">&quot;OPTION&quot;</span>)
         .optional()
-        .map(|opt| <span class="kw">match </span>opt {
-            <span class="prelude-val">Some</span>(val) =&gt; val,
-            <span class="prelude-val">None </span>=&gt; IRFormat::Bitcode,
-        })
 }
 
 <span class="doccomment">/// Gets the number of concurrent threads to use for a given task
@@ -332,6 +402,22 @@
         .help(<span class="string">&quot;the number of concurrent jobs to run tests on&quot;</span>)
         .argument::&lt;usize&gt;(<span class="string">&quot;JOBS&quot;</span>)
         .optional()
+}
+
+<span class="doccomment">/// Gets a list of passes to run over the IR
+</span><span class="kw">pub fn </span>passes() -&gt; <span class="kw">impl </span>Parser&lt;Vec&lt;String&gt;&gt; {
+    bpaf::long(<span class="string">&quot;pass&quot;</span>)
+        .short(<span class="string">&#39;p&#39;</span>)
+        .help(<span class="string">&quot;a pass to run over the input&quot;</span>)
+        .argument::&lt;String&gt;(<span class="string">&quot;PASS-NAME&quot;</span>)
+        .many()
+}
+
+<span class="doccomment">/// Whether the user wants verify passes inserted between optimization passes
+</span><span class="kw">pub fn </span>verify() -&gt; <span class="kw">impl </span>Parser&lt;bool&gt; {
+    bpaf::long(<span class="string">&quot;verify&quot;</span>)
+        .help(<span class="string">&quot;whether to verify the IR before and after passes&quot;</span>)
+        .flag(<span class="bool-val">true</span>, <span class="bool-val">false</span>)
 }
 </code></pre></div></section></main><script>
 renderMathInElement(document.body, {

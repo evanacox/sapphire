@@ -85,7 +85,7 @@
 
         <nav id="sidebar" class="sidebar" aria-label="Table of contents">
             <div class="sidebar-scrollbox">
-                <ol class="chapter"><li class="chapter-item expanded affix "><a href="index.html">Preface</a></li><li class="chapter-item expanded "><a href="sir.html" class="active"><strong aria-hidden="true">1.</strong> Sapphire IR</a></li><li class="chapter-item expanded "><a href="internals/index.html"><strong aria-hidden="true">2.</strong> Compiler Internals</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="internals/parser.html"><strong aria-hidden="true">2.1.</strong> SIR Parser</a></li><li class="chapter-item expanded "><a href="internals/sir-repr.html"><strong aria-hidden="true">2.2.</strong> SIR Representation</a></li></ol></li><li class="chapter-item expanded "><a href="tools/index.html"><strong aria-hidden="true">3.</strong> Tools</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="tools/filetest.html"><strong aria-hidden="true">3.1.</strong> filetest</a></li><li class="chapter-item expanded "><a href="tools/sirc.html"><strong aria-hidden="true">3.2.</strong> sirc</a></li></ol></li></ol>
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="index.html">Preface</a></li><li class="chapter-item expanded "><a href="sir.html" class="active"><strong aria-hidden="true">1.</strong> Sapphire IR</a></li><li class="chapter-item expanded "><a href="internals/index.html"><strong aria-hidden="true">2.</strong> Compiler Internals</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="internals/parser.html"><strong aria-hidden="true">2.1.</strong> SIR Parser</a></li><li class="chapter-item expanded "><a href="internals/sir-repr.html"><strong aria-hidden="true">2.2.</strong> SIR Representation</a></li><li class="chapter-item expanded "><a href="internals/codegen-pipeline.html"><strong aria-hidden="true">2.3.</strong> Codegen Pipeline</a></li><li class="chapter-item expanded "><a href="internals/reg-alloc.html"><strong aria-hidden="true">2.4.</strong> Register Allocation</a></li></ol></li><li class="chapter-item expanded "><a href="tools/index.html"><strong aria-hidden="true">3.</strong> Tools</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="tools/filetest.html"><strong aria-hidden="true">3.1.</strong> filetest</a></li><li class="chapter-item expanded "><a href="tools/sirc.html"><strong aria-hidden="true">3.2.</strong> sirc</a></li></ol></li><li class="chapter-item expanded "><a href="x86-64/index.html"><strong aria-hidden="true">4.</strong> x86-64 Backend</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="x86-64/calls.html"><strong aria-hidden="true">4.1.</strong> Calls</a></li><li class="chapter-item expanded "><a href="x86-64/legalization.html"><strong aria-hidden="true">4.2.</strong> Legalization</a></li></ol></li></ol>
             </div>
             <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
         </nav>
@@ -269,6 +269,39 @@ entry:
 </code></pre>
 <h1 id="functions"><a class="header" href="#functions">Functions</a></h1>
 <p>Functions are made up of a name, a call signature, a list of stack slots, and a list of basic blocks.</p>
+<h2 id="call-signature"><a class="header" href="#call-signature">Call Signature</a></h2>
+<h3 id="return-value"><a class="header" href="#return-value">Return Value</a></h3>
+<p>The return value can have the <code>noalias</code> and <code>nonnull</code> attributes. They work the same as with arguments.</p>
+<h3 id="function-arguments"><a class="header" href="#function-arguments">Function Arguments</a></h3>
+<p>Function arguments can have a type and an attribute list, the following attributes exist and can all only
+be applied to pointers.</p>
+<h4 id="noalias"><a class="header" href="#noalias"><code>noalias</code></a></h4>
+<p>This says that a pointer will not alias with any other pointers accessible to the function it is passed to, i.e.
+there is no way it can get another pointer that aliases the same memory (without <code>itop</code>/<code>offset</code>/etc). </p>
+<blockquote>
+<blockquote>
+<p>If the function does get memory that aliases the <code>noalias</code> pointer, the behavior is undefined.</p>
+</blockquote>
+</blockquote>
+<h4 id="nonnull"><a class="header" href="#nonnull"><code>nonnull</code></a></h4>
+<p>This says that the pointer is guaranteed to not be null.</p>
+<blockquote>
+<blockquote>
+<p>If the pointer is null, the behavior is undefined.</p>
+</blockquote>
+</blockquote>
+<h4 id="byvaln"><a class="header" href="#byvaln"><code>byval(&lt;n&gt;)</code></a></h4>
+<blockquote>
+<blockquote>
+<p>Note: This attribute is not intended for public use. </p>
+<p>The reason is that this exists exclusively  for internal ABI legalization code to generate, 
+not for user code to generate.</p>
+<p>If you want to get this behavior, just pass an aggregate type by-value and the backend will handle it. </p>
+</blockquote>
+</blockquote>
+<p>This is a way of encoding a specific ABI constraint, i.e. &quot;by-value&quot; passing on the stack. </p>
+<p>When this is used, any callers are expected to push <code>&lt;n&gt;</code> bytes onto the stack, the pointer value
+itself is the beginning of that stack allocation.</p>
 <h1 id="stack-slots"><a class="header" href="#stack-slots">Stack Slots</a></h1>
 <p>Stack slots are how stack memory is allocated in SIR. They explicitly mark all the (static) stack memory that will
 be needed by a function, all this memory is allocated before the entry block of a function is entered.</p>

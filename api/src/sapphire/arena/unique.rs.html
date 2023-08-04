@@ -1066,7 +1066,7 @@
     <span class="kw">where
         </span>D: Deserializer&lt;<span class="lifetime">&#39;de</span>&gt;,
     {
-        deserializer.deserialize_seq(UniqueArenaMapVisitor(PhantomData::default()))
+        deserializer.deserialize_seq(UniqueArenaMapVisitor(PhantomData))
     }
 }
 

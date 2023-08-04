@@ -1,0 +1,3 @@
+(function() {var implementors = {
+"sapphire":[["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/nightly/core/fmt/trait.Display.html\" title=\"trait core::fmt::Display\">Display</a> for <a class=\"enum\" href=\"sapphire/codegen/enum.TargetPair.html\" title=\"enum sapphire::codegen::TargetPair\">TargetPair</a>"],["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/nightly/core/fmt/trait.Display.html\" title=\"trait core::fmt::Display\">Display</a> for <a class=\"struct\" href=\"sapphire/codegen/struct.LiveInterval.html\" title=\"struct sapphire::codegen::LiveInterval\">LiveInterval</a>"]]
+};if (window.register_implementors) {window.register_implementors(implementors);} else {window.pending_implementors = implementors;}})()

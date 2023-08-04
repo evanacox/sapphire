@@ -86,7 +86,7 @@
 
         <nav id="sidebar" class="sidebar" aria-label="Table of contents">
             <div class="sidebar-scrollbox">
-                <ol class="chapter"><li class="chapter-item expanded affix "><a href="index.html">Preface</a></li><li class="chapter-item expanded "><a href="sir.html"><strong aria-hidden="true">1.</strong> Sapphire IR</a></li><li class="chapter-item expanded "><a href="internals/index.html"><strong aria-hidden="true">2.</strong> Compiler Internals</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="internals/parser.html"><strong aria-hidden="true">2.1.</strong> SIR Parser</a></li><li class="chapter-item expanded "><a href="internals/sir-repr.html"><strong aria-hidden="true">2.2.</strong> SIR Representation</a></li></ol></li><li class="chapter-item expanded "><a href="tools/index.html"><strong aria-hidden="true">3.</strong> Tools</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="tools/filetest.html"><strong aria-hidden="true">3.1.</strong> filetest</a></li><li class="chapter-item expanded "><a href="tools/sirc.html"><strong aria-hidden="true">3.2.</strong> sirc</a></li></ol></li></ol>
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="index.html">Preface</a></li><li class="chapter-item expanded "><a href="sir.html"><strong aria-hidden="true">1.</strong> Sapphire IR</a></li><li class="chapter-item expanded "><a href="internals/index.html"><strong aria-hidden="true">2.</strong> Compiler Internals</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="internals/parser.html"><strong aria-hidden="true">2.1.</strong> SIR Parser</a></li><li class="chapter-item expanded "><a href="internals/sir-repr.html"><strong aria-hidden="true">2.2.</strong> SIR Representation</a></li><li class="chapter-item expanded "><a href="internals/codegen-pipeline.html"><strong aria-hidden="true">2.3.</strong> Codegen Pipeline</a></li><li class="chapter-item expanded "><a href="internals/reg-alloc.html"><strong aria-hidden="true">2.4.</strong> Register Allocation</a></li></ol></li><li class="chapter-item expanded "><a href="tools/index.html"><strong aria-hidden="true">3.</strong> Tools</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="tools/filetest.html"><strong aria-hidden="true">3.1.</strong> filetest</a></li><li class="chapter-item expanded "><a href="tools/sirc.html"><strong aria-hidden="true">3.2.</strong> sirc</a></li></ol></li><li class="chapter-item expanded "><a href="x86-64/index.html"><strong aria-hidden="true">4.</strong> x86-64 Backend</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="x86-64/calls.html"><strong aria-hidden="true">4.1.</strong> Calls</a></li><li class="chapter-item expanded "><a href="x86-64/legalization.html"><strong aria-hidden="true">4.2.</strong> Legalization</a></li></ol></li></ol>
             </div>
             <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
         </nav>
@@ -308,6 +308,39 @@ entry:
 </code></pre>
 <h1 id="functions"><a class="header" href="#functions">Functions</a></h1>
 <p>Functions are made up of a name, a call signature, a list of stack slots, and a list of basic blocks.</p>
+<h2 id="call-signature"><a class="header" href="#call-signature">Call Signature</a></h2>
+<h3 id="return-value"><a class="header" href="#return-value">Return Value</a></h3>
+<p>The return value can have the <code>noalias</code> and <code>nonnull</code> attributes. They work the same as with arguments.</p>
+<h3 id="function-arguments"><a class="header" href="#function-arguments">Function Arguments</a></h3>
+<p>Function arguments can have a type and an attribute list, the following attributes exist and can all only
+be applied to pointers.</p>
+<h4 id="noalias"><a class="header" href="#noalias"><code>noalias</code></a></h4>
+<p>This says that a pointer will not alias with any other pointers accessible to the function it is passed to, i.e.
+there is no way it can get another pointer that aliases the same memory (without <code>itop</code>/<code>offset</code>/etc). </p>
+<blockquote>
+<blockquote>
+<p>If the function does get memory that aliases the <code>noalias</code> pointer, the behavior is undefined.</p>
+</blockquote>
+</blockquote>
+<h4 id="nonnull"><a class="header" href="#nonnull"><code>nonnull</code></a></h4>
+<p>This says that the pointer is guaranteed to not be null.</p>
+<blockquote>
+<blockquote>
+<p>If the pointer is null, the behavior is undefined.</p>
+</blockquote>
+</blockquote>
+<h4 id="byvaln"><a class="header" href="#byvaln"><code>byval(&lt;n&gt;)</code></a></h4>
+<blockquote>
+<blockquote>
+<p>Note: This attribute is not intended for public use. </p>
+<p>The reason is that this exists exclusively  for internal ABI legalization code to generate, 
+not for user code to generate.</p>
+<p>If you want to get this behavior, just pass an aggregate type by-value and the backend will handle it. </p>
+</blockquote>
+</blockquote>
+<p>This is a way of encoding a specific ABI constraint, i.e. &quot;by-value&quot; passing on the stack. </p>
+<p>When this is used, any callers are expected to push <code>&lt;n&gt;</code> bytes onto the stack, the pointer value
+itself is the beginning of that stack allocation.</p>
 <h1 id="stack-slots"><a class="header" href="#stack-slots">Stack Slots</a></h1>
 <p>Stack slots are how stack memory is allocated in SIR. They explicitly mark all the (static) stack memory that will
 be needed by a function, all this memory is allocated before the entry block of a function is entered.</p>
@@ -995,6 +1028,41 @@ for a given SIR function is divided between two different types:</p>
 in a function that matters, whether it be instructions, blocks, referenced function signatures, etc. Everything
 is stored inside of arenas, and 'references' to those entities is passed around by indices into those arenas. </p>
 <h2 id="layout-the-layout"><a class="header" href="#layout-the-layout"><code>Layout</code>: The Layout</a></h2>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="codegen-pipeline"><a class="header" href="#codegen-pipeline">Codegen Pipeline</a></h1>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="register-allocation"><a class="header" href="#register-allocation">Register Allocation</a></h1>
+<p>Register allocators in Sapphire operate on MIR in a very specific format. This document will use x86-64
+MIR syntax, but the basic idea applies to all architectures.</p>
+<h2 id="expected-input"><a class="header" href="#expected-input">Expected Input</a></h2>
+<p>The expectation is that the MIR input is in non-SSA form using an unlimited set of virtual registers (v-regs).</p>
+<p>All φ nodes are expected to have already been eliminated and replaced with <code>mov</code> instructions. Effectively,
+it is assumed that if the MIR was executed on a machine that had an infinite number of registers, it would
+have the behavior of the original SIR. </p>
+<p>φ-elimination can be performed however the backend sees fit (e.g. the x86-64 backend performs critical edge 
+splitting over the SIR before lowering and translates φ-nodes into naive copies), but the behavior must be modeled 
+through copies (and therefore be visible to the register allocator with <code>MachInst::is_move</code>).</p>
+<h3 id="constraints"><a class="header" href="#constraints">Constraints</a></h3>
+<p>Register constraints are expected to be expressed via instructions that operate directly on specific physical 
+registers. The register allocator is expected to obey these constraints. </p>
+<h3 id="stack-frames"><a class="header" href="#stack-frames">Stack Frames</a></h3>
+<p>It is expected that the prologue/epilogue code not be present (if necessary), as the rewriter will emit
+the prologue and epilogue where necessary.</p>
+<h3 id="parameters--return-values"><a class="header" href="#parameters--return-values">Parameters &amp; Return Values</a></h3>
+<p>Parameters located in registers are the most rigid expectation the register allocator has, they are expected to be
+implemented via <code>mov</code>s from physical registers into v-regs. The stack frame stores which ones are used for this. </p>
+<p>Return values must work in a similar way if they write to registers, they are expected to be <code>mov</code>s
+from v-regs into physical registers as determined by the ABI.</p>
+<p>Example:</p>
+<pre><code class="language-x86asm">foo:
+    mov vi4, edi ; parameter `mov`s start here
+    mov vi3, esi ; .
+    mov vi2, edx ; .
+    mov vi1, ecx ; .
+    mov vi0, vi1 ; regular codegen starts here
+    add vi0, vi2
+    ; ...
+    mov eax, vi0 ; return `mov`s start here
+    ret          ; regular codegen continues here
+</code></pre>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="tools"><a class="header" href="#tools">Tools</a></h1>
 <p>Sapphire comes with several CLI tools for working with SIR, this is the
 documentation on how those tools work and how to use them. </p>
@@ -1086,6 +1154,71 @@ entry:
 }
 </code></pre>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="sirc-sir-compiler"><a class="header" href="#sirc-sir-compiler"><code>sirc</code>: SIR Compiler</a></h1>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="x86-64-backend"><a class="header" href="#x86-64-backend">x86-64 Backend</a></h1>
+<p>This section documents the different constraints, assumptions and limitations
+of the current x86-64 backend. It also documents the specific implementation
+quirks of the backend.</p>
+<h2 id="φ-elimination"><a class="header" href="#φ-elimination">φ Elimination</a></h2>
+<p>φ elimination (also known as SSA destruction) is performed in the naive &quot;translate into copies&quot; method, but this has
+known limitations (see lost copy problem). It is <strong>assumed</strong> that the <code>split-crit-edges</code> 
+pass has been run over the SIR module before codegen begins, if this is not done
+incorrect code can be emitted.</p>
+<h2 id="type-representation"><a class="header" href="#type-representation">Type Representation</a></h2>
+<h3 id="bool"><a class="header" href="#bool"><code>bool</code></a></h3>
+<p><code>bool</code> is represented the same way as an <code>i8</code> (i.e. in <code>byte</code>-sized partial registers), with <code>false</code> being zero
+and <code>true</code> being <code>1</code>.</p>
+<h2 id="condbr-and-icmpfcmp-interactions"><a class="header" href="#condbr-and-icmpfcmp-interactions"><code>condbr</code> and <code>icmp</code>/<code>fcmp</code> Interactions</a></h2>
+<p>Currently, the backend has two states for implementing <code>condbr</code>:</p>
+<ol>
+<li>The comparison is the instruction directly before the <code>condbr</code></li>
+<li>The comparison is not directly before the <code>condbr</code></li>
+</ol>
+<p>This is a bit of a hack, but it's to ensure that CPU flags are maintained correctly.
+The two states are implemented like so:</p>
+<h3 id="directly-before"><a class="header" href="#directly-before">Directly Before</a></h3>
+<p>This is how you'd want it to be emitted, a <code>cmp</code>-like instruction followed by
+a jump that models the condition in the comparison. You get code like this emitted:</p>
+<pre><code class="language-x86asm">cmp rax, rdx
+jl .TRUE
+jmp .FALSE
+</code></pre>
+<p>In this case, the <code>icmp</code>/<code>fcmp</code> does <strong>not</strong> have a constrained register, and is
+only emitted to manipulate CPU flags.</p>
+<h3 id="not-directly-before"><a class="header" href="#not-directly-before">Not Directly Before</a></h3>
+<p>This is the case that needs to be optimized better, but for now this is what it does. The <code>condbr</code>
+places a register constraint on the comparison instruction, and it emits instructions to jump to the
+true branch if that register is 1, and jump to the false branch otherwise. It effectively
+generates this code:</p>
+<pre><code class="language-x86asm">test R, R
+jnz .TRUE
+jmp .FALSE
+</code></pre>
+<p>When the comparison is emitted, it is  expected to <em>also</em> emit a <code>set*</code> instruction to copy the condition 
+to a register, so that the <code>test</code> previously emitted will work. The end result should look like this:</p>
+<pre><code class="language-x86asm">cmp rax, rdx
+xor R, R
+setle R
+...
+test R, R
+jnz .TRUE
+jmp .FALSE
+</code></pre>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="calls"><a class="header" href="#calls">Calls</a></h1>
+<p>Calls are treated as-if they didn't affect the stack layout at all, and are lowered
+such that they don't affect the prologue/epilogue at all. </p>
+<p>All calls that require stack space for parameter passing and whatnot are expected
+to generate their own stack manipulation code. </p>
+<h2 id="system-v"><a class="header" href="#system-v">System V</a></h2>
+<p>For System V, this is implemented via <code>push</code> instructions and
+an <code>add rsp, N</code> after the <code>call</code> that fixes back up the stack.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="abi-legalization"><a class="header" href="#abi-legalization">ABI Legalization</a></h1>
+<p>The x86-64 backend expects a specific subset of SIR as input.</p>
+<p>The gist of it is the follows:</p>
+<ol>
+<li>All aggregates that would be put into registers according to calling convention rules
+remain as aggregates in parameters</li>
+<li>All other aggregates that would be passed in memory </li>
+</ol>
 
                     </main>
 

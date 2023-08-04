@@ -140,6 +140,21 @@
 <a href="#137" id="137">137</a>
 <a href="#138" id="138">138</a>
 <a href="#139" id="139">139</a>
+<a href="#140" id="140">140</a>
+<a href="#141" id="141">141</a>
+<a href="#142" id="142">142</a>
+<a href="#143" id="143">143</a>
+<a href="#144" id="144">144</a>
+<a href="#145" id="145">145</a>
+<a href="#146" id="146">146</a>
+<a href="#147" id="147">147</a>
+<a href="#148" id="148">148</a>
+<a href="#149" id="149">149</a>
+<a href="#150" id="150">150</a>
+<a href="#151" id="151">151</a>
+<a href="#152" id="152">152</a>
+<a href="#153" id="153">153</a>
+<a href="#154" id="154">154</a>
 </pre></div><pre class="rust"><code><span class="comment">//======---------------------------------------------------------------======//
 //                                                                           //
 // Copyright 2022-2023 Evan Cox &lt;evanacox00@gmail.com&gt;. All rights reserved. //
@@ -229,51 +244,66 @@
 <span class="kw">pub struct </span>TestDetails {
     <span class="kw">pub </span>elapsed: Duration,
     <span class="kw">pub </span>output: <span class="prelude-ty">Result</span>&lt;(), TestFailure&gt;,
+    <span class="kw">pub </span>subdir: <span class="kw-2">&amp;</span><span class="lifetime">&#39;static </span>str,
 }
 
 <span class="kw">pub struct </span>Subtest {
-    subdir: <span class="kw-2">&amp;</span><span class="lifetime">&#39;static </span>str,
+    subdirs: <span class="kw-2">&amp;</span><span class="lifetime">&#39;static </span>[<span class="kw-2">&amp;</span><span class="lifetime">&#39;static </span>str],
     runner: <span class="kw">fn</span>(<span class="kw-2">&amp;</span>str, <span class="kw-2">&amp;</span>str) -&gt; TestResult,
 }
 
 <span class="kw">impl </span>Subtest {
-    <span class="kw">pub const fn </span>new(subdir: <span class="kw-2">&amp;</span><span class="lifetime">&#39;static </span>str, runner: <span class="kw">fn</span>(<span class="kw-2">&amp;</span>str, <span class="kw-2">&amp;</span>str) -&gt; TestResult) -&gt; <span class="self">Self </span>{
-        <span class="self">Self </span>{ subdir, runner }
+    <span class="kw">pub const fn </span>new(
+        subdirs: <span class="kw-2">&amp;</span><span class="lifetime">&#39;static </span>[<span class="kw-2">&amp;</span><span class="lifetime">&#39;static </span>str],
+        runner: <span class="kw">fn</span>(<span class="kw-2">&amp;</span>str, <span class="kw-2">&amp;</span>str) -&gt; TestResult,
+    ) -&gt; <span class="self">Self </span>{
+        <span class="self">Self </span>{ subdirs, runner }
     }
 
-    <span class="kw">pub fn </span>subdir(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span><span class="lifetime">&#39;static </span>str {
-        <span class="self">self</span>.subdir
+    <span class="kw">pub fn </span>main_subdir(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span><span class="lifetime">&#39;static </span>str {
+        <span class="self">self</span>.subdirs[<span class="number">0</span>]
+    }
+
+    <span class="kw">pub fn </span>subdirs(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span><span class="lifetime">&#39;static </span>[<span class="kw-2">&amp;</span><span class="lifetime">&#39;static </span>str] {
+        <span class="self">self</span>.subdirs
     }
 
     <span class="kw">pub fn </span>run(<span class="kw-2">&amp;</span><span class="self">self</span>, pool: <span class="kw-2">&amp;mut </span>ThreadPool) -&gt; Receiver&lt;(<span class="kw-2">&amp;</span><span class="lifetime">&#39;static </span>str, TestDetails)&gt; {
         <span class="kw">let </span>(send, recv) = mpsc::channel();
 
-        <span class="kw">for </span>(name, contents, case) <span class="kw">in </span>discovery::cases_in_subdir(<span class="self">self</span>.subdir) {
-            <span class="kw">let </span>send = send.clone();
-            <span class="kw">let </span>runner = <span class="self">self</span>.runner;
+        <span class="kw">for </span>subdir <span class="kw">in </span><span class="self">self</span>.subdirs {
+            panic::set_hook(Box::new(panic_hook));
 
-            pool.execute(<span class="kw">move </span>|| {
-                <span class="kw">let </span>start = SystemTime::now();
-                <span class="kw">let </span>output = panic::catch_unwind(|| runner(name, contents));
-                <span class="kw">let </span>end = SystemTime::now();
+            <span class="kw">for </span>(name, contents, case) <span class="kw">in </span>discovery::cases_in_subdir(subdir) {
+                <span class="kw">let </span>send = send.clone();
+                <span class="kw">let </span>runner = <span class="self">self</span>.runner;
 
-                <span class="kw">let </span>result = <span class="kw">match </span>output {
-                    <span class="prelude-val">Ok</span>(out) =&gt; case.check(out),
-                    <span class="prelude-val">Err</span>(<span class="kw">_</span>) =&gt; {
-                        <span class="kw">let </span>(bt, message) = FAILURE.with(|failure| failure.take().unwrap());
+                pool.execute(<span class="kw">move </span>|| {
+                    <span class="kw">let </span>start = SystemTime::now();
+                    <span class="kw">let </span>output = panic::catch_unwind(|| runner(name, contents));
+                    <span class="kw">let </span>end = SystemTime::now();
 
-                        <span class="prelude-val">Err</span>(TestFailure::Panic(bt, message))
-                    }
-                };
+                    <span class="kw">let </span>result = <span class="kw">match </span>output {
+                        <span class="prelude-val">Ok</span>(out) =&gt; case.check(out),
+                        <span class="prelude-val">Err</span>(<span class="kw">_</span>) =&gt; {
+                            <span class="kw">let </span>(bt, message) = FAILURE.with(|failure| failure.take().unwrap());
 
-                <span class="comment">// we want to display the time taken on a per-test basis
-                </span><span class="kw">let </span>details = TestDetails {
-                    elapsed: end.duration_since(start).unwrap(),
-                    output: result,
-                };
+                            <span class="prelude-val">Err</span>(TestFailure::Panic(bt, message))
+                        }
+                    };
 
-                send.send((name.as_str(), details)).expect(<span class="string">&quot;unable to send&quot;</span>)
-            });
+                    <span class="comment">// we want to display the time taken on a per-test basis
+                    </span><span class="kw">let </span>details = TestDetails {
+                        elapsed: end.duration_since(start).unwrap(),
+                        output: result,
+                        subdir,
+                    };
+
+                    send.send((name.as_str(), details)).expect(<span class="string">&quot;unable to send&quot;</span>)
+                });
+            }
+
+            <span class="kw">let _ </span>= panic::take_hook();
         }
 
         recv

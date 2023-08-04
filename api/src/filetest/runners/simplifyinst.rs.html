@@ -25,7 +25,7 @@
 <a href="#22" id="22">22</a>
 </pre></div><pre class="rust"><code><span class="comment">//======---------------------------------------------------------------======//
 //                                                                           //
-// Copyright 2022 Evan Cox &lt;evanacox00@gmail.com&gt;. All rights reserved.      //
+// Copyright 2022-2023 Evan Cox &lt;evanacox00@gmail.com&gt;. All rights reserved. //
 //                                                                           //
 // Use of this source code is governed by a BSD-style license that can be    //
 // found in the LICENSE.txt file at the root of this project, or at the      //
@@ -34,7 +34,7 @@
 //======---------------------------------------------------------------======//
 
 </span><span class="kw">use </span><span class="kw">crate</span>::runners::optimization_runner::<span class="kw-2">*</span>;
-<span class="kw">use </span><span class="kw">crate</span>::subtest::{Subtest, TestResult};
+<span class="kw">use </span><span class="kw">crate</span>::subtest::Subtest;
 <span class="kw">use </span>sapphire::transforms::SimplifyInstPass;
 
 <span class="macro">runner_for_opt!</span>(
@@ -43,7 +43,7 @@
 );
 
 <span class="kw">pub const fn </span>simplifyinst_subtest() -&gt; Subtest {
-    Subtest::new(<span class="string">&quot;simplifyinst&quot;</span>, simplifyinst)
+    Subtest::new(<span class="kw-2">&amp;</span>[<span class="string">&quot;simplifyinst&quot;</span>], simplifyinst)
 }
 </code></pre></div></section></main><script>
 renderMathInElement(document.body, {

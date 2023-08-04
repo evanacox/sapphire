@@ -85,6 +85,12 @@
 <a href="#82" id="82">82</a>
 <a href="#83" id="83">83</a>
 <a href="#84" id="84">84</a>
+<a href="#85" id="85">85</a>
+<a href="#86" id="86">86</a>
+<a href="#87" id="87">87</a>
+<a href="#88" id="88">88</a>
+<a href="#89" id="89">89</a>
+<a href="#90" id="90">90</a>
 </pre></div><pre class="rust"><code><span class="comment">//======---------------------------------------------------------------======//
 //                                                                           //
 // Copyright 2022-2023 Evan Cox &lt;evanacox00@gmail.com&gt;. All rights reserved. //
@@ -102,13 +108,16 @@
 <span class="kw">use </span>std::time::Duration;
 <span class="kw">use </span>threadpool::ThreadPool;
 
-<span class="kw">const </span>SUBTESTS: [Subtest; <span class="number">6</span>] = [
+<span class="kw">const </span>SUBTESTS: [Subtest; <span class="number">9</span>] = [
     parse_subtest(),
     domtree_subtest(),
     dce_subtest(),
     mem2reg_subtest(),
     gvn_subtest(),
     simplifyinst_subtest(),
+    split_crit_edges_subtest(),
+    isel_greedy_x86_subtest(),
+    lsra_x86_subtest(),
 ];
 
 <span class="kw">fn </span>pool_for_jobs(jobs: <span class="prelude-ty">Option</span>&lt;usize&gt;) -&gt; ThreadPool {
@@ -130,7 +139,7 @@
             total += <span class="number">1</span>;
             total_time += result.elapsed;
 
-            <span class="kw">if let </span><span class="prelude-val">Some</span>(rest) = display::print_subtest_result(test, file, result) {
+            <span class="kw">if let </span><span class="prelude-val">Some</span>(rest) = display::print_subtest_result(file, result) {
                 failed.push(rest);
             }
         }
@@ -166,6 +175,9 @@
         <span class="string">&quot;mem2reg&quot; </span>=&gt; run_tests(<span class="kw-2">&amp;</span>SUBTESTS[<span class="number">3</span>..<span class="number">4</span>], <span class="kw-2">&amp;mut </span>pool),
         <span class="string">&quot;gvn&quot; </span>=&gt; run_tests(<span class="kw-2">&amp;</span>SUBTESTS[<span class="number">4</span>..<span class="number">5</span>], <span class="kw-2">&amp;mut </span>pool),
         <span class="string">&quot;simplifyinst&quot; </span>=&gt; run_tests(<span class="kw-2">&amp;</span>SUBTESTS[<span class="number">5</span>..<span class="number">6</span>], <span class="kw-2">&amp;mut </span>pool),
+        <span class="string">&quot;splitcritedges&quot; </span>=&gt; run_tests(<span class="kw-2">&amp;</span>SUBTESTS[<span class="number">6</span>..<span class="number">7</span>], <span class="kw-2">&amp;mut </span>pool),
+        <span class="string">&quot;isel-x86&quot; </span>=&gt; run_tests(<span class="kw-2">&amp;</span>SUBTESTS[<span class="number">7</span>..<span class="number">8</span>], <span class="kw-2">&amp;mut </span>pool),
+        <span class="string">&quot;lsra-x86&quot; </span>=&gt; run_tests(<span class="kw-2">&amp;</span>SUBTESTS[<span class="number">8</span>..<span class="number">9</span>], <span class="kw-2">&amp;mut </span>pool),
         <span class="kw">_ </span>=&gt; <span class="macro">unreachable!</span>(),
     }
 }

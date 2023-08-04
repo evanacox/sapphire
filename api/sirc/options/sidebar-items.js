@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["OptLevel","RegAlloc"],"fn":["default_target","fixed_intervals","opt_level","parse_options","print","reg_alloc","target_pair","x86_64_asm_format","x86_64_object_format"],"static":["DESCRIPTION"],"struct":["Options"]};

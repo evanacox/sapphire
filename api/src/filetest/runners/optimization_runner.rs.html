@@ -46,9 +46,10 @@
 <a href="#43" id="43">43</a>
 <a href="#44" id="44">44</a>
 <a href="#45" id="45">45</a>
+<a href="#46" id="46">46</a>
 </pre></div><pre class="rust"><code><span class="comment">//======---------------------------------------------------------------======//
 //                                                                           //
-// Copyright 2022 Evan Cox &lt;evanacox00@gmail.com&gt;. All rights reserved.      //
+// Copyright 2022-2023 Evan Cox &lt;evanacox00@gmail.com&gt;. All rights reserved. //
 //                                                                           //
 // Use of this source code is governed by a BSD-style license that can be    //
 // found in the LICENSE.txt file at the root of this project, or at the      //
@@ -59,6 +60,7 @@
 </span><span class="macro">macro_rules! </span>runner_for_opt {
     (<span class="macro-nonterminal">$name</span>:ident, <span class="macro-nonterminal">$opt</span>:expr) =&gt; {
         <span class="kw">fn </span><span class="macro-nonterminal">$name</span>(name: <span class="kw-2">&amp;</span>str, content: <span class="kw-2">&amp;</span>str) -&gt; <span class="kw">crate</span>::subtest::TestResult {
+            <span class="kw">use </span><span class="kw">crate</span>::subtest::TestResult;
             <span class="kw">use </span>::sapphire::analysis::<span class="kw-2">*</span>;
             <span class="kw">use </span>::sapphire::pass::<span class="kw-2">*</span>;
             <span class="kw">use </span>::sapphire::transforms;

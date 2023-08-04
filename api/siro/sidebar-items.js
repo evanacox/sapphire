@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["main","optimize_single_file","parse_options"]};

@@ -1409,7 +1409,7 @@
     <span class="kw">where
         </span>D: Deserializer&lt;<span class="lifetime">&#39;de</span>&gt;,
     {
-        deserializer.deserialize_seq(TinyArrayVisitor(PhantomData::default()))
+        deserializer.deserialize_seq(TinyArrayVisitor(PhantomData))
     }
 }
 

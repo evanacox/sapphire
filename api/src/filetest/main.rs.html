@@ -89,6 +89,14 @@
 <a href="#86" id="86">86</a>
 <a href="#87" id="87">87</a>
 <a href="#88" id="88">88</a>
+<a href="#89" id="89">89</a>
+<a href="#90" id="90">90</a>
+<a href="#91" id="91">91</a>
+<a href="#92" id="92">92</a>
+<a href="#93" id="93">93</a>
+<a href="#94" id="94">94</a>
+<a href="#95" id="95">95</a>
+<a href="#96" id="96">96</a>
 </pre></div><pre class="rust"><code><span class="comment">//======---------------------------------------------------------------======//
 //                                                                           //
 // Copyright 2022-2023 Evan Cox &lt;evanacox00@gmail.com&gt;. All rights reserved. //
@@ -120,8 +128,6 @@
 <span class="kw">fn </span>main() {
     <span class="attr">#[cfg(windows)]
     </span>ansi_term::enable_ansi_support().expect(<span class="string">&quot;unable to enable ANSI&quot;</span>);
-
-    std::panic::set_hook(Box::new(subtest::panic_hook));
 
     <span class="kw">let </span>jobs = cli::jobs();
     <span class="kw">let </span>subtest = subtest();
@@ -176,6 +182,16 @@
 <span class="attr">#[test]
 </span><span class="kw">fn </span>test_simplifyinst() {
     <span class="macro">assert!</span>(<span class="macro">matches!</span>(run_subtest(<span class="string">&quot;simplifyinst&quot;</span>, <span class="prelude-val">Some</span>(<span class="number">1</span>)), <span class="prelude-val">Ok</span>(())))
+}
+
+<span class="attr">#[test]
+</span><span class="kw">fn </span>test_isel_x86() {
+    <span class="macro">assert!</span>(<span class="macro">matches!</span>(run_subtest(<span class="string">&quot;isel-x86&quot;</span>, <span class="prelude-val">Some</span>(<span class="number">1</span>)), <span class="prelude-val">Ok</span>(())))
+}
+
+<span class="attr">#[test]
+</span><span class="kw">fn </span>test_lsra_x86() {
+    <span class="macro">assert!</span>(<span class="macro">matches!</span>(run_subtest(<span class="string">&quot;lsra-x86&quot;</span>, <span class="prelude-val">Some</span>(<span class="number">1</span>)), <span class="prelude-val">Ok</span>(())))
 }
 </code></pre></div></section></main><script>
 renderMathInElement(document.body, {

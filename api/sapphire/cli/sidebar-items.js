@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["IRFormat","MachineFormat"],"fn":["default","emit_machine_format","emit_sir","inputs","jobs","output","tool","tool_with","verbose"],"struct":["BaseOptions"]};
+window.SIDEBAR_ITEMS = {"enum":["FramePointer","IRFormat","MachineFormat"],"fn":["default","emit_machine_format","emit_sir","frame_pointer","inputs","jobs","output","passes","tool","tool_with","verbose","verify"],"struct":["BaseOptions"]};

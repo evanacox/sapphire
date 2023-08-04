@@ -1069,6 +1069,67 @@
 <a href="#1066" id="1066">1066</a>
 <a href="#1067" id="1067">1067</a>
 <a href="#1068" id="1068">1068</a>
+<a href="#1069" id="1069">1069</a>
+<a href="#1070" id="1070">1070</a>
+<a href="#1071" id="1071">1071</a>
+<a href="#1072" id="1072">1072</a>
+<a href="#1073" id="1073">1073</a>
+<a href="#1074" id="1074">1074</a>
+<a href="#1075" id="1075">1075</a>
+<a href="#1076" id="1076">1076</a>
+<a href="#1077" id="1077">1077</a>
+<a href="#1078" id="1078">1078</a>
+<a href="#1079" id="1079">1079</a>
+<a href="#1080" id="1080">1080</a>
+<a href="#1081" id="1081">1081</a>
+<a href="#1082" id="1082">1082</a>
+<a href="#1083" id="1083">1083</a>
+<a href="#1084" id="1084">1084</a>
+<a href="#1085" id="1085">1085</a>
+<a href="#1086" id="1086">1086</a>
+<a href="#1087" id="1087">1087</a>
+<a href="#1088" id="1088">1088</a>
+<a href="#1089" id="1089">1089</a>
+<a href="#1090" id="1090">1090</a>
+<a href="#1091" id="1091">1091</a>
+<a href="#1092" id="1092">1092</a>
+<a href="#1093" id="1093">1093</a>
+<a href="#1094" id="1094">1094</a>
+<a href="#1095" id="1095">1095</a>
+<a href="#1096" id="1096">1096</a>
+<a href="#1097" id="1097">1097</a>
+<a href="#1098" id="1098">1098</a>
+<a href="#1099" id="1099">1099</a>
+<a href="#1100" id="1100">1100</a>
+<a href="#1101" id="1101">1101</a>
+<a href="#1102" id="1102">1102</a>
+<a href="#1103" id="1103">1103</a>
+<a href="#1104" id="1104">1104</a>
+<a href="#1105" id="1105">1105</a>
+<a href="#1106" id="1106">1106</a>
+<a href="#1107" id="1107">1107</a>
+<a href="#1108" id="1108">1108</a>
+<a href="#1109" id="1109">1109</a>
+<a href="#1110" id="1110">1110</a>
+<a href="#1111" id="1111">1111</a>
+<a href="#1112" id="1112">1112</a>
+<a href="#1113" id="1113">1113</a>
+<a href="#1114" id="1114">1114</a>
+<a href="#1115" id="1115">1115</a>
+<a href="#1116" id="1116">1116</a>
+<a href="#1117" id="1117">1117</a>
+<a href="#1118" id="1118">1118</a>
+<a href="#1119" id="1119">1119</a>
+<a href="#1120" id="1120">1120</a>
+<a href="#1121" id="1121">1121</a>
+<a href="#1122" id="1122">1122</a>
+<a href="#1123" id="1123">1123</a>
+<a href="#1124" id="1124">1124</a>
+<a href="#1125" id="1125">1125</a>
+<a href="#1126" id="1126">1126</a>
+<a href="#1127" id="1127">1127</a>
+<a href="#1128" id="1128">1128</a>
+<a href="#1129" id="1129">1129</a>
 </pre></div><pre class="rust"><code><span class="comment">//======---------------------------------------------------------------======//
 //                                                                           //
 // Copyright 2022-2023 Evan Cox &lt;evanacox00@gmail.com&gt;. All rights reserved. //
@@ -1085,8 +1146,9 @@
 <span class="kw">use </span><span class="kw">crate</span>::pass::<span class="kw-2">*</span>;
 <span class="kw">use </span><span class="kw">crate</span>::utility::SaHashSet;
 <span class="kw">use </span>std::cmp::Ordering;
+<span class="kw">use </span>std::iter;
 
-<span class="doccomment">/// Analysis pass that wraps the [`verify_module`] function.
+<span class="doccomment">/// An IR validity verification pass.
 ///
 /// This scans the entire module, and will do nothing if the module is valid. If
 /// the module isn&#39;t valid, it will abort with an error.
@@ -1333,17 +1395,77 @@
         <span class="self">self</span>.return_ty = function.signature().return_ty();
         <span class="self">self</span>.prev_defined.clear();
 
+        <span class="kw">if let </span><span class="prelude-val">Some</span>((ty, attributes)) = function.signature().return_complete() {
+            <span class="kw">if </span>attributes != RetAttributes::NONE {
+                <span class="macro">verify_assert!</span>(
+                    <span class="self">self</span>,
+                    DebugInfo::fake(),
+                    ty.is_ptr(),
+                    <span class="macro">format!</span>(
+                        <span class="string">&quot;function &#39;{}&#39; can only have return attributes on `ptr` return values&quot;</span>,
+                        function.name()
+                    )
+                );
+            }
+        }
+
         <span class="kw">if let </span><span class="prelude-val">Some</span>(def) = function.definition() {
-            <span class="kw">let </span>cfg = ControlFlowGraph::compute(function);
-            <span class="kw">let </span>domtree = DominatorTree::compute(function, <span class="kw-2">&amp;</span>cfg);
+            <span class="kw">if let </span><span class="prelude-val">Some</span>(bb) = def.layout.entry_block() {
+                <span class="kw">let </span>sig = function.signature();
+                <span class="kw">let </span>bb_params = def.dfg.block(bb).params();
+                <span class="kw">let </span>sig_params = sig.params();
 
-            <span class="self">self</span>.domtree.replace(domtree);
+                <span class="macro">verify_assert_eq!</span>(
+                    <span class="self">self</span>,
+                    DebugInfo::fake(),
+                    bb_params.len(),
+                    sig_params.len(),
+                    <span class="macro">format!</span>(<span class="string">&quot;entry block for function &#39;{}&#39; must have same number of parameters as function signature&quot;</span>, function.name())
+                );
 
-            <span class="kw">let </span>reachable: Vec&lt;Block&gt; =
-                <span class="self">self</span>.domtree.as_ref().unwrap().reverse_postorder().collect();
+                <span class="kw">for </span>(<span class="kw-2">&amp;</span>bb_param, <span class="kw-2">&amp;</span>(sig_param, attributes)) <span class="kw">in
+                    </span>iter::zip(bb_params.iter(), sig_params.iter())
+                {
+                    <span class="kw">if </span>attributes != ParamAttributes::NONE {
+                        <span class="macro">verify_assert!</span>(
+                            <span class="self">self</span>,
+                            DebugInfo::fake(),
+                            sig_param.is_ptr(),
+                            <span class="macro">format!</span>(<span class="string">&quot;function &#39;{}&#39; can only have parameter attributes on `ptr` parameters&quot;</span>, function.name())
+                        );
+                    }
 
-            <span class="kw">for </span>block <span class="kw">in </span>reachable {
-                <span class="self">self</span>.visit_block(block, def);
+                    <span class="macro">verify_assert_eq!</span>(
+                        <span class="self">self</span>,
+                        def.dfg.debug(bb_param),
+                        def.dfg.ty(bb_param),
+                        sig_param,
+                        <span class="string">&quot;entry block parameter does not match in type to function signature&quot;
+                    </span>);
+                }
+
+                <span class="kw">let </span>cfg = ControlFlowGraph::compute(function);
+                <span class="kw">let </span>domtree = DominatorTree::compute(function, <span class="kw-2">&amp;</span>cfg);
+
+                <span class="self">self</span>.domtree.replace(domtree);
+
+                <span class="macro">verify_assert_eq!</span>(
+                    <span class="self">self</span>,
+                    DebugInfo::fake(),
+                    cfg.n_predecessors(bb),
+                    <span class="number">0</span>,
+                    <span class="macro">format!</span>(
+                        <span class="string">&quot;entry block for function &#39;{}&#39; must not have any predecessors&quot;</span>,
+                        function.name()
+                    )
+                );
+
+                <span class="kw">let </span>reachable: Vec&lt;Block&gt; =
+                    <span class="self">self</span>.domtree.as_ref().unwrap().reverse_postorder().collect();
+
+                <span class="kw">for </span>block <span class="kw">in </span>reachable {
+                    <span class="self">self</span>.visit_block(block, def);
+                }
             }
         }
     }
@@ -1375,7 +1497,7 @@
             <span class="string">&quot;cannot have the same `Inst` object twice in a given layout&quot;
         </span>);
 
-        <span class="kw">for </span>operand <span class="kw">in </span>def.dfg.data(inst).operands() {
+        <span class="kw">for </span>operand <span class="kw">in </span>def.dfg.inst_data(inst).operands() {
             <span class="kw">let </span>value_def = def.dfg.value_def(<span class="kw-2">*</span>operand);
             <span class="kw">let </span>defined_in = <span class="kw">match </span>value_def {
                 ValueDef::Inst(i) =&gt; {
@@ -1430,7 +1552,7 @@
             }
         }
 
-        <span class="self">self</span>.dispatch_inst(inst, def.dfg.data(inst), def);
+        <span class="self">self</span>.dispatch_inst(inst, def.dfg.inst_data(inst), def);
     }
 
     <span class="kw">fn </span>visit_call(<span class="kw-2">&amp;mut </span><span class="self">self</span>, inst: Inst, data: <span class="kw-2">&amp;</span>CallInst, def: <span class="kw-2">&amp;</span>FunctionDefinition) {

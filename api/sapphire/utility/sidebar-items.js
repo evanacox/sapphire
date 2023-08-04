@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["stringify_tree"],"struct":["IntoIter","PackedOption","RawSpinMutex","SpinMutex","Str","StringPool","TinyArray"],"trait":["IntoTree","Packable"],"type":["SaHashMap","SaHashSet"]};
+window.SIDEBAR_ITEMS = {"fn":["shift_increment","stringify_tree"],"struct":["IntoIter","PackedOption","RawSpinMutex","SpinMutex","Str","StringPool","ThreadPool","TinyArray"],"trait":["IntoTree","Packable"],"type":["SaHashMap","SaHashSet"]};
