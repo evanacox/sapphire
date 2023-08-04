@@ -1,0 +1,13 @@
+; MATCH-SECTION
+;
+; test:
+;     mov vi1, rdi
+;     mov vi0, byte ptr [vi1]
+;     mov eax, vi0
+;     ret
+;;
+fn i8 @test(ptr) {
+entry(ptr %0):
+    %1 = load i8, ptr %0
+    ret i8 %1
+}

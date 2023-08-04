@@ -1,6 +1,6 @@
 //======---------------------------------------------------------------======//
 //                                                                           //
-// Copyright 2022 Evan Cox <evanacox00@gmail.com>. All rights reserved.      //
+// Copyright 2022-2023 Evan Cox <evanacox00@gmail.com>. All rights reserved. //
 //                                                                           //
 // Use of this source code is governed by a BSD-style license that can be    //
 // found in the LICENSE.txt file at the root of this project, or at the      //
@@ -11,6 +11,7 @@
 macro_rules! runner_for_opt {
     ($name:ident, $opt:expr) => {
         fn $name(name: &str, content: &str) -> crate::subtest::TestResult {
+            use crate::subtest::TestResult;
             use ::sapphire::analysis::*;
             use ::sapphire::pass::*;
             use ::sapphire::transforms;

@@ -1,0 +1,12 @@
+; MATCH-SECTION
+;
+; test:
+;     movabs vi0, 9223372036854775807
+;     mov rax, vi0
+;     ret
+;;
+fn i64 @test() {
+entry:
+    %0 = iconst i64 9223372036854775807
+    ret i64 %0
+}

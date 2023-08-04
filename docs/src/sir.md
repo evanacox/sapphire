@@ -153,6 +153,44 @@ Structures are padded, and their size is thus determined by the order of each el
 
 Functions are made up of a name, a call signature, a list of stack slots, and a list of basic blocks.
 
+## Call Signature 
+
+### Return Value
+
+The return value can have the `noalias` and `nonnull` attributes. They work the same as with arguments.
+
+### Function Arguments
+
+Function arguments can have a type and an attribute list, the following attributes exist and can all only
+be applied to pointers.
+
+#### `noalias`
+
+This says that a pointer will not alias with any other pointers accessible to the function it is passed to, i.e.
+there is no way it can get another pointer that aliases the same memory (without `itop`/`offset`/etc). 
+
+> > If the function does get memory that aliases the `noalias` pointer, the behavior is undefined.
+
+#### `nonnull`
+
+This says that the pointer is guaranteed to not be null.
+
+> > If the pointer is null, the behavior is undefined.
+
+#### `byval(<n>)`
+
+> > Note: This attribute is not intended for public use. 
+> > 
+> > The reason is that this exists exclusively  for internal ABI legalization code to generate, 
+> > not for user code to generate.
+> > 
+> > If you want to get this behavior, just pass an aggregate type by-value and the backend will handle it. 
+
+This is a way of encoding a specific ABI constraint, i.e. "by-value" passing on the stack. 
+
+When this is used, any callers are expected to push `<n>` bytes onto the stack, the pointer value
+itself is the beginning of that stack allocation.
+
 # Stack Slots
 
 Stack slots are how stack memory is allocated in SIR. They explicitly mark all the (static) stack memory that will

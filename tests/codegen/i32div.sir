@@ -1,0 +1,6 @@
+; STANDARD
+fn i32 @big(i32, i32) {
+entry(i32 %0, i32 %1):
+  %2 = sdiv i32 %0, %1
+  ret i32 %2
+}

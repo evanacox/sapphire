@@ -9,15 +9,15 @@
 //======---------------------------------------------------------------======//
 
 use crate::ir::*;
-use crate::utility::{PackedOption, Str, TinyArray};
+use crate::utility::{Str, TinyArray};
 use smallvec::SmallVec;
 
 /// Helper type for building a [`Signature`].
 pub struct SigBuilder {
     vararg: bool,
     abi: CallConv,
-    ret: PackedOption<Type>,
-    params: SmallVec<[Type; 4]>,
+    ret: Option<(Type, RetAttributes)>,
+    params: SmallVec<[(Type, ParamAttributes); 4]>,
 }
 
 impl SigBuilder {
@@ -26,7 +26,7 @@ impl SigBuilder {
         Self {
             vararg: false,
             abi: CallConv::C,
-            ret: None.into(),
+            ret: None,
             params: SmallVec::default(),
         }
     }
@@ -56,14 +56,24 @@ impl SigBuilder {
         Self {
             vararg: self.vararg,
             abi: self.abi,
-            ret: ret.into(),
+            ret: ret.map(|ty| (ty, RetAttributes::NONE)),
+            params: self.params,
+        }
+    }
+
+    /// Adds an attribute to the return value of the function
+    pub fn ret_with_attribute(self, ret: Option<(Type, RetAttributes)>) -> Self {
+        Self {
+            vararg: self.vararg,
+            abi: self.abi,
+            ret,
             params: self.params,
         }
     }
 
     /// Appends a parameter to the signature
     pub fn param(mut self, param: Type) -> Self {
-        self.params.push(param);
+        self.params.push((param, ParamAttributes::NONE));
 
         Self {
             vararg: self.vararg,
@@ -71,30 +81,36 @@ impl SigBuilder {
             ret: self.ret,
             params: self.params,
         }
+    }
+
+    /// Adds a param with an attribute list to the signature
+    pub fn param_with_attribute(mut self, param: Type, attributes: ParamAttributes) -> Self {
+        self.params.push((param, attributes));
+
+        self
     }
 
     /// Appends a list of parameters to the signature
     pub fn params(mut self, params: &[Type]) -> Self {
+        for &param in params {
+            self.params.push((param, ParamAttributes::NONE));
+        }
+
+        self
+    }
+
+    /// Appends a list of parameters (all with attributes) to the signature
+    pub fn params_with_attributes(mut self, params: &[(Type, ParamAttributes)]) -> Self {
         self.params.extend_from_slice(params);
 
-        Self {
-            vararg: self.vararg,
-            abi: self.abi,
-            ret: self.ret,
-            params: self.params,
-        }
+        self
     }
 
     /// Builds the signature
     pub fn build(self) -> Signature {
-        let ret = (self.ret.into(), RetAttributes::empty());
-        let params = self
-            .params
-            .into_iter()
-            .map(|p| (p, ParamAttributes::empty()))
-            .collect();
+        let vec = self.params.into_iter().collect();
 
-        Signature::new(params, ret, self.abi, self.vararg)
+        Signature::new(vec, self.ret, self.abi, self.vararg)
     }
 }
 

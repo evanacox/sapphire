@@ -1,6 +1,6 @@
 //======---------------------------------------------------------------======//
 //                                                                           //
-// Copyright 2022 Evan Cox <evanacox00@gmail.com>. All rights reserved.      //
+// Copyright 2022-2023 Evan Cox <evanacox00@gmail.com>. All rights reserved. //
 //                                                                           //
 // Use of this source code is governed by a BSD-style license that can be    //
 // found in the LICENSE.txt file at the root of this project, or at the      //
@@ -9,7 +9,7 @@
 //======---------------------------------------------------------------======//
 
 use crate::runners::optimization_runner::*;
-use crate::subtest::{Subtest, TestResult};
+use crate::subtest::Subtest;
 use sapphire::transforms::SimplifyInstPass;
 
 runner_for_opt!(
@@ -18,5 +18,5 @@ runner_for_opt!(
 );
 
 pub const fn simplifyinst_subtest() -> Subtest {
-    Subtest::new("simplifyinst", simplifyinst)
+    Subtest::new(&["simplifyinst"], simplifyinst)
 }

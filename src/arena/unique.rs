@@ -478,7 +478,7 @@ where
     where
         D: Deserializer<'de>,
     {
-        deserializer.deserialize_seq(UniqueArenaMapVisitor(PhantomData::default()))
+        deserializer.deserialize_seq(UniqueArenaMapVisitor(PhantomData))
     }
 }
 

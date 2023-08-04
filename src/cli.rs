@@ -17,6 +17,7 @@
 
 use bpaf::{construct, OptionParser, Parser};
 use std::path::PathBuf;
+use std::str::FromStr;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -30,6 +31,18 @@ pub enum MachineFormat {
     Obj,
 }
 
+impl FromStr for MachineFormat {
+    type Err = &'static str;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s {
+            "asm" => MachineFormat::Asm,
+            "obj" => MachineFormat::Obj,
+            _ => return Err("format must be one of 'asm' or 'obj'"),
+        })
+    }
+}
+
 /// The format for a tool emitting SIR to emit in.
 #[derive(Copy, Clone, Eq, PartialEq)]
 pub enum IRFormat {
@@ -38,6 +51,18 @@ pub enum IRFormat {
     /// A dense binary format that can be serialized and deserialized
     /// quickly and efficiently, and takes up less space on disk.
     Bitcode,
+}
+
+impl FromStr for IRFormat {
+    type Err = &'static str;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s {
+            "ir" => IRFormat::IR,
+            "bc" => IRFormat::Bitcode,
+            _ => return Err("format must be one of 'ir' or 'bc'"),
+        })
+    }
 }
 
 /// Basic options that every CLI tool in the suite takes in.
@@ -50,7 +75,7 @@ pub struct BaseOptions {
     pub inputs: Vec<PathBuf>,
 }
 
-/// Returns a [`bpaf::OptionParser`] preconfigured with the standard Sapphire
+/// Returns a [`OptionParser`] preconfigured with the standard Sapphire
 /// options and additional tool-specific options.
 pub fn tool_with<T>(
     description: &'static str,
@@ -65,7 +90,7 @@ pub fn tool_with<T>(
         .usage(usage)
 }
 
-/// Returns a [`bpaf::OptionParser`] preconfigured with the standard Sapphire
+/// Returns a [`OptionParser`] preconfigured with the standard Sapphire
 /// options and nothing else.
 pub fn tool<T>(description: &'static str, usage: &'static str) -> OptionParser<BaseOptions> {
     default()
@@ -117,21 +142,8 @@ pub fn emit_machine_format() -> impl Parser<MachineFormat> {
     bpaf::long("emit")
         .short('e')
         .help("the machine format to emit, either 'asm' or 'obj'")
-        .argument::<String>("FORMAT")
-        .guard(
-            |fmt| fmt == "asm" || fmt == "obj",
-            "format must be one of 'asm', 'obj'",
-        )
-        .map(|fmt| match fmt.as_str() {
-            "asm" => MachineFormat::Asm,
-            "obj" => MachineFormat::Obj,
-            _ => unreachable!(),
-        })
-        .optional()
-        .map(|opt| match opt {
-            Some(val) => val,
-            None => MachineFormat::Obj,
-        })
+        .argument::<MachineFormat>("FORMAT")
+        .fallback(MachineFormat::Obj)
 }
 
 /// Gets the emit format for a tool that emits SIR
@@ -139,21 +151,36 @@ pub fn emit_sir() -> impl Parser<IRFormat> {
     bpaf::long("emit")
         .short('e')
         .help("the SIR format to emit, either 'ir' or 'bc'")
-        .argument::<String>("FORMAT")
-        .guard(
-            |fmt| fmt == "ir" || fmt == "bc",
-            "format must be one of 'ir', 'bc'",
-        )
-        .map(|fmt| match fmt.as_str() {
-            "ir" => IRFormat::IR,
-            "bc" => IRFormat::Bitcode,
-            _ => unreachable!(),
-        })
+        .argument::<IRFormat>("FORMAT")
+        .fallback(IRFormat::Bitcode)
+}
+
+/// Option for omitting/leaving the frame pointer
+pub enum FramePointer {
+    /// Omits the frame pointer in any function where it is possible to do so
+    OmitWhenPossible,
+    /// Never omits the frame pointer
+    NeverOmit,
+}
+
+impl FromStr for FramePointer {
+    type Err = &'static str;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "omit" => Ok(FramePointer::OmitWhenPossible),
+            "never-omit" => Ok(FramePointer::NeverOmit),
+            _ => Err("only options are `omit` or `never-omit`"),
+        }
+    }
+}
+
+/// Whether or not to omit the frame pointer
+pub fn frame_pointer() -> impl Parser<Option<FramePointer>> {
+    bpaf::long("frame-ptr")
+        .help("whether to attempt to omit or never omit the frame pointer")
+        .argument::<FramePointer>("OPTION")
         .optional()
-        .map(|opt| match opt {
-            Some(val) => val,
-            None => IRFormat::Bitcode,
-        })
 }
 
 /// Gets the number of concurrent threads to use for a given task
@@ -163,4 +190,20 @@ pub fn jobs() -> impl Parser<Option<usize>> {
         .help("the number of concurrent jobs to run tests on")
         .argument::<usize>("JOBS")
         .optional()
+}
+
+/// Gets a list of passes to run over the IR
+pub fn passes() -> impl Parser<Vec<String>> {
+    bpaf::long("pass")
+        .short('p')
+        .help("a pass to run over the input")
+        .argument::<String>("PASS-NAME")
+        .many()
+}
+
+/// Whether the user wants verify passes inserted between optimization passes
+pub fn verify() -> impl Parser<bool> {
+    bpaf::long("verify")
+        .help("whether to verify the IR before and after passes")
+        .flag(true, false)
 }

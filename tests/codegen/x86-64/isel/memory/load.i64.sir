@@ -1,0 +1,13 @@
+; MATCH-SECTION
+;
+; test:
+;     mov vi1, rdi
+;     mov vi0, qword ptr [vi1]
+;     mov rax, vi0
+;     ret
+;;
+fn i64 @test(ptr) {
+entry(ptr %0):
+    %1 = load i64, ptr %0
+    ret i64 %1
+}

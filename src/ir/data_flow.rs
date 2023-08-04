@@ -8,7 +8,7 @@
 //                                                                           //
 //======---------------------------------------------------------------======//
 
-use crate::arena::{ArenaKey, ArenaMap, SecondaryMap, UniqueArenaMap};
+use crate::arena::{ArenaKey, ArenaMap, SecondaryMap, SecondarySet, UniqueArenaMap};
 use crate::dense_arena_key;
 use crate::ir::{
     BasicBlock, Block, BlockWithParams, DebugInfo, InstData, Instruction, Sig, Signature,
@@ -96,11 +96,13 @@ pub struct StackSlotData {
 
 impl StackSlotData {
     /// Gets the name of the stack slot
+    #[inline]
     pub fn name(self) -> Str {
         self.name
     }
 
     /// Gets the type that the stack slot is allocating space for
+    #[inline]
     pub fn ty(self) -> Type {
         self.ty
     }
@@ -158,6 +160,7 @@ pub struct DataFlowGraph {
     debug: SecondaryMap<EntityRef, DebugInfo>,
     uses: SecondaryMap<Value, SmallVec<[Inst; 4]>>,
     stack_slots: ArenaMap<StackSlot, Option<StackSlotData>>,
+    metadata_affecting_insts: SmallVec<[Inst; 4]>,
 }
 
 impl DataFlowGraph {
@@ -191,7 +194,7 @@ impl DataFlowGraph {
     }
 
     /// Gets a single instruction's [`InstData`].
-    pub fn data(&self, inst: Inst) -> &InstData {
+    pub fn inst_data(&self, inst: Inst) -> &InstData {
         match &self.entities[inst.raw_into()] {
             EntityData::Inst(data) => data,
             _ => unreachable!("got an `Inst` that did not refer to an instruction"),
@@ -235,9 +238,12 @@ impl DataFlowGraph {
             self.uses[*operand].push(Inst::raw_from(k));
         }
 
+        if let InstData::Alloca(_) | InstData::Call(_) | InstData::IndirectCall(_) = &data {
+            self.metadata_affecting_insts.push(Inst::raw_from(k));
+        }
+
         let _ = self.entities.insert(EntityData::Inst(data));
         self.uses.insert(Value::raw_from(k), smallvec![]);
-
         self.debug.insert(k, debug);
 
         self.maybe_result(k, result)
@@ -256,6 +262,11 @@ impl DataFlowGraph {
     /// Finds a block by name, if it exists.
     pub fn find_block(&self, name: Str) -> Option<Block> {
         self.block_names.get(&name).copied()
+    }
+
+    /// Iterates over every blocks
+    pub fn all_blocks(&self) -> impl Iterator<Item = &BasicBlock> {
+        self.blocks.values().flatten()
     }
 
     /// Resolves a block into a full [`BasicBlock`].
@@ -547,6 +558,37 @@ impl DataFlowGraph {
         }
     }
 
+    /// Rewrites a branch that targets `to` to instead branch to `new` (with the args associated
+    /// with `new`).
+    ///
+    /// Returns the old branch target so you can re-use the arguments.
+    pub fn rewrite_branch_target(
+        &mut self,
+        inst: Inst,
+        to: Block,
+        new: BlockWithParams,
+    ) -> BlockWithParams {
+        let data = match &mut self.entities[inst.raw_into()] {
+            EntityData::Inst(data) => data,
+            _ => unreachable!("got an `Inst` that did not refer to an instruction"),
+        };
+
+        // get the old value occupying that slot of the arguments
+        match data {
+            InstData::Br(br) => {
+                debug_assert_eq!(br.target().block(), to);
+
+                br.replace_target(new)
+            }
+            InstData::CondBr(condbr) => {
+                let idx = (condbr.false_branch().block() == to) as usize;
+
+                condbr.replace_target(idx, new)
+            }
+            _ => unreachable!(),
+        }
+    }
+
     /// Creates a new stack slot with a given name and type.
     pub fn create_stack_slot(&mut self, name: Str, ty: Type) -> StackSlot {
         debug_assert!(
@@ -586,6 +628,27 @@ impl DataFlowGraph {
         debug_assert!(self.is_stack_slot_inserted(slot));
 
         let _ = self.stack_slots.get_mut(slot).unwrap().take();
+    }
+
+    /// Returns a [`SecondarySet`](crate::arena::SecondarySet) that contains every
+    /// value with exactly one use in the DFG.
+    ///
+    /// **Note: This may include values that are NOT in the associated function layout!**
+    pub fn all_single_use_values(&self) -> SecondarySet<Value> {
+        let mut map = SecondarySet::with_capacity(self.values.capacity());
+
+        for value in self.values.keys() {
+            if self.uses_of(value).len() == 1 {
+                map.insert(value);
+            }
+        }
+
+        map
+    }
+
+    /// Gets the instructions that can affect the function's metadata in some way
+    pub(in crate::ir) fn all_metadata_affecting_insts(&self) -> &[Inst] {
+        &self.metadata_affecting_insts
     }
 
     fn maybe_result(&mut self, key: EntityRef, result: Option<Type>) -> (Inst, Option<Value>) {

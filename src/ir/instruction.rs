@@ -378,6 +378,16 @@ impl BlockWithParams {
         }
     }
 
+    /// Consumes `self`, and replaces the block being targeted with `block`.
+    ///
+    /// This is intended to be used for re-targeting branch instructions.
+    #[inline]
+    pub fn rewrite_to(mut self, block: Block) -> Self {
+        self.data[0] = Value::raw_from(block);
+
+        self
+    }
+
     #[inline]
     pub(in crate::ir) fn args_mut(&mut self) -> &mut [Value] {
         match self.data.get_mut(1..) {
@@ -673,6 +683,11 @@ impl BrInst {
     pub(in crate::ir) fn replace_branch_arg(&mut self, idx: usize, new: Value) {
         self.target.args_mut()[idx] = new;
     }
+
+    #[inline]
+    pub(in crate::ir) fn replace_target(&mut self, target: BlockWithParams) -> BlockWithParams {
+        mem::replace(&mut self.target, target)
+    }
 }
 
 impl Terminator for BrInst {
@@ -783,6 +798,15 @@ impl CondBrInst {
         };
 
         slice.unwrap()[idx] = new;
+    }
+
+    #[inline]
+    pub(in crate::ir) fn replace_target(
+        &mut self,
+        target: usize,
+        new: BlockWithParams,
+    ) -> BlockWithParams {
+        mem::replace(&mut self.state.branches[target], new)
     }
 
     fn updated_values(
@@ -1154,16 +1178,26 @@ impl Instruction for AllocaInst {
 pub struct LoadInst {
     pointer: Value,
     output: Type,
+    volatile: bool,
 }
 
 impl LoadInst {
-    pub(in crate::ir) fn new(pointer: Value, output: Type) -> Self {
-        Self { pointer, output }
+    pub(in crate::ir) fn new(pointer: Value, output: Type, volatile: bool) -> Self {
+        Self {
+            pointer,
+            output,
+            volatile,
+        }
     }
 
     /// Gets the pointer being loaded
     pub fn pointer(&self) -> Value {
         self.pointer
+    }
+
+    /// Checks if the load is `volatile`
+    pub fn is_volatile(&self) -> bool {
+        self.volatile
     }
 }
 
@@ -1186,12 +1220,14 @@ impl Instruction for LoadInst {
 #[cfg_attr(feature = "enable-serde", derive(Serialize, Deserialize))]
 pub struct StoreInst {
     operands: [Value; 2],
+    volatile: bool,
 }
 
 impl StoreInst {
-    pub(in crate::ir) fn new(pointer: Value, val: Value) -> Self {
+    pub(in crate::ir) fn new(pointer: Value, val: Value, volatile: bool) -> Self {
         Self {
             operands: [pointer, val],
+            volatile,
         }
     }
 
@@ -1203,6 +1239,11 @@ impl StoreInst {
     /// Gets the value being stored
     pub fn stored(&self) -> Value {
         self.operands[1]
+    }
+
+    /// Checks if the store is `volatile`
+    pub fn is_volatile(&self) -> bool {
+        self.volatile
     }
 }
 
@@ -1429,8 +1470,15 @@ impl IConstInst {
     }
 
     /// Gets the actual const value being yielded as an unsigned integer
+    #[inline(always)]
     pub fn value(&self) -> u64 {
         self.constant & self.mask
+    }
+
+    /// Gets the mask used to mask the value
+    #[inline(always)]
+    pub fn mask(&self) -> u64 {
+        self.mask
     }
 }
 

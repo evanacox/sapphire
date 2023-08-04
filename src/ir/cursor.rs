@@ -124,6 +124,17 @@ pub trait Cursor: Sized {
             .and_then(|inst| self.dfg().branch_info(inst))
     }
 
+    /// Tries to get the terminator of the current block. If there is no current block
+    /// or the current block's last instruction is not a terminator, returns `None`.
+    fn current_block_terminator(&self) -> Option<Inst> {
+        let block = match self.current_block() {
+            Some(bb) => bb,
+            None => return None,
+        };
+
+        self.layout().block_last_inst(block)
+    }
+
     /// Gets the debuginfo associated with the current instruction
     fn current_inst_dbg(&self) -> Option<DebugInfo> {
         self.current_inst().map(|inst| self.dfg().inst_debug(inst))
@@ -287,7 +298,7 @@ pub trait Cursor: Sized {
 
     /// Gets the data defining a given instruction
     fn inst_data(&self, inst: Inst) -> &InstData {
-        self.def().dfg.data(inst)
+        self.def().dfg.inst_data(inst)
     }
 
     /// Gets the block that an instruction is defined in
@@ -334,7 +345,7 @@ impl<'b> InstBuilder<'b> for ReplaceBuilder<'b> {
 
     fn build(self, data: InstData, debug: DebugInfo) -> (Inst, Option<Value>) {
         debug_assert_eq!(
-            self.def.dfg.data(self.pos).result_ty(),
+            self.def.dfg.inst_data(self.pos).result_ty(),
             data.result_ty(),
             "cannot replace inst with inst of different result"
         );
@@ -371,6 +382,9 @@ impl<'b> InstBuilder<'b> for InsertBuilder<'b> {
 pub trait CursorMut: Cursor {
     /// Gets a mutable reference to the function's definition.
     fn def_mut(&mut self) -> &mut FunctionDefinition;
+
+    /// Gets a mutable reference to the function itself
+    fn func_mut(&mut self) -> &mut Function;
 
     /// Returns an instruction builder that replaces the current instruction.
     fn replace(&mut self) -> ReplaceBuilder<'_> {
@@ -470,6 +484,69 @@ pub trait CursorMut: Cursor {
     fn remove_stack_slot(&mut self, slot: StackSlot) {
         self.def_mut().dfg.remove_stack_slot(slot);
     }
+
+    /// Creates a single basic block and returns it. This block is appended to
+    /// the end of the block list.
+    ///
+    /// Note that this does not switch the cursor to operate on that block,
+    /// you still need to call `goto_before` or similar.
+    fn create_block(&mut self, name: &str) -> Block {
+        let string = {
+            let mut strings = self.func_mut().ctx().strings_mut();
+
+            strings.insert(name)
+        };
+
+        let block = self.def_mut().dfg.create_block(string);
+
+        self.def_mut().layout.append_block(block);
+
+        block
+    }
+
+    /// Equivalent to [`Self::create_block`], except it inserts the block before `before`
+    /// instead of appending it.
+    fn create_block_before(&mut self, name: &str, before: Block) -> Block {
+        let string = {
+            let mut strings = self.func_mut().ctx().strings_mut();
+
+            strings.insert(name)
+        };
+
+        let block = self.def_mut().dfg.create_block(string);
+
+        self.def_mut().layout.insert_block_before(block, before);
+
+        block
+    }
+
+    /// Equivalent to [`Self::create_block`], except it inserts the block after `after`
+    /// instead of appending it.
+    fn create_block_after(&mut self, name: &str, after: Block) -> Block {
+        let string = {
+            let mut strings = self.func_mut().ctx().strings_mut();
+
+            strings.insert(name)
+        };
+
+        let block = self.def_mut().dfg.create_block(string);
+
+        self.def_mut().layout.insert_block_after(block, after);
+
+        block
+    }
+
+    /// Rewrites the branch at the end of the current block that targets `to` to
+    /// instead branch to `new` (with the args associated with `new`).
+    ///
+    /// Returns the old branch target so you can re-use the arguments.
+    fn rewrite_branch_target(&mut self, to: Block, new: BlockWithParams) -> BlockWithParams {
+        let inst = self
+            .current_block_terminator()
+            .expect("should have terminator");
+
+        self.def_mut().dfg.rewrite_branch_target(inst, to, new)
+    }
 }
 
 /// Effectively a [`FuncCursor`] without any of the operations
@@ -539,5 +616,9 @@ impl<'f> Cursor for FuncCursor<'f> {
 impl<'f> CursorMut for FuncCursor<'f> {
     fn def_mut(&mut self) -> &mut FunctionDefinition {
         self.func.definition_mut().unwrap()
+    }
+
+    fn func_mut(&mut self) -> &mut Function {
+        self.func
     }
 }

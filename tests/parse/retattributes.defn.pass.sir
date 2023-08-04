@@ -1,0 +1,18 @@
+; MATCH-ENTIRE
+fn ptr @one(i64) {
+entry(i64 %0):
+  %1 = itop ptr, i64 %0
+  ret ptr %1
+}
+
+fn nonnull ptr @two(i64) {
+entry(i64 %0):
+  %1 = itop ptr, i64 %0
+  ret ptr %1
+}
+
+fn noalias nonnull ptr @three(i64) {
+entry(i64 %0):
+  %1 = itop ptr, i64 %0
+  ret ptr %1
+}

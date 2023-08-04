@@ -14,4 +14,3 @@ is stored inside of arenas, and 'references' to those entities is passed around 
 
 ## `Layout`: The Layout
 
-

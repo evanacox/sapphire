@@ -1,0 +1,25 @@
+; MATCH-ENTIRE
+fn nonnull ptr @a(ptr) {
+entry(ptr %0):
+  ret ptr %0
+}
+
+fn noalias ptr @b(nonnull ptr) {
+entry(ptr %0):
+  ret ptr %0
+}
+
+fn noalias ptr @c(noalias ptr) {
+entry(ptr %0):
+  ret ptr %0
+}
+
+fn noalias ptr @d(noalias nonnull ptr) {
+entry(ptr %0):
+  ret ptr %0
+}
+
+fn noalias ptr @e(noalias nonnull byval(512) ptr) {
+entry(ptr %0):
+  ret ptr %0
+}

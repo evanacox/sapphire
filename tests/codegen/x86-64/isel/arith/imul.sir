@@ -1,0 +1,14 @@
+; MATCH-SECTION
+;
+; test:
+;     mov vi1, edi
+;     mov vi0, vi1
+;     imul vi0, vi1
+;     mov eax, vi0
+;     ret
+;;
+fn i8 @test(i8) {
+entry(i8 %0):
+  %1 = imul i8 %0, %0
+  ret i8 %1
+}

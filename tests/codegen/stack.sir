@@ -1,0 +1,16 @@
+; STANDARD
+fn i32 @add(i64, i64) {
+  $0 = stack i64
+  $1 = stack i32
+  $2 = stack [i64; 8]
+
+entry(i64 %0, i64 %1):
+  %2 = stackslot $0
+  %3 = stackslot $1
+  store i64 %0, ptr %2
+  %4 = iadd i64 %0, %1
+  %5 = trunc i32, i64 %4
+  store i32 %5, ptr %3
+  %6 = load i32, ptr %3
+  ret i32 %6
+}

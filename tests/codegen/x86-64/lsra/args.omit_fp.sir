@@ -1,0 +1,12 @@
+; MATCH-SECTION
+;
+; add:
+;     add edi, esi
+;     mov eax, edi
+;     ret
+;;
+fn i32 @add(i32, i32) {
+entry(i32 %0, i32 %1):
+  %2 = iadd i32 %0, %1
+  ret i32 %2
+}

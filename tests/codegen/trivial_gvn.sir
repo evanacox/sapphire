@@ -1,0 +1,8 @@
+; STANDARD
+fn i32 @main() {
+entry:
+  %0 = iconst i32 42
+  %1 = iconst i32 42
+  %2 = iadd i32 %0, %1
+  ret i32 %2
+}

@@ -1,0 +1,52 @@
+; MATCH-SECTION
+;
+; test:
+;     mov vi11, esi
+;     mov vi10, edi
+;     xor vi9, vi9
+;     cmp vi10, vi11
+;     sete vi9
+;     xor vi8, vi8
+;     cmp vi9, vi9
+;     setne vi8
+;     xor vi7, vi7
+;     cmp vi9, vi8
+;     setg vi7
+;     xor vi6, vi6
+;     cmp vi8, vi7
+;     setl vi6
+;     xor vi5, vi5
+;     cmp vi7, vi6
+;     setge vi5
+;     xor vi4, vi4
+;     cmp vi6, vi5
+;     setle vi4
+;     xor vi3, vi3
+;     cmp vi5, vi4
+;     seta vi3
+;     xor vi1, vi1
+;     cmp vi4, vi3
+;     setb vi1
+;     xor vi2, vi2
+;     cmp vi3, vi1
+;     setae vi2
+;     xor vi0, vi0
+;     cmp vi1, vi2
+;     setbe vi0
+;     mov eax, vi0
+;     ret
+;;
+fn bool @test(i32, i32) {
+entry(i32 %0, i32 %1):
+  %2 = icmp eq i32 %0, %1
+  %3 = icmp ne bool %2, %2
+  %4 = icmp sgt bool %2, %3
+  %5 = icmp slt bool %3, %4
+  %6 = icmp sge bool %4, %5
+  %7 = icmp sle bool %5, %6
+  %8 = icmp ugt bool %6, %7
+  %9 = icmp ult bool %7, %8
+  %10 = icmp uge bool %8, %9
+  %11 = icmp ule bool %9, %10
+  ret bool %11
+}

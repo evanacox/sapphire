@@ -14,7 +14,10 @@
 //! used to parse SIR text files, with type-checking strapped on to ensure
 //! only valid IR is being parsed.
 
-use crate::analysis::{stringify_signature, stringify_ty};
+use crate::analysis::{
+    stringify_param_attributes_space, stringify_ret_attribute_space, stringify_signature,
+    stringify_ty,
+};
 use crate::ir::*;
 use crate::utility::{Packable, SaHashMap, Str};
 use pest::error::ErrorVariant;
@@ -207,14 +210,14 @@ impl SIRParser {
         let global_ident = proto.next_or("expected a global name");
         let name = self.parse_global(global_ident)?;
 
-        let return_ty = self.parse_ty_or_void(ty_or_void, pool)?;
+        let ret = self.parse_ty_or_void_with_ret_attribute(ty_or_void, pool)?;
         let param_list = proto.next_or("expected a parameter list");
         let (params, variadic) = self.parse_param_list(param_list, pool)?;
         let abi = self.parse_abi(proto.next())?;
 
         let sig = SigBuilder::new()
-            .ret(return_ty)
-            .params(&params)
+            .ret_with_attribute(ret)
+            .params_with_attributes(&params)
             .vararg(variadic)
             .abi(abi)
             .build();
@@ -233,9 +236,129 @@ impl SIRParser {
 
         match pair.as_str() {
             "ccc" => Ok(CallConv::C),
-            "fastcc" => Ok(CallConv::Fast),
+            "sysv" => Ok(CallConv::SysV),
+            "win64" => Ok(CallConv::Win64),
             _ => unreachable!(),
         }
+    }
+
+    fn parse_param_ty_list(
+        &mut self,
+        pair: Pair<'_, Rule>,
+        pool: &mut TypePool,
+    ) -> ParseResult<Vec<(Type, ParamAttributes)>> {
+        debug_assert!(matches!(pair.as_rule(), Rule::param_ty_list));
+
+        pair // collect has a version returning Result<_, _>
+            .into_inner()
+            .map(|pair| self.parse_ty_with_param_attribute(pair, pool))
+            .collect()
+    }
+
+    fn parse_ty_with_param_attribute(
+        &mut self,
+        pair: Pair<'_, Rule>,
+        pool: &mut TypePool,
+    ) -> ParseResult<(Type, ParamAttributes)> {
+        debug_assert!(matches!(pair.as_rule(), Rule::ty_with_param_attributes));
+
+        let pair_clone = pair.clone();
+        let mut pairs = pair.into_inner();
+        let mut attributes = ParamAttributes::NONE;
+
+        // take attribute pairs until we hit a ty pair, that's the type
+        let ty = loop {
+            if let Some(pair) = pairs.next() {
+                if pair.as_rule() == Rule::ty {
+                    break self.parse_ty(pair, pool)?;
+                }
+
+                debug_assert!(matches!(pair.as_rule(), Rule::param_attribute));
+
+                let attr = match pair.as_str() {
+                    "noalias" => ParamAttributes::NOALIAS,
+                    "nonnull" => ParamAttributes::NONNULL,
+                    _ => {
+                        let mut pairs = pair.into_inner();
+
+                        let int = pairs.next_or("expected int literal for `byval(n)`");
+                        let val = self.parse_int_lit(32, int)?;
+
+                        ParamAttributes::byval(val as usize)
+                    }
+                };
+
+                attributes |= attr;
+            } else {
+                unreachable!()
+            }
+        };
+
+        if !ty.is_ptr() && attributes != ParamAttributes::NONE {
+            let msg = format!(
+                "can only have parameter attributes on 'ptr' type, but got '{}'",
+                stringify_param_attributes_space(attributes).trim_end(),
+            );
+
+            return Err(string_into_err(pair_clone.as_span(), msg));
+        }
+
+        Ok((ty, attributes))
+    }
+
+    fn parse_ty_or_void_with_ret_attribute(
+        &mut self,
+        pair: Pair<'_, Rule>,
+        pool: &mut TypePool,
+    ) -> ParseResult<Option<(Type, RetAttributes)>> {
+        debug_assert!(matches!(pair.as_rule(), Rule::ty_or_void_with_attr));
+
+        if pair.as_str() == "void" {
+            return Ok(None);
+        }
+
+        let pair_clone = pair.clone();
+        let mut pairs = pair.into_inner();
+        let next = pairs.next_or("expected type");
+
+        if next.as_rule() == Rule::ty {
+            return Ok(Some((self.parse_ty(next, pool)?, RetAttributes::NONE)));
+        }
+
+        // stupid but its late and I want this to work
+        pairs = pair_clone.clone().into_inner();
+
+        let mut attributes = RetAttributes::NONE;
+        let ty = loop {
+            if let Some(pair) = pairs.next() {
+                if pair.as_rule() == Rule::ty {
+                    break self.parse_ty(pair, pool)?;
+                }
+
+                debug_assert!(matches!(pair.as_rule(), Rule::ret_attribute));
+
+                let attr = match pair.as_str() {
+                    "noalias" => RetAttributes::NOALIAS,
+                    "nonnull" => RetAttributes::NONNULL,
+                    _ => unreachable!(),
+                };
+
+                attributes |= attr;
+            } else {
+                unreachable!()
+            }
+        };
+
+        if !ty.is_ptr() && attributes != RetAttributes::NONE {
+            let msg = format!(
+                "can only have return attributes on 'ptr' type, but got '{}'",
+                stringify_ret_attribute_space(attributes).trim_end(),
+            );
+
+            return Err(string_into_err(pair_clone.as_span(), msg));
+        }
+
+        Ok(Some((ty, attributes)))
     }
 
     // parses a function prototype's parameter list. returns the parameter types and whether
@@ -244,7 +367,7 @@ impl SIRParser {
         &mut self,
         pair: Pair<'_, Rule>,
         pool: &mut TypePool,
-    ) -> ParseResult<(Vec<Type>, bool)> {
+    ) -> ParseResult<(Vec<(Type, ParamAttributes)>, bool)> {
         debug_assert!(matches!(pair.as_rule(), Rule::param_list));
 
         let mut inner = pair.into_inner();
@@ -254,7 +377,7 @@ impl SIRParser {
         };
 
         let list = match next.as_rule() {
-            Rule::ty_list => self.parse_ty_list(next, pool)?,
+            Rule::param_ty_list => self.parse_param_ty_list(next, pool)?,
             Rule::variadic => return Ok((vec![], true)),
             _ => unreachable!(),
         };
@@ -401,7 +524,6 @@ impl SIRParser {
         Ok(block)
     }
 
-    //
     fn verify_block_label(
         &mut self,
         pair: Pair<'_, Rule>,
@@ -508,7 +630,7 @@ impl SIRParser {
         let pair = inner.clone();
         let mut pairs = inner.into_inner();
         let result = self.parse_optional_result(&mut pairs, builder)?;
-        let ty = self.parse_ty_or_void(
+        let ty = self.parse_ty_or_void_with_ret_attribute(
             pairs.next_or("expected ty or void"),
             &mut builder.ctx().types_mut(),
         )?;
@@ -516,12 +638,23 @@ impl SIRParser {
         let func = self.parse_func_name(pairs.next_or("expected func name"), builder)?;
         let signature = builder.function(func).signature().clone();
 
-        match (signature.return_ty(), ty) {
-            (Some(t1), Some(t2)) if t1 != t2 => {
+        match (signature.return_complete(), ty) {
+            (Some((t1, _)), Some((t2, _))) if t1 != t2 => {
                 let msg = format!(
                     "mismatched return type, expected '{}' but got '{}'. signature of '{}' is '{}'",
                     stringify_ty(&builder.ctx().types(), t1),
                     stringify_ty(&builder.ctx().types(), t2),
+                    builder.function(func).name(),
+                    stringify_signature(&builder.ctx().types(), &signature)
+                );
+
+                return Err(string_into_err(pair.as_span(), msg));
+            }
+            (Some((_, attr1)), Some((_, attr2))) if attr1 != attr2 => {
+                let msg = format!(
+                    "mismatched return attributes, expected '{}' but got '{}'. signature of '{}' is '{}'",
+                    stringify_ret_attribute_space(attr1).trim_start(),
+                    stringify_ret_attribute_space(attr2).trim_start(),
                     builder.function(func).name(),
                     stringify_signature(&builder.ctx().types(), &signature)
                 );
@@ -832,7 +965,7 @@ expected {expected} arguments but got {count}"
         debug_assert!(matches!(inner.as_rule(), Rule::signature));
 
         let mut inner = inner.into_inner();
-        let ret = self.parse_ty_or_void(
+        let ret = self.parse_ty_or_void_with_ret_attribute(
             inner.next_or("expected ty or void"),
             &mut builder.ctx().types_mut(),
         )?;
@@ -842,12 +975,8 @@ expected {expected} arguments but got {count}"
             &mut builder.ctx().types_mut(),
         )?;
 
-        let params: SmallVec<[(Type, ParamAttributes); 2]> = params
-            .into_iter()
-            .map(|param| (param, ParamAttributes::empty()))
-            .collect();
-
-        let sig = Signature::new(params, (ret, RetAttributes::empty()), CallConv::C, variadic);
+        let params = SmallVec::from_vec(params);
+        let sig = Signature::new(params, ret, CallConv::C, variadic);
 
         Ok(builder.import_signature(&sig))
     }
@@ -1175,6 +1304,7 @@ expected {expected} arguments but got {count}"
 
         let mut inner = pair.into_inner();
         let result = inner.next_or("expected result");
+        let maybe_volatile = inner.next_or("expected volatile");
         let ty_pair = inner.next_or("expected type");
         let _ = inner.next_or("expected ptr");
         let val_pair = inner.next_or("expected value");
@@ -1183,7 +1313,12 @@ expected {expected} arguments but got {count}"
         let ty = self.parse_ty(ty_pair, &mut builder.ctx().types_mut())?;
         let operand = self.parse_existing_local_of_ty(val_pair, Type::ptr(), builder)?;
 
-        self.append_val(builder, name).load(ty, operand, info);
+        if maybe_volatile.as_str() == "volatile" {
+            self.append_val(builder, name)
+                .load_volatile(ty, operand, info);
+        } else {
+            self.append_val(builder, name).load(ty, operand, info);
+        }
 
         Ok(())
     }
@@ -1197,6 +1332,7 @@ expected {expected} arguments but got {count}"
 
         let pair2 = pair.clone();
         let mut inner = pair.into_inner();
+        let maybe_volatile = inner.next_or("expected volatile");
         let operand = inner.next_or("expected operand");
         let _ = inner.next_or("expected ptr");
         let val_pair = inner.next_or("expected value");
@@ -1205,8 +1341,11 @@ expected {expected} arguments but got {count}"
         let operand = self.parse_operand(operand, builder)?;
         let ptr = self.parse_existing_local_of_ty(val_pair, Type::ptr(), builder)?;
 
-        builder.append().store(operand, ptr, info);
-
+        if maybe_volatile.as_str() == "volatile" {
+            builder.append().store_volatile(operand, ptr, info);
+        } else {
+            builder.append().store(operand, ptr, info);
+        }
         Ok(())
     }
 
@@ -2146,23 +2285,6 @@ expected {expected} arguments but got {count}"
             Rule::array_ty => self.parse_array_ty(pair, pool),
             Rule::struct_ty => self.parse_struct_ty(pair, pool),
             _ => unreachable!(),
-        }
-    }
-
-    fn parse_ty_or_void(
-        &mut self,
-        pair: Pair<'_, Rule>,
-        pool: &mut TypePool,
-    ) -> ParseResult<Option<Type>> {
-        debug_assert!(matches!(pair.as_rule(), Rule::ty_or_void));
-
-        if pair.as_str() == "void" {
-            Ok(None)
-        } else {
-            let ty_pair = pair.into_inner().next_or("expected type");
-            let ty = self.parse_ty(ty_pair, pool)?;
-
-            Ok(Some(ty))
         }
     }
 

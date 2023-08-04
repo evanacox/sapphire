@@ -26,5 +26,5 @@ fn parser_output(name: &str, content: &str) -> TestResult {
 }
 
 pub const fn parse_subtest() -> Subtest {
-    Subtest::new("parse", parser_output)
+    Subtest::new(&["parse"], parser_output)
 }

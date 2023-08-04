@@ -1,0 +1,18 @@
+; MATCH-SECTION
+;
+; test:
+;     mov vi1, rdi
+;     mov vi2, 42
+;     mov rax, vi1
+;     xor edx, edx
+;     div vi2
+;     mov vi0, rax
+;     mov rax, vi0
+;     ret
+;;
+fn i64 @test(i64) {
+entry(i64 %0):
+  %1 = iconst i64 42
+  %2 = udiv i64 %0, %1
+  ret i64 %2
+}

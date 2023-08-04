@@ -30,8 +30,6 @@ fn main() {
     #[cfg(windows)]
     ansi_term::enable_ansi_support().expect("unable to enable ANSI");
 
-    std::panic::set_hook(Box::new(subtest::panic_hook));
-
     let jobs = cli::jobs();
     let subtest = subtest();
     let ((subtest, jobs), options) = cli::tool_with(
@@ -85,4 +83,14 @@ fn test_gvn() {
 #[test]
 fn test_simplifyinst() {
     assert!(matches!(run_subtest("simplifyinst", Some(1)), Ok(())))
+}
+
+#[test]
+fn test_isel_x86() {
+    assert!(matches!(run_subtest("isel-x86", Some(1)), Ok(())))
+}
+
+#[test]
+fn test_lsra_x86() {
+    assert!(matches!(run_subtest("lsra-x86", Some(1)), Ok(())))
 }

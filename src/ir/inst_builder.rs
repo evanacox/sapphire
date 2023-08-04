@@ -328,20 +328,38 @@ pub trait InstBuilder<'dfg>: Sized {
         self.build_result(InstData::Alloca(AllocaInst::new(ty)), debug)
     }
 
-    /// Builds a `load` instruction
+    /// Builds a non-volatile `load` instruction
     fn load(self, ty: Type, ptr: Value, debug: DebugInfo) -> Value {
         debug_assert_eq!(self.dfg().ty(ptr), Type::ptr());
 
-        let inst = LoadInst::new(ptr, ty);
+        let inst = LoadInst::new(ptr, ty, false);
 
         self.build_result(InstData::Load(inst), debug)
     }
 
-    /// Builds a `store` instruction
+    /// Builds a volatile `load` instruction
+    fn load_volatile(self, ty: Type, ptr: Value, debug: DebugInfo) -> Value {
+        debug_assert_eq!(self.dfg().ty(ptr), Type::ptr());
+
+        let inst = LoadInst::new(ptr, ty, true);
+
+        self.build_result(InstData::Load(inst), debug)
+    }
+
+    /// Builds a non-volatile `store` instruction
     fn store(self, val: Value, ptr: Value, debug: DebugInfo) -> Inst {
         debug_assert_eq!(self.dfg().ty(ptr), Type::ptr());
 
-        let inst = StoreInst::new(ptr, val);
+        let inst = StoreInst::new(ptr, val, false);
+
+        self.build_inst(InstData::Store(inst), debug)
+    }
+
+    /// Builds a volatile `store` instruction
+    fn store_volatile(self, val: Value, ptr: Value, debug: DebugInfo) -> Inst {
+        debug_assert_eq!(self.dfg().ty(ptr), Type::ptr());
+
+        let inst = StoreInst::new(ptr, val, true);
 
         self.build_inst(InstData::Store(inst), debug)
     }
@@ -512,7 +530,6 @@ pub trait InstBuilder<'dfg>: Sized {
     /// Builds an `iconst` instruction
     fn iconst(self, into: Type, from: u64, debug: DebugInfo) -> Value {
         debug_assert!(into.is_int());
-        debug_assert!(into.unwrap_int().mask() >= from);
 
         self.build_result(InstData::IConst(IConstInst::new(into, from)), debug)
     }

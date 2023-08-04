@@ -1,0 +1,6 @@
+; STANDARD
+fn i32 @foo(i8) {
+entry(i8 %0):
+  %1 = sext i32, i8 %0
+  ret i32 %1
+}

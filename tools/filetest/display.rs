@@ -18,9 +18,13 @@ use std::time::Duration;
 const PAD_TO_START_OF_LINE: &str = "        ";
 
 pub fn print_subtest_header(subtest: &Subtest) {
-    let files = cases_in_subdir(subtest.subdir()).len();
+    let files = subtest
+        .subdirs()
+        .iter()
+        .fold(0, |count, subdir| count + cases_in_subdir(subdir).len());
+
     let starting = Green.bold().paint("Starting");
-    let name = White.bold().paint(subtest.subdir());
+    let name = White.bold().paint(subtest.main_subdir());
 
     println!("     {starting} subtest '{name}' with {files} total test cases");
 }
@@ -39,14 +43,23 @@ pub fn print_summary(total: usize, failed: usize, elapsed: Duration) {
 
 fn prettify_diff(expected: &str, got: &str) -> String {
     let mut result = String::from("\n");
+    let mut line_number = 0;
 
-    for (line, diff) in diff::lines(got, expected).into_iter().enumerate() {
-        result += &format!("{:3} |", line + 1);
+    for diff in diff::lines(got, expected).into_iter() {
+        result += &format!("{:3} |", line_number + 1);
 
         let line = match diff {
             diff::Result::Left(l) => Red.paint(format!("- {l}")).to_string(),
-            diff::Result::Both(l, _) => format!("  {l}"),
-            diff::Result::Right(r) => Green.paint(format!("+ {r}")).to_string(),
+            diff::Result::Both(l, _) => {
+                line_number += 1;
+
+                format!("  {l}")
+            }
+            diff::Result::Right(r) => {
+                line_number += 1;
+
+                Green.paint(format!("+ {r}")).to_string()
+            }
         };
 
         result += &line;
@@ -108,12 +121,8 @@ pub fn print_failure(file: String, error: String) {
     );
 }
 
-pub fn print_subtest_result(
-    subtest: &Subtest,
-    file: &'static str,
-    details: TestDetails,
-) -> Option<(String, String)> {
-    let filename = format!("{}/{}", Cyan.paint(subtest.subdir()), Blue.paint(file));
+pub fn print_subtest_result(file: &'static str, details: TestDetails) -> Option<(String, String)> {
+    let filename = format!("{}/{}", Cyan.paint(details.subdir), Blue.paint(file));
     let time = format!("{:11}s", details.elapsed.as_secs_f32());
     let (start, rest) = test_results(&details);
 

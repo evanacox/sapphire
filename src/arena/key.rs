@@ -80,7 +80,7 @@ macro_rules! arena_key {
 
                 #[cfg(not(debug_assertions))]
                 {
-                    Self(index as $ty);
+                    Self(index as $ty)
                 }
             }
 

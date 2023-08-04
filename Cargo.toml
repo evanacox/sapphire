@@ -8,15 +8,43 @@ name = "sirc"
 path = "./tools/sirc/main.rs"
 
 [[bin]]
+name = "playground"
+path = "./tools/playground/main.rs"
+required-features = ["dev-tools", "playground"]
+
+[[bin]]
 name = "filetest"
 path = "./tools/filetest/main.rs"
 test = true
 required-features = ["dev-tools"]
 
+[[bin]]
+name = "siro"
+path = "./tools/siro/main.rs"
+required-features = ["dev-tools"]
+
+[profile.release]
+lto = "fat"
+
+[profile.profiling]
+inherits = "release"
+debug = true
+debug-assertions = false
+
+[target.'cfg(windows)'.dependencies.windows-sys]
+version = "0.48.0"
+features = [
+    "Win32_Foundation",
+    "Win32_System_Threading",
+    "Win32_System_SystemInformation",
+]
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2.147"
+
 [dependencies]
 ahash = "0.8.1"
-bitflags = "1.3.2"
-bpaf = "0.7.7"
+bpaf = "0.9.0"
 paste = "1.0.11"
 pest = "2.5.2"
 pest_derive = "2.5.2"
@@ -33,9 +61,9 @@ ansi_term = { version = "0.12.1", optional = true }
 backtrace = { version = "0.3.67", optional = true }
 diff = { version = "0.1.13", optional = true }
 threadpool = { version = "1.8.1", optional = true }
-lazy_static = { version = "1.4.0", optional = true }
 
 [features]
 default = ["enable-serde", "dev-tools"]
-dev-tools = ["dep:ansi_term", "dep:diff", "dep:threadpool", "dep:lazy_static", "dep:backtrace"]
+dev-tools = ["dep:ansi_term", "dep:diff", "dep:threadpool", "dep:backtrace"]
 enable-serde = ["dep:serde", "dep:serde_test", "smallvec/serde"]
+playground = []

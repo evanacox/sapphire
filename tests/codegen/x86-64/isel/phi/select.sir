@@ -1,0 +1,33 @@
+; MATCH-SECTION
+;
+; test:
+;     mov vi2, esi
+;     mov vi1, edi
+;     cmp vi1, 42
+;     jg .L1
+;     jmp .L0
+; .L0:
+;     mov vi0, vi2
+;     jmp .L2
+; .L1:
+;     mov vi0, vi1
+;     jmp .L2
+; .L2:
+;     mov eax, vi0
+;     ret
+;;
+fn i32 @test(i32, i32) {
+entry(i32 %0, i32 %1):
+  %2 = iconst i32 42
+  %3 = icmp sgt i32 %0, %2
+  condbr bool %3, one, two
+
+one:
+  br exit(i32 %0)
+
+two:
+  br exit(i32 %1)
+
+exit(i32 %4):
+  ret i32 %4
+}

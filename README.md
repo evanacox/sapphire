@@ -78,3 +78,5 @@ exit(i32 %a)
 ```
 
 ## License
+
+Licensed under the BSD-3 license found in [LICENSE.txt](./LICENSE.txt)

@@ -1,0 +1,15 @@
+; MATCH-SECTION
+;
+; test:
+;     mov vi1, edi
+;     mov vi0, vi1
+;     imul vi0, 42
+;     mov eax, vi0
+;     ret
+;;
+fn i32 @test(i32) {
+entry(i32 %0):
+  %1 = iconst i32 42
+  %2 = imul i32 %0, %1
+  ret i32 %2
+}

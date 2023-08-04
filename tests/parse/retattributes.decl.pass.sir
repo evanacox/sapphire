@@ -1,0 +1,6 @@
+; MATCH-ENTIRE
+fn nonnull ptr @one(i64)
+
+fn noalias ptr @two(i32)
+
+fn noalias nonnull ptr @three(i32)

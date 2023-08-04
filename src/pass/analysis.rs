@@ -8,7 +8,7 @@
 //                                                                           //
 //======---------------------------------------------------------------======//
 
-use crate::analysis::{ControlFlowGraphAnalysis, DominatorTreeAnalysis};
+use crate::analysis::{ControlFlowGraphAnalysis, DominanceFrontierAnalysis, DominatorTreeAnalysis};
 use crate::arena::{ArenaMap, SecondaryMap};
 use crate::dense_arena_key;
 use crate::ir::{Func, Function, Module, ModuleIdentity};
@@ -118,33 +118,13 @@ impl _InitGuard {
 macro_rules! analysis_preserved {
     ($($t:ty),*) => {
         {
-            use $crate::pass::_InitGuard;
-            use std::any::TypeId;
-            use std::mem::MaybeUninit;
+            use std::sync::OnceLock;
 
-            static mut PRESERVED: MaybeUninit<[TypeId; __analysis_preserved_count!($($t)*)]> = MaybeUninit::uninit();
-            static GUARD: _InitGuard = _InitGuard::__new();
+            static PRESERVED: OnceLock<[TypeId; __analysis_preserved_count!($($t)*)]> = OnceLock::new();
 
-            // check if anyone has already initialized this. almost always true
-            if GUARD.__need_try_acquire() {
-                let array = [
-                    $(
-                        TypeId::of::<$t>(),
-                    )*];
-
-                // multiple threads may try to do this at the same time, so __acquire
-                // will wait if this happens and then check that it's initialized
-                if GUARD.__acquire() {
-                    unsafe {
-                        PRESERVED = MaybeUninit::new(array);
-
-                        GUARD.__release();
-                    }
-                }
-            }
-
-            // if we get here we know that we're initialized
-            unsafe { PRESERVED.assume_init_ref() }
+            PRESERVED.get_or_init(|| [$(
+                TypeId::of::<$t>(),
+            )*])
         }
     }
 }
@@ -614,6 +594,9 @@ impl FunctionAnalysisManager {
     ///
     /// This manager has no analyses registered, they need to be added with [`Self::add_analysis`]
     /// before they can be used by transform passes.
+    ///
+    /// # Note
+    /// Note that [`Self::default()`] can be used to get all analyses pre-registered.
     #[inline]
     pub fn new() -> Self {
         let mut am = AnalysisManager::new();
@@ -659,7 +642,13 @@ impl FunctionAnalysisManager {
 
 impl Default for FunctionAnalysisManager {
     fn default() -> Self {
-        Self::new()
+        let mut fam = Self::new();
+
+        fam.add_analysis(ControlFlowGraphAnalysis);
+        fam.add_analysis(DominatorTreeAnalysis);
+        fam.add_analysis(DominanceFrontierAnalysis);
+
+        fam
     }
 }
 

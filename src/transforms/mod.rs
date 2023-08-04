@@ -20,6 +20,7 @@
 
 pub mod common;
 
+mod critical;
 mod dce;
 mod gvn;
 mod mem2reg;
@@ -29,6 +30,7 @@ mod simplifycfg;
 mod simplifyinst;
 mod verify;
 
+pub use critical::*;
 pub use dce::*;
 pub use gvn::*;
 pub use mem2reg::*;

@@ -1,0 +1,44 @@
+; MATCH-SECTION
+;
+; fn i32 @test(bool) {
+; entry(bool %0):
+;   condbr bool %0, bb0, bb1
+;
+; bb0:
+;   %1 = iconst i32 42
+;   %2 = iconst i32 13
+;   condbr bool %0, bb2(i32 %1), bb0.bb3.split_crit_edge
+;
+; bb0.bb3.split_crit_edge:
+;   br bb3(i32 %2)
+;
+; bb1:
+;   %3 = iconst i32 16
+;   br bb3(i32 %3)
+;
+; bb2(i32 %4):
+;   ret i32 %4
+;
+; bb3(i32 %5):
+;   ret i32 %5
+; }
+;;
+fn i32 @test(bool) {
+entry(bool %0):
+    condbr bool %0, bb0, bb1
+
+bb0:
+    %1 = iconst i32 42
+    %2 = iconst i32 13
+    condbr bool %0, bb2(i32 %1), bb3(i32 %2)
+
+bb1:
+    %3 = iconst i32 16
+    br bb3(i32 %3)
+
+bb2(i32 %4):
+    ret i32 %4
+
+bb3(i32 %5):
+    ret i32 %5
+}

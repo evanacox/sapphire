@@ -1,0 +1,21 @@
+; MATCH-SECTION
+;
+; test:
+;     mov vi2, edi
+;     mov vi1, vi2
+;     jmp .L0
+; .L0:
+;     mov vi0, vi1
+;     add vi0, 1
+;     mov eax, vi0
+;     ret
+;;
+fn i32 @test(i32) {
+entry(i32 %0):
+  %1 = iconst i32 1
+  br one(i32 %0)
+
+one(i32 %2):
+  %3 = iadd i32 %2, %1
+  ret i32 %3
+}

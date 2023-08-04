@@ -1,0 +1,36 @@
+; MATCH-SECTION
+;
+; lost_copy:
+;     mov vi3, 1
+;     mov vi0, vi3
+;     jmp .L0
+; .L0:
+;     mov vi1, vi0
+;     add vi1, vi3
+;     call rand_bool
+;     mov vi2, eax
+;     test vi2, vi2
+;     jnz .L2
+;     jmp .L1
+; .L1:
+;     mov vi0, vi1
+;     jmp .L0
+; .L2:
+;     mov eax, vi0
+;     ret
+;;
+fn bool @rand_bool()
+
+fn i32 @lost_copy() {
+entry:
+  %0 = iconst i32 1
+  br one(i32 %0)
+
+one(i32 %1):
+  %2 = iadd i32 %1, %0
+  %3 = call bool @rand_bool()
+  condbr bool %3, exit, one(i32 %2)
+
+exit:
+  ret i32 %1
+}

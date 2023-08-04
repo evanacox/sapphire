@@ -70,7 +70,7 @@ impl<K: ArenaKey, V> ArenaMap<K, V> {
     pub fn new() -> Self {
         Self {
             slots: Vec::default(),
-            _unused: PhantomData::default(),
+            _unused: PhantomData,
         }
     }
 
@@ -89,7 +89,7 @@ impl<K: ArenaKey, V> ArenaMap<K, V> {
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             slots: Vec::with_capacity(capacity),
-            _unused: PhantomData::default(),
+            _unused: PhantomData,
         }
     }
 
@@ -382,7 +382,7 @@ impl<K: ArenaKey, V> FromIterator<V> for ArenaMap<K, V> {
     fn from_iter<T: IntoIterator<Item = V>>(iter: T) -> Self {
         Self {
             slots: Vec::from_iter(iter),
-            _unused: PhantomData::default(),
+            _unused: PhantomData,
         }
     }
 }

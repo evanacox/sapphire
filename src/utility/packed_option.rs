@@ -400,14 +400,14 @@ mod test {
         let none = PackedOption::default();
         let mut some = PackedOption::some(key);
 
-        assert_eq!(none.is_none(), true);
-        assert_eq!(none.is_some(), false);
-        assert_eq!(some.is_none(), false);
-        assert_eq!(some.is_some(), true);
+        assert!(none.is_none());
+        assert!(!none.is_some());
+        assert!(!some.is_none());
+        assert!(some.is_some());
 
         some = none;
 
-        assert_eq!(some.is_none(), true);
-        assert_eq!(some.is_some(), false);
+        assert!(some.is_none());
+        assert!(!some.is_some());
     }
 }

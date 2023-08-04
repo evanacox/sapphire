@@ -1,6 +1,6 @@
 //======---------------------------------------------------------------======//
 //                                                                           //
-// Copyright 2022 Evan Cox <evanacox00@gmail.com>. All rights reserved.      //
+// Copyright 2022-2023 Evan Cox <evanacox00@gmail.com>. All rights reserved. //
 //                                                                           //
 // Use of this source code is governed by a BSD-style license that can be    //
 // found in the LICENSE.txt file at the root of this project, or at the      //
@@ -16,6 +16,8 @@ use crate::transforms::common::rewrite_pad_branch_argument;
 use crate::utility::{IntoTree, SaHashMap, SaHashSet};
 use smallvec::{smallvec, SmallVec};
 
+/// A memory to SSA promotion pass.
+///
 /// Promotes stack slots that only have `load`s and `store`s as uses into registers.
 /// This is effectively an SSA construction pass, it promotes memory operations into
 /// SSA values and φ nodes.  
@@ -202,14 +204,17 @@ fn find_promotable_slots(
                 if operands.contains(&stackslot) {
                     match data {
                         InstData::Store(store) => {
-                            if store.pointer() != stackslot || *ty != cursor.ty(store.stored()) {
+                            if store.pointer() != stackslot
+                                || *ty != cursor.ty(store.stored())
+                                || store.is_volatile()
+                            {
                                 not_promotable.push(stackslot);
                             } else {
                                 defs.push(inst)
                             }
                         }
                         InstData::Load(load) => {
-                            if load.result_ty().unwrap() != *ty {
+                            if load.result_ty().unwrap() != *ty || load.is_volatile() {
                                 not_promotable.push(stackslot);
                             }
                         }

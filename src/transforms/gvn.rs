@@ -1,6 +1,6 @@
 //======---------------------------------------------------------------======//
 //                                                                           //
-// Copyright 2022 Evan Cox <evanacox00@gmail.com>. All rights reserved.      //
+// Copyright 2022-2023 Evan Cox <evanacox00@gmail.com>. All rights reserved. //
 //                                                                           //
 // Use of this source code is governed by a BSD-style license that can be    //
 // found in the LICENSE.txt file at the root of this project, or at the      //
@@ -16,7 +16,7 @@ use crate::utility::SaHashMap;
 use smallvec::SmallVec;
 use std::hash::Hash;
 
-/// A simple global value numbering pass.
+/// A simple GVN (global value numbering) pass.
 ///
 /// This pass works best when the code is already canonicalized
 /// and isn't full of memory operations, so it would be a good idea to
@@ -33,8 +33,6 @@ impl FunctionTransformPass for GVNPass {
 
 /// Runs a global value-numbering algorithm over `func` to remove redundant
 /// expressions.
-///
-/// This pass works best
 pub fn gvn(func: &mut Function, domtree: &DominatorTree) {
     let mut tables = ScopedHashMap::new();
     let mut scope_stack = SmallVec::<[Block; 16]>::new();

@@ -1,6 +1,6 @@
 //======---------------------------------------------------------------======//
 //                                                                           //
-// Copyright 2022 Evan Cox <evanacox00@gmail.com>. All rights reserved.      //
+// Copyright 2022-2023 Evan Cox <evanacox00@gmail.com>. All rights reserved. //
 //                                                                           //
 // Use of this source code is governed by a BSD-style license that can be    //
 // found in the LICENSE.txt file at the root of this project, or at the      //
@@ -17,11 +17,12 @@ use crate::pass::*;
 use crate::transforms::common::has_side_effect;
 use std::mem;
 
-/// A "simplify all the instructions" pass. This is the algebraic simplification
-/// pass, although it will do some trivial constant folding as well. This is
-/// not a full constant propagation pass, but things like `iadd 1, 1` will be
-/// simplified. Notably, it will not simplify any branches, although it may simplify
-/// their conditions.
+/// A peephole optimization and algebraic simplification pass.
+///
+/// While this is the algebraic simplification pass, it will do some trivial
+/// constant folding as well. This is not a full constant propagation pass,
+/// but things like `iadd 1, 1` will be simplified. Notably, it will not
+/// simplify any branches, although it may simplify their conditions.
 ///
 /// This combines three main jobs:
 ///
@@ -35,7 +36,7 @@ impl FunctionTransformPass for SimplifyInstPass {
         let domtree = am.get::<DominatorTreeAnalysis>(func);
         let visitor = SimplifyVisitor::new(func, &domtree);
 
-        visitor.walk();
+        visitor.walk(());
 
         let mut preserved = PreservedAnalyses::none();
 
@@ -67,11 +68,11 @@ impl<'f> SimplifyVisitor<'f> {
 
     // returns if the replacer should replace with swapped operands.
     //
-    // there are four cases we care about:
+    // there are the cases we care about:
     //   - lhs is constant, rhs is not: should swap always to move the constant
     //   - lhs is not, rhs is constant: should never swap
     //   - lhs is constant, rhs is constant: should swap based on lhs.value > rhs.value
-    //   - neither are constant: should swap if lhs value number is larger
+    //   - neither are constant: should swap if lhs is a phi and rhs isnt or if lhs value number is larger
     fn should_sort_binary_ops(&mut self, lhs: Value, rhs: Value) -> bool {
         match (
             self.cursor.value_to_inst(lhs),
@@ -88,7 +89,34 @@ impl<'f> SimplifyVisitor<'f> {
                     (false, false) => lhs.key_index() > rhs.key_index(),
                 }
             }
-            _ => lhs.key_index() > rhs.key_index(),
+            // if the lhs is a constant and rhs is a phi, we do want to swap
+            (Some(i_lhs), None) => {
+                let i_lhs = self.cursor.inst_data(i_lhs);
+
+                i_lhs.is_constant()
+            }
+            // this is here to prevent an infinite loop of changes. if we previously
+            // moved a constant to rhs and lhs is a phi, we explicitly prevent a change
+            // so we don't get stuck in an infinite loop of switching phis and constants
+            (None, Some(i_rhs)) => {
+                let i_rhs = self.cursor.inst_data(i_rhs);
+
+                !i_rhs.is_constant()
+            }
+            // otherwise, try to move phis to the right
+            _ => {
+                // try to keep phi nodes on the right if possible
+                let dfg = self.cursor.dfg();
+                let lhs_phi = dfg.is_block_param(lhs);
+                let rhs_phi = dfg.is_block_param(rhs);
+
+                // if both are phis or neither are phis, sort based on number
+                if lhs_phi == rhs_phi {
+                    lhs.key_index() > rhs.key_index()
+                } else {
+                    lhs_phi && !rhs_phi
+                }
+            }
         }
     }
 
@@ -105,19 +133,19 @@ impl<'f> SimplifyVisitor<'f> {
     }
 }
 
-impl<'f> FunctionCursorVisitor<'f, Option<Simplification<'f>>, FuncCursor<'f>>
+impl<'f> FunctionCursorVisitor<'f, Option<Simplification<'f>>, FuncCursor<'f>, ()>
     for SimplifyVisitor<'f>
 {
     fn cursor(&mut self) -> &mut FuncCursor<'f> {
         &mut self.cursor
     }
 
-    fn result(self) -> Option<Simplification<'f>> {
+    fn result(self, _: ()) -> Option<Simplification<'f>> {
         None
     }
 
-    fn walk(mut self) -> Option<Simplification<'f>> {
-        self.dispatch_blocks();
+    fn walk(mut self, _: ()) -> Option<Simplification<'f>> {
+        self.dispatch_blocks(());
 
         // if the worklist has anything in it, run all the simplifications
         // and then try to refill the worklist. repeat until no more simplifications are found
@@ -131,34 +159,34 @@ impl<'f> FunctionCursorVisitor<'f, Option<Simplification<'f>>, FuncCursor<'f>>
                 (work)(&mut self, dbg, &data);
             }
 
-            self.dispatch_blocks();
+            self.dispatch_blocks(());
         }
 
         None
     }
 
-    fn dispatch_blocks(&mut self) {
+    fn dispatch_blocks(&mut self, _: ()) {
         // stupid, but you can't iterate over self.rpo while calling `self.visit_block`
         let rpo = mem::take(&mut self.rpo);
 
         for bb in rpo.iter().copied() {
-            self.visit_block(bb);
+            self.visit_block(bb, ());
         }
 
         self.rpo = rpo;
     }
 
-    fn dispatch_insts(&mut self, block: Block) {
+    fn dispatch_insts(&mut self, block: Block, _: ()) {
         self.cursor().goto_before(block);
 
         while let Some(inst) = self.cursor().next_inst() {
-            if let Some(simplification) = self.visit_inst(inst) {
+            if let Some(simplification) = self.visit_inst(inst, ()) {
                 self.worklist.push((simplification, inst));
             }
         }
     }
 
-    fn visit_inst(&mut self, inst: Inst) -> Option<Simplification<'f>> {
+    fn visit_inst(&mut self, inst: Inst, _: ()) -> Option<Simplification<'f>> {
         // we intentionally don't want to screw with branches here
         if !has_side_effect(self.cursor.dfg(), inst) {
             let data = self.cursor.inst_data(inst).clone();
@@ -169,7 +197,7 @@ impl<'f> FunctionCursorVisitor<'f, Option<Simplification<'f>>, FuncCursor<'f>>
                 return Some(|_, _, _| {});
             }
 
-            return self.dispatch_inst(&data);
+            return self.dispatch_inst(&data, ());
         }
 
         None
@@ -213,16 +241,16 @@ macro_rules! cast_val {
 
 type Simplification<'f> = fn(&mut SimplifyVisitor<'f>, DebugInfo, &InstData);
 
-impl<'f> GenericInstVisitor<Option<Simplification<'f>>> for SimplifyVisitor<'f> {
-    fn visit_call(&mut self, _: &CallInst) -> Option<Simplification<'f>> {
+impl<'f> GenericInstVisitor<Option<Simplification<'f>>, ()> for SimplifyVisitor<'f> {
+    fn visit_call(&mut self, _: &CallInst, _: ()) -> Option<Simplification<'f>> {
         None
     }
 
-    fn visit_indirectcall(&mut self, _: &IndirectCallInst) -> Option<Simplification<'f>> {
+    fn visit_indirectcall(&mut self, _: &IndirectCallInst, _: ()) -> Option<Simplification<'f>> {
         None
     }
 
-    fn visit_icmp(&mut self, icmp: &ICmpInst) -> Option<Simplification<'f>> {
+    fn visit_icmp(&mut self, icmp: &ICmpInst, _: ()) -> Option<Simplification<'f>> {
         if self.should_sort_binary_ops(icmp.lhs(), icmp.rhs()) {
             Some(|this, dbg, data| {
                 let icmp = cast!(InstData::ICmp, data);
@@ -236,7 +264,7 @@ impl<'f> GenericInstVisitor<Option<Simplification<'f>>> for SimplifyVisitor<'f> 
         }
     }
 
-    fn visit_fcmp(&mut self, fcmp: &FCmpInst) -> Option<Simplification<'f>> {
+    fn visit_fcmp(&mut self, fcmp: &FCmpInst, _: ()) -> Option<Simplification<'f>> {
         if self.should_sort_binary_ops(fcmp.lhs(), fcmp.rhs()) {
             Some(|this, dbg, data| {
                 let fcmp = cast!(InstData::FCmp, data);
@@ -250,67 +278,67 @@ impl<'f> GenericInstVisitor<Option<Simplification<'f>>> for SimplifyVisitor<'f> 
         }
     }
 
-    fn visit_sel(&mut self, _: &SelInst) -> Option<Simplification<'f>> {
+    fn visit_sel(&mut self, _: &SelInst, _: ()) -> Option<Simplification<'f>> {
         None
     }
 
-    fn visit_br(&mut self, _: &BrInst) -> Option<Simplification<'f>> {
+    fn visit_br(&mut self, _: &BrInst, _: ()) -> Option<Simplification<'f>> {
         None
     }
 
-    fn visit_condbr(&mut self, _: &CondBrInst) -> Option<Simplification<'f>> {
+    fn visit_condbr(&mut self, _: &CondBrInst, _: ()) -> Option<Simplification<'f>> {
         None
     }
 
-    fn visit_unreachable(&mut self, _: &UnreachableInst) -> Option<Simplification<'f>> {
+    fn visit_unreachable(&mut self, _: &UnreachableInst, _: ()) -> Option<Simplification<'f>> {
         None
     }
 
-    fn visit_ret(&mut self, _: &RetInst) -> Option<Simplification<'f>> {
+    fn visit_ret(&mut self, _: &RetInst, _: ()) -> Option<Simplification<'f>> {
         None
     }
 
-    fn visit_and(&mut self, and: &CommutativeArithInst) -> Option<Simplification<'f>> {
+    fn visit_and(&mut self, and: &CommutativeArithInst, _: ()) -> Option<Simplification<'f>> {
         try_sort_commutative_binary_ops!(self, and, InstData::And, and);
 
         None
     }
 
-    fn visit_or(&mut self, or: &CommutativeArithInst) -> Option<Simplification<'f>> {
+    fn visit_or(&mut self, or: &CommutativeArithInst, _: ()) -> Option<Simplification<'f>> {
         try_sort_commutative_binary_ops!(self, or, InstData::Or, or);
 
         None
     }
 
-    fn visit_xor(&mut self, xor: &CommutativeArithInst) -> Option<Simplification<'f>> {
+    fn visit_xor(&mut self, xor: &CommutativeArithInst, _: ()) -> Option<Simplification<'f>> {
         try_sort_commutative_binary_ops!(self, xor, InstData::Xor, xor);
 
         None
     }
 
-    fn visit_shl(&mut self, _: &ArithInst) -> Option<Simplification<'f>> {
+    fn visit_shl(&mut self, _: &ArithInst, _: ()) -> Option<Simplification<'f>> {
         None
     }
 
-    fn visit_ashr(&mut self, _: &ArithInst) -> Option<Simplification<'f>> {
+    fn visit_ashr(&mut self, _: &ArithInst, _: ()) -> Option<Simplification<'f>> {
         None
     }
 
-    fn visit_lshr(&mut self, _: &ArithInst) -> Option<Simplification<'f>> {
+    fn visit_lshr(&mut self, _: &ArithInst, _: ()) -> Option<Simplification<'f>> {
         None
     }
 
-    fn visit_iadd(&mut self, iadd: &CommutativeArithInst) -> Option<Simplification<'f>> {
+    fn visit_iadd(&mut self, iadd: &CommutativeArithInst, _: ()) -> Option<Simplification<'f>> {
         try_sort_commutative_binary_ops!(self, iadd, InstData::IAdd, iadd);
 
         None
     }
 
-    fn visit_isub(&mut self, _: &ArithInst) -> Option<Simplification<'f>> {
+    fn visit_isub(&mut self, _: &ArithInst, _: ()) -> Option<Simplification<'f>> {
         None
     }
 
-    fn visit_imul(&mut self, imul: &CommutativeArithInst) -> Option<Simplification<'f>> {
+    fn visit_imul(&mut self, imul: &CommutativeArithInst, _: ()) -> Option<Simplification<'f>> {
         try_sort_commutative_binary_ops!(self, imul, InstData::IMul, imul);
 
         // imul %0, <power of 2>
@@ -335,11 +363,11 @@ impl<'f> GenericInstVisitor<Option<Simplification<'f>>> for SimplifyVisitor<'f> 
         None
     }
 
-    fn visit_sdiv(&mut self, _: &ArithInst) -> Option<Simplification<'f>> {
+    fn visit_sdiv(&mut self, _: &ArithInst, _: ()) -> Option<Simplification<'f>> {
         None
     }
 
-    fn visit_udiv(&mut self, inst: &ArithInst) -> Option<Simplification<'f>> {
+    fn visit_udiv(&mut self, inst: &ArithInst, _: ()) -> Option<Simplification<'f>> {
         // udiv %0, <power of 2>
         if self.matches_inst(self.inst(), udiv_with(val(), power_of_two())) {
             let rhs = cast_val!(InstData::IConst, self, inst.rhs()).value();
@@ -362,11 +390,11 @@ impl<'f> GenericInstVisitor<Option<Simplification<'f>>> for SimplifyVisitor<'f> 
         None
     }
 
-    fn visit_srem(&mut self, _: &ArithInst) -> Option<Simplification<'f>> {
+    fn visit_srem(&mut self, _: &ArithInst, _: ()) -> Option<Simplification<'f>> {
         None
     }
 
-    fn visit_urem(&mut self, inst: &ArithInst) -> Option<Simplification<'f>> {
+    fn visit_urem(&mut self, inst: &ArithInst, _: ()) -> Option<Simplification<'f>> {
         // urem %0, <power of 2>
         if self.matches_inst(self.inst(), urem_with(val(), power_of_two())) {
             let rhs = cast_val!(InstData::IConst, self, inst.rhs()).value();
@@ -389,139 +417,139 @@ impl<'f> GenericInstVisitor<Option<Simplification<'f>>> for SimplifyVisitor<'f> 
         None
     }
 
-    fn visit_fneg(&mut self, _: &FloatUnaryInst) -> Option<Simplification<'f>> {
+    fn visit_fneg(&mut self, _: &FloatUnaryInst, _: ()) -> Option<Simplification<'f>> {
         None
     }
 
-    fn visit_fadd(&mut self, fadd: &CommutativeArithInst) -> Option<Simplification<'f>> {
+    fn visit_fadd(&mut self, fadd: &CommutativeArithInst, _: ()) -> Option<Simplification<'f>> {
         try_sort_commutative_binary_ops!(self, fadd, InstData::FAdd, fadd);
 
         None
     }
 
-    fn visit_fsub(&mut self, _: &ArithInst) -> Option<Simplification<'f>> {
+    fn visit_fsub(&mut self, _: &ArithInst, _: ()) -> Option<Simplification<'f>> {
         None
     }
 
-    fn visit_fmul(&mut self, fmul: &CommutativeArithInst) -> Option<Simplification<'f>> {
+    fn visit_fmul(&mut self, fmul: &CommutativeArithInst, _: ()) -> Option<Simplification<'f>> {
         try_sort_commutative_binary_ops!(self, fmul, InstData::FMul, fmul);
 
         None
     }
 
-    fn visit_fdiv(&mut self, _: &ArithInst) -> Option<Simplification<'f>> {
+    fn visit_fdiv(&mut self, _: &ArithInst, _: ()) -> Option<Simplification<'f>> {
         None
     }
 
-    fn visit_frem(&mut self, _: &ArithInst) -> Option<Simplification<'f>> {
+    fn visit_frem(&mut self, _: &ArithInst, _: ()) -> Option<Simplification<'f>> {
         None
     }
 
-    fn visit_alloca(&mut self, _: &AllocaInst) -> Option<Simplification<'f>> {
+    fn visit_alloca(&mut self, _: &AllocaInst, _: ()) -> Option<Simplification<'f>> {
         None
     }
 
-    fn visit_load(&mut self, _: &LoadInst) -> Option<Simplification<'f>> {
+    fn visit_load(&mut self, _: &LoadInst, _: ()) -> Option<Simplification<'f>> {
         None
     }
 
-    fn visit_store(&mut self, _: &StoreInst) -> Option<Simplification<'f>> {
+    fn visit_store(&mut self, _: &StoreInst, _: ()) -> Option<Simplification<'f>> {
         None
     }
 
-    fn visit_offset(&mut self, _: &OffsetInst) -> Option<Simplification<'f>> {
+    fn visit_offset(&mut self, _: &OffsetInst, _: ()) -> Option<Simplification<'f>> {
         None
     }
 
-    fn visit_extract(&mut self, _: &ExtractInst) -> Option<Simplification<'f>> {
+    fn visit_extract(&mut self, _: &ExtractInst, _: ()) -> Option<Simplification<'f>> {
         None
     }
 
-    fn visit_insert(&mut self, _: &InsertInst) -> Option<Simplification<'f>> {
+    fn visit_insert(&mut self, _: &InsertInst, _: ()) -> Option<Simplification<'f>> {
         None
     }
 
-    fn visit_elemptr(&mut self, _: &ElemPtrInst) -> Option<Simplification<'f>> {
+    fn visit_elemptr(&mut self, _: &ElemPtrInst, _: ()) -> Option<Simplification<'f>> {
         None
     }
 
-    fn visit_sext(&mut self, _: &CastInst) -> Option<Simplification<'f>> {
+    fn visit_sext(&mut self, _: &CastInst, _: ()) -> Option<Simplification<'f>> {
         None
     }
 
-    fn visit_zext(&mut self, _: &CastInst) -> Option<Simplification<'f>> {
+    fn visit_zext(&mut self, _: &CastInst, _: ()) -> Option<Simplification<'f>> {
         None
     }
 
-    fn visit_trunc(&mut self, _: &CastInst) -> Option<Simplification<'f>> {
+    fn visit_trunc(&mut self, _: &CastInst, _: ()) -> Option<Simplification<'f>> {
         None
     }
 
-    fn visit_itob(&mut self, _: &CastInst) -> Option<Simplification<'f>> {
+    fn visit_itob(&mut self, _: &CastInst, _: ()) -> Option<Simplification<'f>> {
         None
     }
 
-    fn visit_btoi(&mut self, _: &CastInst) -> Option<Simplification<'f>> {
+    fn visit_btoi(&mut self, _: &CastInst, _: ()) -> Option<Simplification<'f>> {
         None
     }
 
-    fn visit_sitof(&mut self, _: &CastInst) -> Option<Simplification<'f>> {
+    fn visit_sitof(&mut self, _: &CastInst, _: ()) -> Option<Simplification<'f>> {
         None
     }
 
-    fn visit_uitof(&mut self, _: &CastInst) -> Option<Simplification<'f>> {
+    fn visit_uitof(&mut self, _: &CastInst, _: ()) -> Option<Simplification<'f>> {
         None
     }
 
-    fn visit_ftosi(&mut self, _: &CastInst) -> Option<Simplification<'f>> {
+    fn visit_ftosi(&mut self, _: &CastInst, _: ()) -> Option<Simplification<'f>> {
         None
     }
 
-    fn visit_ftoui(&mut self, _: &CastInst) -> Option<Simplification<'f>> {
+    fn visit_ftoui(&mut self, _: &CastInst, _: ()) -> Option<Simplification<'f>> {
         None
     }
 
-    fn visit_fext(&mut self, _: &CastInst) -> Option<Simplification<'f>> {
+    fn visit_fext(&mut self, _: &CastInst, _: ()) -> Option<Simplification<'f>> {
         None
     }
 
-    fn visit_ftrunc(&mut self, _: &CastInst) -> Option<Simplification<'f>> {
+    fn visit_ftrunc(&mut self, _: &CastInst, _: ()) -> Option<Simplification<'f>> {
         None
     }
 
-    fn visit_itop(&mut self, _: &CastInst) -> Option<Simplification<'f>> {
+    fn visit_itop(&mut self, _: &CastInst, _: ()) -> Option<Simplification<'f>> {
         None
     }
 
-    fn visit_ptoi(&mut self, _: &CastInst) -> Option<Simplification<'f>> {
+    fn visit_ptoi(&mut self, _: &CastInst, _: ()) -> Option<Simplification<'f>> {
         None
     }
 
-    fn visit_iconst(&mut self, _: &IConstInst) -> Option<Simplification<'f>> {
+    fn visit_iconst(&mut self, _: &IConstInst, _: ()) -> Option<Simplification<'f>> {
         None
     }
 
-    fn visit_fconst(&mut self, _: &FConstInst) -> Option<Simplification<'f>> {
+    fn visit_fconst(&mut self, _: &FConstInst, _: ()) -> Option<Simplification<'f>> {
         None
     }
 
-    fn visit_bconst(&mut self, _: &BConstInst) -> Option<Simplification<'f>> {
+    fn visit_bconst(&mut self, _: &BConstInst, _: ()) -> Option<Simplification<'f>> {
         None
     }
 
-    fn visit_undef(&mut self, _: &UndefConstInst) -> Option<Simplification<'f>> {
+    fn visit_undef(&mut self, _: &UndefConstInst, _: ()) -> Option<Simplification<'f>> {
         None
     }
 
-    fn visit_null(&mut self, _: &NullConstInst) -> Option<Simplification<'f>> {
+    fn visit_null(&mut self, _: &NullConstInst, _: ()) -> Option<Simplification<'f>> {
         None
     }
 
-    fn visit_stackslot(&mut self, _: &StackSlotInst) -> Option<Simplification<'f>> {
+    fn visit_stackslot(&mut self, _: &StackSlotInst, _: ()) -> Option<Simplification<'f>> {
         None
     }
 
-    fn visit_globaladdr(&mut self, _: &GlobalAddrInst) -> Option<Simplification<'f>> {
+    fn visit_globaladdr(&mut self, _: &GlobalAddrInst, _: ()) -> Option<Simplification<'f>> {
         None
     }
 }

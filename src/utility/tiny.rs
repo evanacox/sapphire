@@ -566,7 +566,7 @@ where
     where
         D: Deserializer<'de>,
     {
-        deserializer.deserialize_seq(TinyArrayVisitor(PhantomData::default()))
+        deserializer.deserialize_seq(TinyArrayVisitor(PhantomData))
     }
 }
 

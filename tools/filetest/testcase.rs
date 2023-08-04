@@ -90,19 +90,30 @@ fn find_checks<'data>(name: &str, contents: &'data str) -> Check<'data> {
     }
 
     if first.starts_with("; COMPILE-ERROR: ") {
-        return Check::CompileError(first.trim_start_matches("; COMPILE-ERROR: ").to_string());
+        return Check::CompileError(
+            first
+                .trim_start_matches("; COMPILE-ERROR: ")
+                .trim_end()
+                .to_string(),
+        );
     }
 
     if first.starts_with("; STANDARD") {
         return find_individual_checks(rest);
     }
 
-    panic!("test '{name}' did not provide `; <TYPE>` header for `filetest`. got: '{first}'")
+    // we explicitly print out here since the panic handler may have been replaced
+    eprintln!("test '{name}' did not provide `; <TYPE>` header for `filetest`. got: '{first}'");
+    panic!()
 }
 
 fn match_entire_file(output: TestResult, expected: &str) -> Result<(), TestFailure> {
     match output {
-        TestResult::Output(data) if data == expected => Ok(()),
+        TestResult::Output(data)
+            if data.replace("\r\n", "\n") == expected.replace("\r\n", "\n") =>
+        {
+            Ok(())
+        }
         TestResult::CompileError(err) => Err(TestFailure::CompileError(err)),
         TestResult::Output(data) => Err(TestFailure::Diff {
             expected: expected.to_string(),
@@ -121,7 +132,13 @@ fn match_compile_error(output: TestResult, err: &str) -> Result<(), TestFailure>
 
 fn match_section(output: TestResult, section: &str) -> Result<(), TestFailure> {
     match output {
-        TestResult::Output(data) if data.contains(section) => Ok(()),
+        TestResult::Output(data)
+            if data
+                .replace("\r\n", "\n")
+                .contains(&section.replace("\r\n", "\n")) =>
+        {
+            Ok(())
+        }
         TestResult::CompileError(err) => Err(TestFailure::CompileError(err)),
         TestResult::Output(data) => Err(TestFailure::Diff {
             expected: section.to_string(),
@@ -144,7 +161,8 @@ fn match_checks(output: TestResult, checks: &[&str]) -> Result<(), TestFailure> 
             None => break,
         };
 
-        if line == check {
+        // hack to make tests pass on windows regardless of LF/CRLF
+        if line.replace("\r\n", "\n") == check.replace("\r\n", "\n") {
             let _ = checks.next();
         }
     }

@@ -43,14 +43,19 @@ ty = { bool_ty | ptr_ty | int_ty | float_ty | array_ty | struct_ty }
 // functions
 //   - fn T @name(T, U)
 //
-ty_or_void = { ty | "void" }
 variadic = @{ "..." }
-abi = @{ "ccc" | "fastcc" }
+abi = @{ "ccc" | "sysv" | "win64" }
+
+ret_attribute = @{ "noalias" | "nonnull" }
+ty_or_void_with_attr = { (ret_attribute* ~ ty) | "void" }
+param_attribute = { ret_attribute | "byval(" ~ int_literal ~ ")" }
+ty_with_param_attributes = { param_attribute* ~ ty }
+param_ty_list = { (ty_with_param_attributes ~ ("," ~ ty_with_param_attributes)*) }
 param_list = {
      ("(" ~ variadic? ~ ")") |
-     ("(" ~ ty_list ~ ("," ~ variadic)? ~ ")")
+     ("(" ~ param_ty_list ~ ("," ~ variadic)? ~ ")")
 }
-function_prototype = { "fn" ~ ty_or_void ~ global ~ param_list ~ abi? }
+function_prototype = { "fn" ~ ty_or_void_with_attr ~ global ~ param_list ~ abi? }
 function_body = {
 	"{" ~ (NEWLINE | LINE_COMMENT) ~
     (PATTERN_WHITE_SPACE*) ~
@@ -143,10 +148,10 @@ inst = {
 // %2 = call i32 @printf(ptr %0, i32 %1)
 // call void @foo()
 args_with_types = { "(" ~ (operand ~ ("," ~ operand)*)? ~ ")" }
-call = { result? ~ "call" ~ ty_or_void ~ global ~ args_with_types }
+call = { result? ~ "call" ~ ty_or_void_with_attr ~ global ~ args_with_types }
 
 // %2 = indirectcall i32 (ptr, ...)
-signature = { ty_or_void ~ param_list }
+signature = { ty_or_void_with_attr ~ param_list }
 indirectcall = { result? ~ "indirectcall" ~ signature ~ "," ~ ptr_ty ~ local ~ args_with_types }
 
 // %2 = icmp eq i32 %0, %1
@@ -192,11 +197,13 @@ binary_float = { result ~ binary_float_opcode ~ float_ty ~ binary_operands }
 // %0 = alloca T
 alloca = { result ~ "alloca" ~ ty }
 
+maybe_volatile = @{ "volatile"? }
+
 // %1 = load T, ptr %0
-load = { result ~ "load" ~ ty ~ "," ~ ptr_ty ~ local }
+load = { result ~ "load" ~ maybe_volatile ~ ty ~ "," ~ ptr_ty ~ local }
 
 // store T %0, ptr %1
-store = { "store" ~ operand ~ "," ~ ptr_ty ~ local }
+store = { "store" ~ maybe_volatile ~ operand ~ "," ~ ptr_ty ~ local }
 
 // %2 = offset T, ptr %0, iN %1
 offset = { result ~ "offset" ~ ty ~ "," ~ ptr_ty ~ local ~ "," ~ int_ty ~ local }

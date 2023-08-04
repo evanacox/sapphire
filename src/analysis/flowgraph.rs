@@ -37,20 +37,39 @@ impl ControlFlowGraph {
     }
 
     /// Returns an iterator over the predecessors for a given block.
-    pub fn predecessors(&self, block: Block) -> impl Iterator<Item = Block> + '_ {
+    #[inline]
+    pub fn predecessors(&self, block: Block) -> impl ExactSizeIterator<Item = Block> + '_ {
         let node = self.data_of(block);
 
         node.predecessors.iter().copied()
     }
 
     /// Returns an iterator over the successors for a given block.
-    pub fn successors(&self, block: Block) -> impl Iterator<Item = Block> + '_ {
+    #[inline]
+    pub fn successors(&self, block: Block) -> impl ExactSizeIterator<Item = Block> + '_ {
         let node = self.data_of(block);
 
         node.successors.iter().copied()
     }
 
+    /// Returns an iterator over the predecessors for a given block.
+    #[inline]
+    pub fn n_predecessors(&self, block: Block) -> usize {
+        let node = self.data_of(block);
+
+        node.predecessors.len()
+    }
+
+    /// Returns an iterator over the successors for a given block.
+    #[inline]
+    pub fn n_successors(&self, block: Block) -> usize {
+        let node = self.data_of(block);
+
+        node.successors.len()
+    }
+
     /// Checks if a given block `pred` is a predecessor of `block`
+    #[inline]
     pub fn is_pred_of(&self, block: Block, pred: Block) -> bool {
         let node = self.data_of(block);
 
@@ -58,6 +77,7 @@ impl ControlFlowGraph {
     }
 
     /// Checks if a given block `pred` is a successor of `block`
+    #[inline]
     pub fn is_succ_of(&self, block: Block, succ: Block) -> bool {
         let node = self.data_of(block);
 

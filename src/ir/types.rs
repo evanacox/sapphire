@@ -769,6 +769,18 @@ impl Type {
         self.discriminator() == Self::STRUCT
     }
 
+    /// Checks if the type is a [`Struct`] or an [`Array`].
+    ///
+    /// ```
+    /// # use sapphire::ir::*;
+    /// let t1 = Type::bool();
+    /// assert_eq!(t1.is_aggregate(), false);
+    /// ```
+    #[inline]
+    pub const fn is_aggregate(&self) -> bool {
+        self.is_struct() || self.is_array()
+    }
+
     /// If `self` models a boolean type, unwraps the boolean type
     /// and returns it.
     pub fn as_bool(&self) -> Option<Bool> {

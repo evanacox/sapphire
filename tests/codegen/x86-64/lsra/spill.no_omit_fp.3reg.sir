@@ -1,0 +1,27 @@
+; MATCH-SECTION
+;
+; test:
+;     push rbp
+;     mov rbp, rsp
+;     sub rsp, 16
+;     mov r8d, ecx
+;     mov qword ptr [rbp - 8], r8
+;     mov r9d, edx
+;     mov r10d, esi
+;     mov r8d, edi
+;     add r8d, r10d
+;     mov r10, qword ptr [rbp - 8]
+;     add r9d, r10d
+;     xor r8d, r9d
+;     mov eax, r8d
+;     add rsp, 16
+;     pop rbp
+;     ret
+;;
+fn i32 @test(i32, i32, i32, i32) {
+entry(i32 %0, i32 %1, i32 %2, i32 %3):
+    %4 = iadd i32 %0, %1
+    %5 = iadd i32 %2, %3
+    %6 = xor i32 %4, %5
+    ret i32 %6
+}

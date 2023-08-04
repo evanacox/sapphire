@@ -1,0 +1,14 @@
+; MATCH-SECTION
+;
+; test:
+;     add di, si
+;     mov eax, edi
+;     ret
+;;
+fn i16 @test(i16, i16) {
+entry(i16 %0, i16 %1):
+  ; %2 starts with a copy from `mov vi0, <ARG REG>`
+  ; and we want it to inherit <ARG REG>
+  %2 = iadd i16 %0, %1
+  ret i16 %2
+}
