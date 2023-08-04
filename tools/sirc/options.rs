@@ -9,12 +9,12 @@
 //======---------------------------------------------------------------======//
 
 use bpaf::Parser;
-use lazy_static::lazy_static;
 use sapphire::cli::{emit_machine_format, frame_pointer, verify, FramePointer, MachineFormat};
 use sapphire::codegen::x86_64::{X86_64Assembly, X86_64ObjectFile};
 use sapphire::codegen::{CodegenOptions, TargetPair};
 use sapphire::{cli, cli::BaseOptions};
 use std::str::FromStr;
+use std::sync::OnceLock;
 
 /// The options given by the user, both inferred and explicit.
 pub struct Options {
@@ -44,12 +44,7 @@ pub struct Options {
     pub x86_64_obj: Option<X86_64ObjectFile>,
 }
 
-lazy_static! {
-    static ref DESCRIPTION: String = format!(
-        "static compiler for Sapphire IR (default target: {})",
-        default_target()
-    );
-}
+static DESCRIPTION: OnceLock<String> = OnceLock::new();
 
 /// Parses and infers all options necessary for the compiler.
 ///
@@ -62,7 +57,12 @@ pub fn parse_options() -> Options {
         (format, omit_fp, x86_asm, x86_obj, target, regalloc, opt, verify, print, fixed_intervals),
         base,
     ) = cli::tool_with(
-        &DESCRIPTION,
+        &DESCRIPTION.get_or_init(|| {
+            format!(
+                "static compiler for Sapphire IR (default target: {})",
+                default_target()
+            )
+        }),
         "Usage: sirc [options] <input ir>",
         bpaf::construct!(
             emit_machine_format(),

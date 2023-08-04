@@ -9,26 +9,16 @@
 //======---------------------------------------------------------------======//
 
 use crate::testcase::FileTestCase;
-use lazy_static::lazy_static;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::OnceLock;
 use std::{fs, mem};
 
 type DirectoryContents =
     HashMap<String, Vec<(String, String, FileTestCase<'static>)>, ahash::RandomState>;
 
-lazy_static! {
-    static ref ALL_TEST_CASES: DirectoryContents = {
-        let mut map = DirectoryContents::default();
-        let mut root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        root.push("tests/");
-
-        recursive_build(&mut map, String::default(), root);
-
-        map
-    };
-}
+static ALL_TEST_CASES: OnceLock<DirectoryContents> = OnceLock::new();
 
 fn recursive_build(out: &mut DirectoryContents, curr_key: String, current_dir: PathBuf) {
     let mut subdirs = Vec::default();
@@ -72,11 +62,23 @@ fn recursive_build(out: &mut DirectoryContents, curr_key: String, current_dir: P
     }
 }
 
+fn init_directory() -> DirectoryContents {
+    let mut map = DirectoryContents::default();
+    let mut root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    root.push("tests/");
+
+    recursive_build(&mut map, String::default(), root);
+
+    map
+}
+
 pub fn cases_in_subdir(path: &'static str) -> &'static [(String, String, FileTestCase)] {
     assert!(
-        ALL_TEST_CASES.contains_key(path),
+        ALL_TEST_CASES
+            .get_or_init(init_directory)
+            .contains_key(path),
         "no files found for path `{path}`"
     );
 
-    &ALL_TEST_CASES[path]
+    &ALL_TEST_CASES.get_or_init(init_directory)[path]
 }
