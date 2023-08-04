@@ -57,7 +57,7 @@ pub fn parse_options() -> Options {
         (format, omit_fp, x86_asm, x86_obj, target, regalloc, opt, verify, print, fixed_intervals),
         base,
     ) = cli::tool_with(
-        &DESCRIPTION.get_or_init(|| {
+        DESCRIPTION.get_or_init(|| {
             format!(
                 "static compiler for Sapphire IR (default target: {})",
                 default_target()
