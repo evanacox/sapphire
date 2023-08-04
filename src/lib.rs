@@ -23,17 +23,20 @@
 //!
 //! These are the basic APIs for building, manipulating and emitting SIR.
 
-mod reader;
+pub mod reader2;
 
 pub mod analysis;
 pub mod arena;
-pub mod cli;
 pub mod codegen;
 pub mod ir;
 pub mod pass;
+pub mod reader;
 pub mod transforms;
 pub mod utility;
 pub mod vm;
+
+#[cfg(feature = "dev-tools")]
+pub mod cli;
 
 use crate::analysis::{
     ControlFlowGraphAnalysis, DominanceFrontierAnalysis, DominatorTreeAnalysis,
