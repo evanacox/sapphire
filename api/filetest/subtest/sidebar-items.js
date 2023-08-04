@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["FAILURE"],"enum":["TestResult"],"fn":["__getit","__init","panic_hook"],"static":["__KEY"],"struct":["Subtest","TestDetails"]};
+window.SIDEBAR_ITEMS = {"constant":["FAILURE"],"enum":["TestResult"],"fn":["panic_hook"],"struct":["Subtest","TestDetails"]};

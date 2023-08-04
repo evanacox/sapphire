@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["__stability","__static_ref_initialize","cases_in_subdir","recursive_build"],"static":["LAZY"],"struct":["ALL_TEST_CASES"],"type":["DirectoryContents"]};
+window.SIDEBAR_ITEMS = {"fn":["cases_in_subdir","recursive_build"],"struct":["ALL_TEST_CASES"],"type":["DirectoryContents"]};
