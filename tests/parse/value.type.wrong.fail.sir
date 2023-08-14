@@ -1,4 +1,4 @@
-; COMPILE-ERROR: mismatched types for value '%1', expected 'i32' but value actually is of type 'ptr'
+; COMPILE-ERROR: expected type of value to be 'i32' but actually is 'ptr'
 fn i32 @printf(ptr)
 
 fn void @test() {

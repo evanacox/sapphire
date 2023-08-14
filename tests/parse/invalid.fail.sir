@@ -1,2 +1,2 @@
-; COMPILE-ERROR: expected EOI or function_prototype
+; COMPILE-ERROR: expected 'fn' or EOF
 invalid

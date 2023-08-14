@@ -165,7 +165,7 @@ pub(crate) fn stringify_ty(ctx: &TypePool, ty: Type) -> String {
         }
         UType::Array(arr) => {
             format!(
-                "[{}; {}]",
+                "[{} x {}]",
                 stringify_ty(ctx, arr.element(ctx)),
                 arr.len(ctx)
             )
@@ -911,7 +911,7 @@ impl<'m> SIRVisitor<'m> for WriterImpl<'m> {
         let result = if is_nan {
             format!("fconst {ty} NaN")
         } else {
-            format!("fconst {ty} 0xfp{value:020X}")
+            format!("fconst {ty} 0f{value:020X}")
         };
 
         self.state.whole += &result;
@@ -984,17 +984,20 @@ mod tests {
 
         {
             let i8_512 = Type::array(&mut module.type_pool_mut(), Type::i8(), 512);
-            assert_eq!(writer.ty(&module.type_pool(), i8_512), "[i8; 512]");
+            assert_eq!(writer.ty(&module.type_pool(), i8_512), "[i8 x 512]");
 
             let i8_512_16 = Type::array(&mut module.type_pool_mut(), i8_512, 16);
-            assert_eq!(writer.ty(&module.type_pool(), i8_512_16), "[[i8; 512]; 16]");
+            assert_eq!(
+                writer.ty(&module.type_pool(), i8_512_16),
+                "[[i8 x 512] x 16]"
+            );
 
             let ptr_0 = Type::array(&mut module.type_pool_mut(), Type::ptr(), 0);
-            assert_eq!(writer.ty(&module.type_pool(), ptr_0), "[ptr; 0]");
+            assert_eq!(writer.ty(&module.type_pool(), ptr_0), "[ptr x 0]");
 
             let unit = Type::structure(&mut module.type_pool_mut(), &[]);
             let unit_42 = Type::array(&mut module.type_pool_mut(), unit, 42);
-            assert_eq!(writer.ty(&module.type_pool(), unit_42), "[{}; 42]");
+            assert_eq!(writer.ty(&module.type_pool(), unit_42), "[{} x 42]");
 
             let slice = Type::structure(&mut module.type_pool_mut(), &[Type::ptr(), Type::i64()]);
             let slice_64 = Type::array(&mut module.type_pool_mut(), slice, 64);
@@ -1003,7 +1006,7 @@ mod tests {
                 Type::array(&mut module.type_pool_mut(), struct_slice_64, 732);
             assert_eq!(
                 writer.ty(&module.type_pool(), struct_slice_64_732),
-                "[{ [{ ptr, i64 }; 64] }; 732]"
+                "[{ [{ ptr, i64 } x 64] } x 732]"
             );
         }
 

@@ -114,9 +114,9 @@ and the alignment of a float is exactly the same as its size.
 
 are untyped.
 
-### `[T, N]`: Arrays
+### `[T x N]`: Arrays
 
-`[T, N]` models contiguous blocks of storage, approximately equivalent to arrays in C. Arrays are considered to be aggregate types, and thus aggregate operations can be used on them. Each array index is considered to be a distinct aggregate member.
+`[T x N]` models contiguous blocks of storage, approximately equivalent to arrays in C. Arrays are considered to be aggregate types, and thus aggregate operations can be used on them. Each array index is considered to be a distinct aggregate member.
 
 an independent element.
 
@@ -485,7 +485,7 @@ Syntax:
 Selects one of two given values based on a `bool` condition.
 
 ```other
-%0 = sel i64, bool %b, %a, %b
+%0 = sel bool %b, i64, %a, i64 %b
 ```
 
 This is effectively a hint to the backend to try to use a `cmov` (x86), `csel` (arm64) or similar.
@@ -1128,15 +1128,15 @@ Syntax:
 
 Materializes a floating-point constant from a given floating-point literal.
 
-Floating-point literals can be in decimal form with a `.`, scientific notation, C's hex float format, or raw hex (prefix `0xfp` to make distinct from hex integer values) denoting the underlying byte values.
+Floating-point literals can be in decimal form with a `.`, scientific notation, C's hex float format, or raw hex (prefix `0f` to make distinct from hex integer values) denoting the underlying byte values.
 
 - Standard decimal form: `([0-9]+).([0-9]+)` (ex. `0.0039`)
 - Scientific notation: `.([0-9]+)(.[0-9]+)?e(+|-)([0-9]+)` (ex. `1.749e-3`)
-- Raw hex: `0xfp([0-9a-fA-F]+)` (ex. `0xfp3FD55558B21DC9EA`)
+- Raw hex: `0f([0-9a-fA-F]+)` (ex. `0f3FD55558B21DC9EA`)
 - `NaN` for an unspecified NaN value
 
 ```other
-%0 = fconst f64 0xfp3FD55558B21DC9EA
+%0 = fconst f64 0f3FD55558B21DC9EA
 %1 = fconst f32 3.14195
 %3 = fconst f32 1.3e100
 ```

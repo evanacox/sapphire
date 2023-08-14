@@ -22,7 +22,7 @@ fn isel_greedy_x86_64(name: &str, content: &str) -> TestResult {
 
             module
         }
-        Err(err) => return TestResult::CompileError(format!("{err}")),
+        Err(err) => return TestResult::CompileError(err.to_string()),
     };
 
     let options = CodegenOptions {
@@ -45,6 +45,7 @@ pub const fn isel_greedy_x86_subtest() -> Subtest {
         &[
             "codegen/x86-64/isel",
             "codegen/x86-64/isel/arith",
+            "codegen/x86-64/isel/builtins",
             "codegen/x86-64/isel/constants",
             "codegen/x86-64/isel/icmp",
             "codegen/x86-64/isel/memory",

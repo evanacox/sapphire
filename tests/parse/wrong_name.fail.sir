@@ -1,4 +1,4 @@
-; COMPILE-ERROR: value should be numbered '%0' but got '%1'
+; COMPILE-ERROR: expected next instruction to be numbered '%0' but got '%1'
 fn i32 @printf(ptr, ...)
 
 fn void @test() {

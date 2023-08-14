@@ -248,7 +248,7 @@ where
         let name = ctx.module.function(func).name();
 
         match name {
-            "builtin.x86_64.noop" => ctx.emit(Inst::Nop(Nop { bytes: 1 })),
+            "builtin.x86_64.nop" => ctx.emit(Inst::Nop(Nop { bytes: 1 })),
             _ => return false,
         }
 

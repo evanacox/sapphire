@@ -40,8 +40,6 @@ impl ParamAttributes {
 
     /// Marks this parameter as being a "by-value" struct pass, this is lowered to what ABIs define
     /// it to be.
-    ///
-    /// The exact semantics here
     #[inline(always)]
     pub const fn byval(size: usize) -> Self {
         // all lower bits are available for `byval` size
@@ -218,6 +216,12 @@ dense_arena_key! {
     pub struct Sig;
 }
 
+/// A return type with an optional list of attributes
+pub type RetTy = Option<(Type, RetAttributes)>;
+
+/// A parameter with an optional list of attributes
+pub type ParamTy = (Type, ParamAttributes);
+
 /// Holds all of the information necessary to call a function.
 ///
 /// These are held in the [`DataFlowGraph`] alongside everything else
@@ -225,16 +229,16 @@ dense_arena_key! {
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
 #[cfg_attr(feature = "enable-serde", derive(Serialize, Deserialize))]
 pub struct Signature {
-    params: SmallVec<[(Type, ParamAttributes); 2]>,
-    ret: Option<(Type, RetAttributes)>,
+    params: SmallVec<[ParamTy; 2]>,
+    ret: RetTy,
     call_conv: CallConv,
     vararg: bool,
 }
 
 impl Signature {
     pub(crate) fn new(
-        params: SmallVec<[(Type, ParamAttributes); 2]>,
-        ret: Option<(Type, RetAttributes)>,
+        params: SmallVec<[ParamTy; 2]>,
+        ret: RetTy,
         call_conv: CallConv,
         vararg: bool,
     ) -> Self {
@@ -263,13 +267,13 @@ impl Signature {
 
     /// Gets everything related to the return value.
     #[inline]
-    pub fn return_complete(&self) -> Option<(Type, RetAttributes)> {
+    pub fn return_complete(&self) -> RetTy {
         self.ret
     }
 
     /// Gets the list of parameters and their associated attributes for the function.
     #[inline]
-    pub fn params(&self) -> &[(Type, ParamAttributes)] {
+    pub fn params(&self) -> &[ParamTy] {
         &self.params
     }
 

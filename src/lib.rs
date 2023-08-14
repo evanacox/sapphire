@@ -23,17 +23,18 @@
 //!
 //! These are the basic APIs for building, manipulating and emitting SIR.
 
-mod reader;
-
 pub mod analysis;
 pub mod arena;
-pub mod cli;
 pub mod codegen;
 pub mod ir;
 pub mod pass;
+pub mod reader2;
 pub mod transforms;
 pub mod utility;
 pub mod vm;
+
+#[cfg(feature = "dev-tools")]
+pub mod cli;
 
 use crate::analysis::{
     ControlFlowGraphAnalysis, DominanceFrontierAnalysis, DominatorTreeAnalysis,
@@ -48,7 +49,7 @@ use crate::transforms::{
     SimplifyCFGPass, SimplifyInstPass, SplitCriticalEdgesPass, VerifyModulePass,
 };
 
-pub use reader::parse_sir;
+pub use reader2::parse_sir;
 
 /// A helper function that handles "run these passes specified by the user" in a way that multiple
 /// tools can use.

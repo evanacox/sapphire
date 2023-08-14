@@ -1,0 +1,13 @@
+; MATCH-SECTION
+;
+; test:
+;     nop
+;     ret
+;;
+fn void @builtin.x86_64.nop()
+
+fn void @test() {
+entry:
+    call void @builtin.x86_64.nop()
+    ret void
+}

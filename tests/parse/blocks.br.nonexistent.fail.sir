@@ -1,4 +1,4 @@
-; COMPILE-ERROR: unknown basic block 'bb1'
+; COMPILE-ERROR: unknown block name 'bb1'
 fn void @test() {
 bb0:
   br bb1

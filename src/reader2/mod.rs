@@ -8,24 +8,15 @@
 //                                                                           //
 //======---------------------------------------------------------------======//
 
-use crate::subtest::{Subtest, TestResult};
-use sapphire::analysis;
-use sapphire::reader2;
-use sapphire::transforms;
+//! A hand-written parser and lexer meant to replace the Pest-based generated
+//! parser.
+//!
+//! It should be significantly faster in every case than the Pest version.
 
-fn parser_output(name: &str, content: &str) -> TestResult {
-    match reader2::parse_sir(name, content) {
-        Ok(module) => {
-            // this also tests the verifier. Every SIR file we parse should
-            // also correctly verify, anything that doesn't is a bug.
-            transforms::verify_module_panic(&module);
+mod errors;
+mod lex;
+mod parse;
 
-            TestResult::Output(analysis::stringify_module(&module))
-        }
-        Err(err) => TestResult::CompileError(err.to_string()),
-    }
-}
-
-pub const fn parse_subtest() -> Subtest {
-    Subtest::new(&["parse"], parser_output)
-}
+pub use errors::*;
+pub use lex::*;
+pub use parse::*;

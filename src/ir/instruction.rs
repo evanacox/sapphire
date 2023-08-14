@@ -1475,6 +1475,12 @@ impl IConstInst {
         self.constant & self.mask
     }
 
+    /// Gets the value the instruction was created with
+    #[inline(always)]
+    pub fn given_value(&self) -> u64 {
+        self.constant & self.mask
+    }
+
     /// Gets the mask used to mask the value
     #[inline(always)]
     pub fn mask(&self) -> u64 {
