@@ -22,12 +22,18 @@ entry(i32 %0, i32 %1):
   %3 = icmp sgt i32 %0, %2
   condbr bool %3, one, two
 
+fake:
+  %4 = iconst i32 16
+  br fake
+
 one:
   br exit(i32 %0)
 
 two:
   br exit(i32 %1)
 
-exit(i32 %4):
-  ret i32 %4
+exit(i32 %5):
+  ret i32 %5
 }
+
+

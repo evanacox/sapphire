@@ -1,2 +1,2 @@
-; COMPILE-ERROR: can only have parameter attributes on 'ptr' type
+; COMPILE-ERROR: cannot have param attributes on non-'ptr' parameter
 fn void @f(nonnull i64)

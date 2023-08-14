@@ -10,10 +10,11 @@
 
 use crate::subtest::{Subtest, TestResult};
 use sapphire::analysis;
+use sapphire::reader2;
 use sapphire::transforms;
 
 fn parser_output(name: &str, content: &str) -> TestResult {
-    match sapphire::parse_sir(name, content) {
+    match reader2::parse_sir(name, content) {
         Ok(module) => {
             // this also tests the verifier. Every SIR file we parse should
             // also correctly verify, anything that doesn't is a bug.
@@ -21,7 +22,7 @@ fn parser_output(name: &str, content: &str) -> TestResult {
 
             TestResult::Output(analysis::stringify_module(&module))
         }
-        Err(err) => TestResult::CompileError(format!("{err}")),
+        Err(err) => TestResult::CompileError(err.to_string()),
     }
 }
 

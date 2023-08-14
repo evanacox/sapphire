@@ -1,0 +1,7 @@
+; MATCH-ENTIRE
+fn i32 @max(bool, i32, i32) {
+entry(bool %0, i32 %1, i32 %2):
+  %3 = icmp sgt i32 %1, %2
+  %4 = sel i32, bool %3, %1, %2
+  ret i32 %4
+}

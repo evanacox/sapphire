@@ -47,12 +47,12 @@ entry:
   store f64 %31, ptr %39
   %41 = iconst i64 501
   %42 = offset i32, ptr %39, i64 %41
-  %43 = null { ptr, [i64; 16] }
-  %44 = extract [i64; 16], { ptr, [i64; 16] } %43, 1
-  %45 = insert { ptr, [i64; 16] } %43, ptr %42, 0
-  %46 = extract i64, [i64; 16] %44, 2
-  %47 = elemptr { ptr, [i64; 16] }, ptr %42, 1
-  %48 = elemptr [i64; 16], ptr %42, 1
+  %43 = null { ptr, [i64 x 16] }
+  %44 = extract [i64 x 16], { ptr, [i64 x 16] } %43, 1
+  %45 = insert { ptr, [i64 x 16] } %43, ptr %42, 0
+  %46 = extract i64, [i64 x 16] %44, 2
+  %47 = elemptr { ptr, [i64 x 16] }, ptr %42, 1
+  %48 = elemptr [i64 x 16], ptr %42, 1
   %49 = sext i64, i8 %15
   %50 = zext i32, i8 %15
   %51 = trunc i16, i32 %50

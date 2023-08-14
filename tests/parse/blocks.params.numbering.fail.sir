@@ -1,4 +1,4 @@
-; COMPILE-ERROR: should be numbered '%3' but got '%4'
+; COMPILE-ERROR: expected next instruction to be numbered '%3' but got '%4'
 fn i32 @add(i32, i32) {
 first(i32 %0, i32 %1):
   %2 = iadd i32 %0, %1

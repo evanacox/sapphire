@@ -1,4 +1,4 @@
-; COMPILE-ERROR: can only have return attributes on 'ptr' type
+; COMPILE-ERROR: cannot have return attributes on non-'ptr' return type
 fn nonnull i64 @malloc() {
 entry:
   %0 = iconst i64 12

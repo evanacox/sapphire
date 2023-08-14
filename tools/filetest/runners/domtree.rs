@@ -16,7 +16,7 @@ use sapphire::{transforms, utility};
 fn domtree_test(name: &str, contents: &str) -> TestResult {
     let module = match sapphire::parse_sir(name, contents) {
         Ok(module) => module,
-        Err(e) => return TestResult::CompileError(format!("{e}")),
+        Err(e) => return TestResult::CompileError(e.to_string()),
     };
 
     transforms::verify_module_panic(&module);

@@ -26,7 +26,7 @@ fn lsra_x86(name: &str, content: &str) -> TestResult {
 
             module
         }
-        Err(err) => return TestResult::CompileError(format!("{err}")),
+        Err(err) => return TestResult::CompileError(err.to_string()),
     };
 
     let target = if name.contains("3reg") {
