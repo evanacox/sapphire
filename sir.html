@@ -242,8 +242,8 @@ entry:
 <h3 id="ptr-pointers"><a class="header" href="#ptr-pointers"><code>ptr</code>: Pointers</a></h3>
 <p><code>ptr</code> models the idea of a pointer, and nothing else. Unlike many high-level languages, pointers</p>
 <p>are untyped.</p>
-<h3 id="t-n-arrays"><a class="header" href="#t-n-arrays"><code>[T, N]</code>: Arrays</a></h3>
-<p><code>[T, N]</code> models contiguous blocks of storage, approximately equivalent to arrays in C. Arrays are considered to be aggregate types, and thus aggregate operations can be used on them. Each array index is considered to be a distinct aggregate member.</p>
+<h3 id="t-x-n-arrays"><a class="header" href="#t-x-n-arrays"><code>[T x N]</code>: Arrays</a></h3>
+<p><code>[T x N]</code> models contiguous blocks of storage, approximately equivalent to arrays in C. Arrays are considered to be aggregate types, and thus aggregate operations can be used on them. Each array index is considered to be a distinct aggregate member.</p>
 <p>an independent element.</p>
 <p>They take up exactly <code>sizeof(T) * N</code> bytes of storage, with alignment that is equal to <code>alignof(T)</code>.</p>
 <p>Note that this means that arrays that satisfy one of the following conditions are zero-sized:</p>
@@ -535,7 +535,7 @@ condbr bool %2, if.true, if.false
 </code></pre>
 <h4 id="sel---select-based-on-condition"><a class="header" href="#sel---select-based-on-condition">'<code>sel</code>‘ - Select based on Condition</a></h4>
 <p>Selects one of two given values based on a <code>bool</code> condition.</p>
-<pre><code class="language-other">%0 = sel i64, bool %b, %a, %b
+<pre><code class="language-other">%0 = sel bool %b, i64, %a, i64 %b
 </code></pre>
 <p>This is effectively a hint to the backend to try to use a <code>cmov</code> (x86), <code>csel</code> (arm64) or similar.</p>
 <p>Syntax:</p>
@@ -924,14 +924,14 @@ variable, etc. </p>
 </code></pre>
 <h4 id="fconst---floating-point-constant"><a class="header" href="#fconst---floating-point-constant">'<code>fconst</code>' - Floating-point Constant</a></h4>
 <p>Materializes a floating-point constant from a given floating-point literal.</p>
-<p>Floating-point literals can be in decimal form with a <code>.</code>, scientific notation, C's hex float format, or raw hex (prefix <code>0xfp</code> to make distinct from hex integer values) denoting the underlying byte values.</p>
+<p>Floating-point literals can be in decimal form with a <code>.</code>, scientific notation, C's hex float format, or raw hex (prefix <code>0f</code> to make distinct from hex integer values) denoting the underlying byte values.</p>
 <ul>
 <li>Standard decimal form: <code>([0-9]+).([0-9]+)</code> (ex. <code>0.0039</code>)</li>
 <li>Scientific notation: <code>.([0-9]+)(.[0-9]+)?e(+|-)([0-9]+)</code> (ex. <code>1.749e-3</code>)</li>
-<li>Raw hex: <code>0xfp([0-9a-fA-F]+)</code> (ex. <code>0xfp3FD55558B21DC9EA</code>)</li>
+<li>Raw hex: <code>0f([0-9a-fA-F]+)</code> (ex. <code>0f3FD55558B21DC9EA</code>)</li>
 <li><code>NaN</code> for an unspecified NaN value</li>
 </ul>
-<pre><code class="language-other">%0 = fconst f64 0xfp3FD55558B21DC9EA
+<pre><code class="language-other">%0 = fconst f64 0f3FD55558B21DC9EA
 %1 = fconst f32 3.14195
 %3 = fconst f32 1.3e100
 </code></pre>

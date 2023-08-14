@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `src/transforms/verify.rs`."><title>verify.rs - source</title><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/SourceSerif4-Regular-46f98efaafac5295.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/FiraSans-Regular-018c141bf0843ffd.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/FiraSans-Medium-8f9a781e4970d388.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/SourceSerif4-Bold-a2c9cd1067f8b328.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2"><link rel="stylesheet" href="../../../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../../../static.files/rustdoc-cb6f1f67f1bcd037.css" id="mainThemeStyle"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="sapphire" data-themes="" data-resource-suffix="" data-rustdoc-version="1.73.0-nightly (474709a9a 2023-08-03)" data-channel="nightly" data-search-js="search-6dfdfced5eff6596.js" data-settings-js="settings-de11bff964e9d4e5.js" data-settings-css="settings-8c76f75bfb6bd192.css" data-theme-light-css="light-6d2c9675f3d09c26.css" data-theme-dark-css="dark-45ceb8f2e522f4d1.css" data-theme-ayu-css="ayu-fd19013d6ce078bf.css" ><script src="../../../static.files/storage-db41da1a38ea3cb8.js"></script><script defer src="../../../static.files/src-script-3280b574d94e47b4.js"></script><script defer src="../../../src-files.js"></script><script defer src="../../../static.files/main-0795b7d26be81095.js"></script><noscript><link rel="stylesheet" media="(prefers-color-scheme:light)" href="../../../static.files/light-6d2c9675f3d09c26.css"><link rel="stylesheet" media="(prefers-color-scheme:dark)" href="../../../static.files/dark-45ceb8f2e522f4d1.css"><link rel="stylesheet" href="../../../static.files/noscript-cffde32267a19fd6.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-16x16-8b506e7a72182f1c.png"><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-2c020d218678b618.svg"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.6.0/katex.min.css">
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `src/transforms/verify.rs`."><title>verify.rs - source</title><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/SourceSerif4-Regular-46f98efaafac5295.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/FiraSans-Regular-018c141bf0843ffd.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/FiraSans-Medium-8f9a781e4970d388.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/SourceSerif4-Bold-a2c9cd1067f8b328.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2"><link rel="stylesheet" href="../../../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../../../static.files/rustdoc-cb6f1f67f1bcd037.css" id="mainThemeStyle"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="sapphire" data-themes="" data-resource-suffix="" data-rustdoc-version="1.73.0-nightly (1b198b3a1 2023-08-13)" data-channel="nightly" data-search-js="search-6dfdfced5eff6596.js" data-settings-js="settings-de11bff964e9d4e5.js" data-settings-css="settings-8c76f75bfb6bd192.css" data-theme-light-css="light-1596385f77d47ef2.css" data-theme-dark-css="dark-0a43001d3fc2282c.css" data-theme-ayu-css="ayu-fd19013d6ce078bf.css" ><script src="../../../static.files/storage-db41da1a38ea3cb8.js"></script><script defer src="../../../static.files/src-script-3280b574d94e47b4.js"></script><script defer src="../../../src-files.js"></script><script defer src="../../../static.files/main-0795b7d26be81095.js"></script><noscript><link rel="stylesheet" media="(prefers-color-scheme:light)" href="../../../static.files/light-1596385f77d47ef2.css"><link rel="stylesheet" media="(prefers-color-scheme:dark)" href="../../../static.files/dark-0a43001d3fc2282c.css"><link rel="stylesheet" href="../../../static.files/noscript-cffde32267a19fd6.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-16x16-8b506e7a72182f1c.png"><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-2c020d218678b618.svg"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.6.0/katex.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.6.0/katex.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.6.0/contrib/auto-render.min.js"></script>
 </head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"></nav><main><nav class="sub"><a class="sub-logo-container" href="../../../sapphire/index.html"><img class="rust-logo" src="../../../static.files/rust-logo-151179464ae7ed46.svg" alt="logo"></a><form class="search-form"><span></span><input class="search-input" name="search" aria-label="Run search in the documentation" autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"><div id="help-button" title="help" tabindex="-1"><a href="../../../help.html">?</a></div><div id="settings-menu" tabindex="-1"><a href="../../../settings.html" title="settings"><img width="22" height="22" alt="Change settings" src="../../../static.files/wheel-7b819b6101059cd0.svg"></a></div></form></nav><section id="main-content" class="content"><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers"><a href="#1" id="1">1</a>
@@ -1130,6 +1130,38 @@
 <a href="#1127" id="1127">1127</a>
 <a href="#1128" id="1128">1128</a>
 <a href="#1129" id="1129">1129</a>
+<a href="#1130" id="1130">1130</a>
+<a href="#1131" id="1131">1131</a>
+<a href="#1132" id="1132">1132</a>
+<a href="#1133" id="1133">1133</a>
+<a href="#1134" id="1134">1134</a>
+<a href="#1135" id="1135">1135</a>
+<a href="#1136" id="1136">1136</a>
+<a href="#1137" id="1137">1137</a>
+<a href="#1138" id="1138">1138</a>
+<a href="#1139" id="1139">1139</a>
+<a href="#1140" id="1140">1140</a>
+<a href="#1141" id="1141">1141</a>
+<a href="#1142" id="1142">1142</a>
+<a href="#1143" id="1143">1143</a>
+<a href="#1144" id="1144">1144</a>
+<a href="#1145" id="1145">1145</a>
+<a href="#1146" id="1146">1146</a>
+<a href="#1147" id="1147">1147</a>
+<a href="#1148" id="1148">1148</a>
+<a href="#1149" id="1149">1149</a>
+<a href="#1150" id="1150">1150</a>
+<a href="#1151" id="1151">1151</a>
+<a href="#1152" id="1152">1152</a>
+<a href="#1153" id="1153">1153</a>
+<a href="#1154" id="1154">1154</a>
+<a href="#1155" id="1155">1155</a>
+<a href="#1156" id="1156">1156</a>
+<a href="#1157" id="1157">1157</a>
+<a href="#1158" id="1158">1158</a>
+<a href="#1159" id="1159">1159</a>
+<a href="#1160" id="1160">1160</a>
+<a href="#1161" id="1161">1161</a>
 </pre></div><pre class="rust"><code><span class="comment">//======---------------------------------------------------------------======//
 //                                                                           //
 // Copyright 2022-2023 Evan Cox &lt;evanacox00@gmail.com&gt;. All rights reserved. //
@@ -1239,12 +1271,14 @@
             lhs.is_int(),
             <span class="macro">concat!</span>(<span class="string">&quot;`&quot;</span>, <span class="macro-nonterminal">$name</span>, <span class="string">&quot;` operands must be of int type&quot;</span>)
         );
+
         <span class="macro">verify_assert!</span>(
             <span class="macro-nonterminal">$self</span>,
             <span class="macro-nonterminal">$def</span>.dfg.inst_debug(<span class="macro-nonterminal">$inst</span>),
             rhs.is_int(),
             <span class="macro">concat!</span>(<span class="string">&quot;`&quot;</span>, <span class="macro-nonterminal">$name</span>, <span class="string">&quot;` operands must be of int type&quot;</span>)
         );
+
         <span class="macro">verify_assert_eq!</span>(
             <span class="macro-nonterminal">$self</span>,
             <span class="macro-nonterminal">$def</span>.dfg.inst_debug(<span class="macro-nonterminal">$inst</span>),
@@ -1265,12 +1299,14 @@
             lhs.is_float(),
             <span class="macro">concat!</span>(<span class="string">&quot;`&quot;</span>, <span class="macro-nonterminal">$name</span>, <span class="string">&quot;` operands must be of float type&quot;</span>)
         );
+
         <span class="macro">verify_assert!</span>(
             <span class="macro-nonterminal">$self</span>,
             <span class="macro-nonterminal">$def</span>.dfg.inst_debug(<span class="macro-nonterminal">$inst</span>),
             rhs.is_float(),
             <span class="macro">concat!</span>(<span class="string">&quot;`&quot;</span>, <span class="macro-nonterminal">$name</span>, <span class="string">&quot;` operands must be of float type&quot;</span>)
         );
+
         <span class="macro">verify_assert_eq!</span>(
             <span class="macro-nonterminal">$self</span>,
             <span class="macro-nonterminal">$def</span>.dfg.inst_debug(<span class="macro-nonterminal">$inst</span>),
@@ -1314,14 +1350,30 @@
         <span class="kw-2">&amp;mut </span><span class="self">self</span>,
         debug: DebugInfo,
         sig: <span class="kw-2">&amp;</span>Signature,
-        params: <span class="kw">impl </span>Iterator&lt;Item = Type&gt;,
-        <span class="kw-2">mut </span>args: <span class="kw">impl </span>Iterator&lt;Item = Type&gt;,
+        params: <span class="kw">impl </span>Iterator&lt;Item = Type&gt; + ExactSizeIterator,
+        <span class="kw-2">mut </span>args: <span class="kw">impl </span>Iterator&lt;Item = Type&gt; + ExactSizeIterator,
     ) {
-        <span class="kw">if </span>sig.vararg() {
-            <span class="kw">for </span>ty <span class="kw">in </span>params {
-                <span class="kw">let </span>next = args.next().expect(<span class="string">&quot;should have argument for position&quot;</span>);
+        <span class="kw">let </span>param_len = params.len();
+        <span class="kw">let </span>args_len = args.len();
 
-                <span class="macro">verify_assert_eq!</span>(
+        <span class="kw">if </span>sig.vararg() {
+            <span class="kw">for </span>(i, ty) <span class="kw">in </span>params.enumerate() {
+                <span class="kw">let </span>next = <span class="kw">match </span>args.next() {
+                    <span class="prelude-val">Some</span>(next) =&gt; next,
+                    <span class="prelude-val">None </span>=&gt; {
+                        <span class="macro">verify_assert!</span>(
+                            <span class="self">self</span>,
+                            debug,
+                            <span class="bool-val">false</span>,
+                            <span class="macro">format!</span>(<span class="string">&quot;expected {param_len} arguments but got {args_len}&quot;</span>)
+                        );
+
+                        <span class="kw">break</span>;
+                    }
+                };
+
+                <span class="comment">// while parsing args for function with signature &#39;i32 (ptr)&#39;, unexpected parameter &#39;i32 %1&#39;
+                </span><span class="macro">verify_assert_eq!</span>(
                     <span class="self">self</span>,
                     debug,
                     ty,
@@ -2140,12 +2192,14 @@
             into.is_int(),
             <span class="string">&quot;`trunc` output must be int&quot;
         </span>);
+
         <span class="macro">verify_assert!</span>(
             <span class="self">self</span>,
             def.dfg.inst_debug(inst),
             from.is_int(),
             <span class="string">&quot;`trunc` input must be int&quot;
         </span>);
+
         <span class="macro">verify_assert!</span>(
             <span class="self">self</span>,
             def.dfg.inst_debug(inst),
@@ -2188,6 +2242,7 @@
             into.is_float_of_format(FloatFormat::Double),
             <span class="string">&quot;`fext` output must be `f64`&quot;
         </span>);
+
         <span class="macro">verify_assert!</span>(
             <span class="self">self</span>,
             def.dfg.inst_debug(inst),
@@ -2206,6 +2261,7 @@
             into.is_float_of_format(FloatFormat::Single),
             <span class="string">&quot;`ftrunc` output must be `f32`&quot;
         </span>);
+
         <span class="macro">verify_assert!</span>(
             <span class="self">self</span>,
             def.dfg.inst_debug(inst),
@@ -2228,6 +2284,14 @@
             def.dfg.inst_debug(inst),
             data.result_ty().unwrap().is_int(),
             <span class="string">&quot;type of `iconst` must be integral&quot;
+        </span>);
+
+        <span class="macro">verify_assert_eq!</span>(
+            <span class="self">self</span>,
+            def.dfg.inst_debug(inst),
+            data.value(),
+            data.given_value(),
+            <span class="string">&quot;`iconst` value is too large to fit in constant of that type&quot;
         </span>);
     }
 

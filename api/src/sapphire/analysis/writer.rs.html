@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `src/analysis/writer.rs`."><title>writer.rs - source</title><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/SourceSerif4-Regular-46f98efaafac5295.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/FiraSans-Regular-018c141bf0843ffd.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/FiraSans-Medium-8f9a781e4970d388.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/SourceSerif4-Bold-a2c9cd1067f8b328.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2"><link rel="stylesheet" href="../../../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../../../static.files/rustdoc-cb6f1f67f1bcd037.css" id="mainThemeStyle"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="sapphire" data-themes="" data-resource-suffix="" data-rustdoc-version="1.73.0-nightly (474709a9a 2023-08-03)" data-channel="nightly" data-search-js="search-6dfdfced5eff6596.js" data-settings-js="settings-de11bff964e9d4e5.js" data-settings-css="settings-8c76f75bfb6bd192.css" data-theme-light-css="light-6d2c9675f3d09c26.css" data-theme-dark-css="dark-45ceb8f2e522f4d1.css" data-theme-ayu-css="ayu-fd19013d6ce078bf.css" ><script src="../../../static.files/storage-db41da1a38ea3cb8.js"></script><script defer src="../../../static.files/src-script-3280b574d94e47b4.js"></script><script defer src="../../../src-files.js"></script><script defer src="../../../static.files/main-0795b7d26be81095.js"></script><noscript><link rel="stylesheet" media="(prefers-color-scheme:light)" href="../../../static.files/light-6d2c9675f3d09c26.css"><link rel="stylesheet" media="(prefers-color-scheme:dark)" href="../../../static.files/dark-45ceb8f2e522f4d1.css"><link rel="stylesheet" href="../../../static.files/noscript-cffde32267a19fd6.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-16x16-8b506e7a72182f1c.png"><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-2c020d218678b618.svg"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.6.0/katex.min.css">
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `src/analysis/writer.rs`."><title>writer.rs - source</title><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/SourceSerif4-Regular-46f98efaafac5295.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/FiraSans-Regular-018c141bf0843ffd.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/FiraSans-Medium-8f9a781e4970d388.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/SourceSerif4-Bold-a2c9cd1067f8b328.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2"><link rel="stylesheet" href="../../../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../../../static.files/rustdoc-cb6f1f67f1bcd037.css" id="mainThemeStyle"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="sapphire" data-themes="" data-resource-suffix="" data-rustdoc-version="1.73.0-nightly (1b198b3a1 2023-08-13)" data-channel="nightly" data-search-js="search-6dfdfced5eff6596.js" data-settings-js="settings-de11bff964e9d4e5.js" data-settings-css="settings-8c76f75bfb6bd192.css" data-theme-light-css="light-1596385f77d47ef2.css" data-theme-dark-css="dark-0a43001d3fc2282c.css" data-theme-ayu-css="ayu-fd19013d6ce078bf.css" ><script src="../../../static.files/storage-db41da1a38ea3cb8.js"></script><script defer src="../../../static.files/src-script-3280b574d94e47b4.js"></script><script defer src="../../../src-files.js"></script><script defer src="../../../static.files/main-0795b7d26be81095.js"></script><noscript><link rel="stylesheet" media="(prefers-color-scheme:light)" href="../../../static.files/light-1596385f77d47ef2.css"><link rel="stylesheet" media="(prefers-color-scheme:dark)" href="../../../static.files/dark-0a43001d3fc2282c.css"><link rel="stylesheet" href="../../../static.files/noscript-cffde32267a19fd6.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-16x16-8b506e7a72182f1c.png"><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-2c020d218678b618.svg"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.6.0/katex.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.6.0/katex.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.6.0/contrib/auto-render.min.js"></script>
 </head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"></nav><main><nav class="sub"><a class="sub-logo-container" href="../../../sapphire/index.html"><img class="rust-logo" src="../../../static.files/rust-logo-151179464ae7ed46.svg" alt="logo"></a><form class="search-form"><span></span><input class="search-input" name="search" aria-label="Run search in the documentation" autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"><div id="help-button" title="help" tabindex="-1"><a href="../../../help.html">?</a></div><div id="settings-menu" tabindex="-1"><a href="../../../settings.html" title="settings"><img width="22" height="22" alt="Change settings" src="../../../static.files/wheel-7b819b6101059cd0.svg"></a></div></form></nav><section id="main-content" class="content"><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers"><a href="#1" id="1">1</a>
@@ -1498,6 +1498,9 @@
 <a href="#1495" id="1495">1495</a>
 <a href="#1496" id="1496">1496</a>
 <a href="#1497" id="1497">1497</a>
+<a href="#1498" id="1498">1498</a>
+<a href="#1499" id="1499">1499</a>
+<a href="#1500" id="1500">1500</a>
 </pre></div><pre class="rust"><code><span class="comment">//======---------------------------------------------------------------======//
 //                                                                           //
 // Copyright 2022-2023 Evan Cox &lt;evanacox00@gmail.com&gt;. All rights reserved. //
@@ -1665,7 +1668,7 @@
         }
         UType::Array(arr) =&gt; {
             <span class="macro">format!</span>(
-                <span class="string">&quot;[{}; {}]&quot;</span>,
+                <span class="string">&quot;[{} x {}]&quot;</span>,
                 stringify_ty(ctx, arr.element(ctx)),
                 arr.len(ctx)
             )
@@ -2411,7 +2414,7 @@
         <span class="kw">let </span>result = <span class="kw">if </span>is_nan {
             <span class="macro">format!</span>(<span class="string">&quot;fconst {ty} NaN&quot;</span>)
         } <span class="kw">else </span>{
-            <span class="macro">format!</span>(<span class="string">&quot;fconst {ty} 0xfp{value:020X}&quot;</span>)
+            <span class="macro">format!</span>(<span class="string">&quot;fconst {ty} 0f{value:020X}&quot;</span>)
         };
 
         <span class="self">self</span>.state.whole += <span class="kw-2">&amp;</span>result;
@@ -2484,17 +2487,20 @@
 
         {
             <span class="kw">let </span>i8_512 = Type::array(<span class="kw-2">&amp;mut </span>module.type_pool_mut(), Type::i8(), <span class="number">512</span>);
-            <span class="macro">assert_eq!</span>(writer.ty(<span class="kw-2">&amp;</span>module.type_pool(), i8_512), <span class="string">&quot;[i8; 512]&quot;</span>);
+            <span class="macro">assert_eq!</span>(writer.ty(<span class="kw-2">&amp;</span>module.type_pool(), i8_512), <span class="string">&quot;[i8 x 512]&quot;</span>);
 
             <span class="kw">let </span>i8_512_16 = Type::array(<span class="kw-2">&amp;mut </span>module.type_pool_mut(), i8_512, <span class="number">16</span>);
-            <span class="macro">assert_eq!</span>(writer.ty(<span class="kw-2">&amp;</span>module.type_pool(), i8_512_16), <span class="string">&quot;[[i8; 512]; 16]&quot;</span>);
+            <span class="macro">assert_eq!</span>(
+                writer.ty(<span class="kw-2">&amp;</span>module.type_pool(), i8_512_16),
+                <span class="string">&quot;[[i8 x 512] x 16]&quot;
+            </span>);
 
             <span class="kw">let </span>ptr_0 = Type::array(<span class="kw-2">&amp;mut </span>module.type_pool_mut(), Type::ptr(), <span class="number">0</span>);
-            <span class="macro">assert_eq!</span>(writer.ty(<span class="kw-2">&amp;</span>module.type_pool(), ptr_0), <span class="string">&quot;[ptr; 0]&quot;</span>);
+            <span class="macro">assert_eq!</span>(writer.ty(<span class="kw-2">&amp;</span>module.type_pool(), ptr_0), <span class="string">&quot;[ptr x 0]&quot;</span>);
 
             <span class="kw">let </span>unit = Type::structure(<span class="kw-2">&amp;mut </span>module.type_pool_mut(), <span class="kw-2">&amp;</span>[]);
             <span class="kw">let </span>unit_42 = Type::array(<span class="kw-2">&amp;mut </span>module.type_pool_mut(), unit, <span class="number">42</span>);
-            <span class="macro">assert_eq!</span>(writer.ty(<span class="kw-2">&amp;</span>module.type_pool(), unit_42), <span class="string">&quot;[{}; 42]&quot;</span>);
+            <span class="macro">assert_eq!</span>(writer.ty(<span class="kw-2">&amp;</span>module.type_pool(), unit_42), <span class="string">&quot;[{} x 42]&quot;</span>);
 
             <span class="kw">let </span>slice = Type::structure(<span class="kw-2">&amp;mut </span>module.type_pool_mut(), <span class="kw-2">&amp;</span>[Type::ptr(), Type::i64()]);
             <span class="kw">let </span>slice_64 = Type::array(<span class="kw-2">&amp;mut </span>module.type_pool_mut(), slice, <span class="number">64</span>);
@@ -2503,7 +2509,7 @@
                 Type::array(<span class="kw-2">&amp;mut </span>module.type_pool_mut(), struct_slice_64, <span class="number">732</span>);
             <span class="macro">assert_eq!</span>(
                 writer.ty(<span class="kw-2">&amp;</span>module.type_pool(), struct_slice_64_732),
-                <span class="string">&quot;[{ [{ ptr, i64 }; 64] }; 732]&quot;
+                <span class="string">&quot;[{ [{ ptr, i64 } x 64] } x 732]&quot;
             </span>);
         }
 

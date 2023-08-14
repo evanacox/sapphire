@@ -1,0 +1,3 @@
+(function() {var implementors = {
+"sapphire":[["impl&lt;'a&gt; <a class=\"trait\" href=\"https://doc.rust-lang.org/nightly/core/error/trait.Error.html\" title=\"trait core::error::Error\">Error</a> for <a class=\"struct\" href=\"sapphire/reader2/struct.Error.html\" title=\"struct sapphire::reader2::Error\">Error</a>&lt;'a&gt;"]]
+};if (window.register_implementors) {window.register_implementors(implementors);} else {window.pending_implementors = implementors;}})()
