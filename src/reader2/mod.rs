@@ -13,8 +13,10 @@
 //!
 //! It should be significantly faster in every case than the Pest version.
 
+mod errors;
 mod lex;
 mod parse;
 
+pub use errors::*;
 pub use lex::*;
 pub use parse::*;

@@ -107,12 +107,14 @@ macro_rules! verify_integral_binop {
             lhs.is_int(),
             concat!("`", $name, "` operands must be of int type")
         );
+
         verify_assert!(
             $self,
             $def.dfg.inst_debug($inst),
             rhs.is_int(),
             concat!("`", $name, "` operands must be of int type")
         );
+
         verify_assert_eq!(
             $self,
             $def.dfg.inst_debug($inst),
@@ -133,12 +135,14 @@ macro_rules! verify_float_binop {
             lhs.is_float(),
             concat!("`", $name, "` operands must be of float type")
         );
+
         verify_assert!(
             $self,
             $def.dfg.inst_debug($inst),
             rhs.is_float(),
             concat!("`", $name, "` operands must be of float type")
         );
+
         verify_assert_eq!(
             $self,
             $def.dfg.inst_debug($inst),
@@ -182,13 +186,29 @@ impl<'m> Verifier<'m> {
         &mut self,
         debug: DebugInfo,
         sig: &Signature,
-        params: impl Iterator<Item = Type>,
-        mut args: impl Iterator<Item = Type>,
+        params: impl Iterator<Item = Type> + ExactSizeIterator,
+        mut args: impl Iterator<Item = Type> + ExactSizeIterator,
     ) {
-        if sig.vararg() {
-            for ty in params {
-                let next = args.next().expect("should have argument for position");
+        let param_len = params.len();
+        let args_len = args.len();
 
+        if sig.vararg() {
+            for (i, ty) in params.enumerate() {
+                let next = match args.next() {
+                    Some(next) => next,
+                    None => {
+                        verify_assert!(
+                            self,
+                            debug,
+                            false,
+                            format!("expected {param_len} arguments but got {args_len}")
+                        );
+
+                        break;
+                    }
+                };
+
+                // while parsing args for function with signature 'i32 (ptr)', unexpected parameter 'i32 %1'
                 verify_assert_eq!(
                     self,
                     debug,
@@ -1008,12 +1028,14 @@ impl<'m> SIRVisitor<'m> for Verifier<'m> {
             into.is_int(),
             "`trunc` output must be int"
         );
+
         verify_assert!(
             self,
             def.dfg.inst_debug(inst),
             from.is_int(),
             "`trunc` input must be int"
         );
+
         verify_assert!(
             self,
             def.dfg.inst_debug(inst),
@@ -1056,6 +1078,7 @@ impl<'m> SIRVisitor<'m> for Verifier<'m> {
             into.is_float_of_format(FloatFormat::Double),
             "`fext` output must be `f64`"
         );
+
         verify_assert!(
             self,
             def.dfg.inst_debug(inst),
@@ -1074,6 +1097,7 @@ impl<'m> SIRVisitor<'m> for Verifier<'m> {
             into.is_float_of_format(FloatFormat::Single),
             "`ftrunc` output must be `f32`"
         );
+
         verify_assert!(
             self,
             def.dfg.inst_debug(inst),
@@ -1096,6 +1120,14 @@ impl<'m> SIRVisitor<'m> for Verifier<'m> {
             def.dfg.inst_debug(inst),
             data.result_ty().unwrap().is_int(),
             "type of `iconst` must be integral"
+        );
+
+        verify_assert_eq!(
+            self,
+            def.dfg.inst_debug(inst),
+            data.value(),
+            data.given_value(),
+            "`iconst` value is too large to fit in constant of that type"
         );
     }
 

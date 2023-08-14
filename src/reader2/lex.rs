@@ -9,8 +9,46 @@
 //======---------------------------------------------------------------======//
 
 use std::iter::Peekable;
-use std::str::Chars;
-use unicode_segmentation::{UWordBoundIndices, UnicodeSegmentation};
+use std::str::Bytes;
+
+/// A lexer for SIR that lazily produces tokens.
+pub struct Lex<'a> {
+    raw: RawLex<'a>,
+    next: Option<TokPair<'a>>,
+}
+
+impl<'a> Lex<'a> {
+    /// Creates a new [`Lex`] based on a given source file.
+    pub fn new(source: &'a str) -> Self {
+        let mut raw = RawLex::new(source);
+        let first = raw.next();
+
+        Self { raw, next: first }
+    }
+
+    /// Produces the next token, if one exists. If `None` is returned,
+    /// EOF has been reached.
+    pub fn next_token(&mut self) -> Option<TokPair<'a>> {
+        // instead of just directly returning the yielded token, we stay "one ahead"
+        // this allows us to implement `is_at_end` in a way that doesn't need `&mut self`
+        // and makes `peek` trivial
+        let old = self.next.take();
+
+        self.next = self.raw.next();
+
+        old
+    }
+
+    /// Returns whether or not the lexer is able to yield more tokens via [`Self::next_token`]
+    pub fn is_at_end(&self) -> bool {
+        self.next.is_none()
+    }
+
+    /// Peek at the next token to be yielded, if there are any
+    pub fn peek_token(&self) -> Option<TokPair<'a>> {
+        self.next
+    }
+}
 
 /// An instruction opcode, e.g. the `iadd` in `iadd i32 %0, %1`.
 #[repr(u8)]
@@ -243,12 +281,32 @@ pub enum Token<'a> {
     ParenOpen,
     /// `)`
     ParenClose,
+    /// `[`
+    SquareOpen,
+    /// `]`
+    SquareClose,
     /// `=`
     Eq,
     /// `:`
     Colon,
+    /// `x`
+    X,
     /// `,`
     Comma,
+    /// `byval`
+    ByVal,
+    /// `noalias`
+    NoAlias,
+    /// `nonnull`
+    NonNull,
+    /// `ccc`
+    CCC,
+    /// `sysv`
+    SysV,
+    /// `win64`
+    Win64,
+    /// `volatile`
+    Volatile,
     /// An instruction opcode
     Opcode(Opcode),
     /// An opcode for `icmp` or `fcmp`
@@ -274,349 +332,469 @@ pub enum Token<'a> {
     FloatLitNaN,
     /// A `bool` literal
     BoolLit(bool),
+    /// `stack`
+    Stack,
     /// An unknown token, almost certainly an error
     Unknown(&'a str),
+}
+
+impl<'a> Token<'a> {
+    /// If `self` is one of the integer literals, returns it in
+    /// a nicer-to-work-with form.
+    ///
+    /// Unfortunately [`Token`] has to work like this to fit in 24 bytes,
+    /// if it just held [`IntLiteral`] in the variants it would be 32.
+    #[inline]
+    pub fn as_int_lit(self) -> Option<IntLiteral<'a>> {
+        match self {
+            Self::IntLitHex(s) => Some(IntLiteral::Hex(s)),
+            Self::IntLitOctal(s) => Some(IntLiteral::Octal(s)),
+            Self::IntLitBinary(s) => Some(IntLiteral::Binary(s)),
+            Self::IntLitDecimal(s) => Some(IntLiteral::Decimal(s)),
+            _ => None,
+        }
+    }
+
+    /// If `self` is one of the float literals, returns it in
+    /// a nicer-to-work-with form.
+    ///
+    /// Unfortunately [`Token`] has to work like this to fit in 24 bytes,
+    /// if it just held [`FloatLiteral`] in the variants it would be 32.
+    #[inline]
+    pub fn as_float_lit(self) -> Option<FloatLiteral<'a>> {
+        match self {
+            Self::FloatLitRaw(s) => Some(FloatLiteral::Raw(s)),
+            Self::FloatLitStandard(s) => Some(FloatLiteral::Standard(s)),
+            Self::FloatLitScientific(s) => Some(FloatLiteral::Scientific(s)),
+            Self::FloatLitNaN => Some(FloatLiteral::NaN),
+            _ => None,
+        }
+    }
 }
 
 static_assertions::assert_eq_size!(Token<'static>, [usize; 3]);
 
 /// A token yielded by the lexer, containing line/col information as well
 /// as raw token data.
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub struct TokPair<'a> {
     /// The raw token data
     pub tok: Token<'a>,
     /// The line in the original source that the token is located at
     pub line: u32,
     /// The column in the original source that the token is located at
-    pub col: u32,
+    pub col: u16,
+    /// The total length of the token
+    pub len: u16,
 }
 
 static_assertions::assert_eq_size!(TokPair<'static>, [usize; 4]);
 
-/// A lexer that lazily produces tokens.
-pub struct Lex<'a> {
+// implements lexicographic string comparisons at compile time
+//
+// this is equivalent to `Ord<str, str>`, just written in a way that
+// is actually usable inside `const` functions
+const fn less_than(left: &'static str, right: &'static str) -> bool {
+    let left = left.as_bytes();
+    let right = right.as_bytes();
+    let mut i = 0;
+    let min_length = if left.len() > right.len() {
+        right.len()
+    } else {
+        left.len()
+    };
+
+    while i < min_length {
+        if left[i] != right[i] {
+            return left[i] < right[i];
+        }
+
+        i += 1;
+    }
+
+    left.len() < right.len()
+}
+
+// insertion sort for our lex pairs at compile time, this is used to sort
+// our pairs array to enable binary-searching while lexing
+const fn sort_array<const N: usize>(
+    mut arr: [(&'static str, Token<'static>); N],
+) -> [(&'static str, Token<'static>); N] {
+    let mut i = 1;
+
+    while i < N {
+        let mut j = i;
+
+        while j > 0 && !less_than(arr[j - 1].0, arr[j].0) {
+            let tmp = arr[j - 1];
+            arr[j - 1] = arr[j];
+            arr[j] = tmp;
+            j -= 1;
+        }
+
+        i += 1;
+    }
+
+    arr
+}
+
+// this is our mapping in an unsorted (and easy to modify) format
+// we do a sort at compile time, and assign the result to `SORTED_IDENT_TOKENS`
+const IDENT_TOKENS: [(&str, Token<'static>); 97] = [
+    ("bool", Token::Bool),
+    ("ptr", Token::Ptr),
+    ("i8", Token::I8),
+    ("i16", Token::I16),
+    ("i32", Token::I32),
+    ("i64", Token::I64),
+    ("f32", Token::F32),
+    ("f64", Token::F64),
+    ("fn", Token::Fn),
+    ("void", Token::Void),
+    ("call", Token::Opcode(Opcode::Call)),
+    ("indirectcall", Token::Opcode(Opcode::IndirectCall)),
+    ("fcmp", Token::Opcode(Opcode::FCmp)),
+    ("icmp", Token::Opcode(Opcode::ICmp)),
+    ("sel", Token::Opcode(Opcode::Sel)),
+    ("br", Token::Opcode(Opcode::Br)),
+    ("condbr", Token::Opcode(Opcode::CondBr)),
+    ("unreachable", Token::Opcode(Opcode::Unreachable)),
+    ("ret", Token::Opcode(Opcode::Ret)),
+    ("and", Token::Opcode(Opcode::And)),
+    ("or", Token::Opcode(Opcode::Or)),
+    ("xor", Token::Opcode(Opcode::Xor)),
+    ("shl", Token::Opcode(Opcode::Shl)),
+    ("ashr", Token::Opcode(Opcode::AShr)),
+    ("lshr", Token::Opcode(Opcode::LShr)),
+    ("iadd", Token::Opcode(Opcode::IAdd)),
+    ("isub", Token::Opcode(Opcode::ISub)),
+    ("imul", Token::Opcode(Opcode::IMul)),
+    ("sdiv", Token::Opcode(Opcode::SDiv)),
+    ("udiv", Token::Opcode(Opcode::UDiv)),
+    ("srem", Token::Opcode(Opcode::SRem)),
+    ("urem", Token::Opcode(Opcode::URem)),
+    ("fneg", Token::Opcode(Opcode::FNeg)),
+    ("fadd", Token::Opcode(Opcode::FAdd)),
+    ("fsub", Token::Opcode(Opcode::FSub)),
+    ("fmul", Token::Opcode(Opcode::FMul)),
+    ("fdiv", Token::Opcode(Opcode::FDiv)),
+    ("frem", Token::Opcode(Opcode::FRem)),
+    ("alloca", Token::Opcode(Opcode::Alloca)),
+    ("load", Token::Opcode(Opcode::Load)),
+    ("store", Token::Opcode(Opcode::Store)),
+    ("offset", Token::Opcode(Opcode::Offset)),
+    ("extract", Token::Opcode(Opcode::Extract)),
+    ("insert", Token::Opcode(Opcode::Insert)),
+    ("elemptr", Token::Opcode(Opcode::ElemPtr)),
+    ("sext", Token::Opcode(Opcode::Sext)),
+    ("zext", Token::Opcode(Opcode::Zext)),
+    ("trunc", Token::Opcode(Opcode::Trunc)),
+    ("itob", Token::Opcode(Opcode::IToB)),
+    ("btoi", Token::Opcode(Opcode::BToI)),
+    ("sitof", Token::Opcode(Opcode::SIToF)),
+    ("uitof", Token::Opcode(Opcode::UIToF)),
+    ("ftosi", Token::Opcode(Opcode::FToSI)),
+    ("ftoui", Token::Opcode(Opcode::FToUI)),
+    ("fext", Token::Opcode(Opcode::FExt)),
+    ("ftrunc", Token::Opcode(Opcode::FTrunc)),
+    ("itop", Token::Opcode(Opcode::IToP)),
+    ("ptoi", Token::Opcode(Opcode::PToI)),
+    ("iconst", Token::Opcode(Opcode::IConst)),
+    ("fconst", Token::Opcode(Opcode::FConst)),
+    ("bconst", Token::Opcode(Opcode::BConst)),
+    ("null", Token::Opcode(Opcode::Null)),
+    ("undef", Token::Opcode(Opcode::Undef)),
+    ("stackslot", Token::Opcode(Opcode::StackSlot)),
+    ("globaladdr", Token::Opcode(Opcode::GlobalAddr)),
+    ("eq", Token::CmpOpcode(CompareOpcode::Eq)),
+    ("ne", Token::CmpOpcode(CompareOpcode::Ne)),
+    ("ugt", Token::CmpOpcode(CompareOpcode::Ugt)),
+    ("ult", Token::CmpOpcode(CompareOpcode::Ult)),
+    ("uge", Token::CmpOpcode(CompareOpcode::Uge)),
+    ("ule", Token::CmpOpcode(CompareOpcode::Ule)),
+    ("sgt", Token::CmpOpcode(CompareOpcode::Sgt)),
+    ("slt", Token::CmpOpcode(CompareOpcode::Slt)),
+    ("sge", Token::CmpOpcode(CompareOpcode::Sge)),
+    ("sle", Token::CmpOpcode(CompareOpcode::Sle)),
+    ("ord", Token::CmpOpcode(CompareOpcode::Ord)),
+    ("uno", Token::CmpOpcode(CompareOpcode::Uno)),
+    ("ueq", Token::CmpOpcode(CompareOpcode::Ueq)),
+    ("une", Token::CmpOpcode(CompareOpcode::Une)),
+    ("oeq", Token::CmpOpcode(CompareOpcode::Oeq)),
+    ("one", Token::CmpOpcode(CompareOpcode::One)),
+    ("ogt", Token::CmpOpcode(CompareOpcode::Ogt)),
+    ("olt", Token::CmpOpcode(CompareOpcode::Olt)),
+    ("oge", Token::CmpOpcode(CompareOpcode::Oge)),
+    ("ole", Token::CmpOpcode(CompareOpcode::Ole)),
+    ("true", Token::BoolLit(true)),
+    ("false", Token::BoolLit(false)),
+    ("NaN", Token::FloatLitNaN),
+    ("byval", Token::ByVal),
+    ("noalias", Token::NoAlias),
+    ("nonnull", Token::NonNull),
+    ("ccc", Token::CCC),
+    ("sysv", Token::SysV),
+    ("win64", Token::Win64),
+    ("volatile", Token::Volatile),
+    ("x", Token::X),
+    ("stack", Token::Stack),
+];
+
+const SORTED_IDENT_TOKENS: [(&str, Token<'static>); 97] = sort_array(IDENT_TOKENS);
+
+struct RawLex<'a> {
     source: &'a str,
-    words: Peekable<UWordBoundIndices<'a>>,
+    chars: Peekable<Bytes<'a>>,
+    current: usize,
+    last: usize,
     line: usize,
     col: usize,
 }
 
-impl<'a> Lex<'a> {
+impl<'a> RawLex<'a> {
     /// Creates a new [`Lex`] based on a given source file.
-    pub fn new(source: &'a str) -> Self {
+    fn new(source: &'a str) -> Self {
         Self {
             source,
-            words: source.split_word_bound_indices().peekable(),
+            current: 0,
+            last: 0,
             line: 1,
             col: 1,
+            chars: source.bytes().peekable(),
         }
     }
 
     /// Produces the next token, if one exists. If `None` is returned,
     /// EOF has been reached.
-    pub fn next(&mut self) -> Option<TokPair<'a>> {
-        let (index, string) = self.take_next_word()?;
-        let tok = match string {
-            "%" => {
-                let (index, tok) = self.take_next_word()?;
+    fn next(&mut self) -> Option<TokPair<'a>> {
+        let ch = self.take_next()?;
+        let start = self.current - 1;
+        let col = self.col;
+        let line = self.line;
 
-                Token::LocalIdent(self.try_lex_ident(tok, tok.chars(), index))
-            }
-            "$" => {
-                let (index, tok) = self.take_next_word()?;
-
-                Token::StackIdent(self.try_lex_ident(tok, tok.chars(), index))
-            }
-            "@" => {
-                let (index, tok) = self.take_next_word()?;
-
-                Token::GlobalIdent(self.try_lex_ident(tok, tok.chars(), index))
-            }
-            "bool" => Token::Bool,
-            "ptr" => Token::Ptr,
-            "i8" => Token::I8,
-            "i16" => Token::I16,
-            "i32" => Token::I32,
-            "i64" => Token::I64,
-            "f32" => Token::F32,
-            "f64" => Token::F64,
-            "void" => Token::Void,
-            "..." => Token::Variadic,
-            "fn" => Token::Fn,
-            "{" => Token::CurlyOpen,
-            "}" => Token::CurlyClose,
-            "(" => Token::ParenOpen,
-            ")" => Token::ParenClose,
-            "=" => Token::Eq,
-            ":" => Token::Colon,
-            "," => Token::Comma,
-            "call" => Token::Opcode(Opcode::Call),
-            "indirectcall" => Token::Opcode(Opcode::IndirectCall),
-            "fcmp" => Token::Opcode(Opcode::FCmp),
-            "icmp" => Token::Opcode(Opcode::ICmp),
-            "sel" => Token::Opcode(Opcode::Sel),
-            "br" => Token::Opcode(Opcode::Br),
-            "condbr" => Token::Opcode(Opcode::CondBr),
-            "unreachable" => Token::Opcode(Opcode::Unreachable),
-            "ret" => Token::Opcode(Opcode::Ret),
-            "and" => Token::Opcode(Opcode::And),
-            "or" => Token::Opcode(Opcode::Or),
-            "xor" => Token::Opcode(Opcode::Xor),
-            "shl" => Token::Opcode(Opcode::Shl),
-            "ashr" => Token::Opcode(Opcode::AShr),
-            "lshr" => Token::Opcode(Opcode::LShr),
-            "iadd" => Token::Opcode(Opcode::IAdd),
-            "isub" => Token::Opcode(Opcode::ISub),
-            "imul" => Token::Opcode(Opcode::IMul),
-            "sdiv" => Token::Opcode(Opcode::SDiv),
-            "udiv" => Token::Opcode(Opcode::UDiv),
-            "srem" => Token::Opcode(Opcode::SRem),
-            "urem" => Token::Opcode(Opcode::URem),
-            "fneg" => Token::Opcode(Opcode::FNeg),
-            "fadd" => Token::Opcode(Opcode::FAdd),
-            "fsub" => Token::Opcode(Opcode::FSub),
-            "fmul" => Token::Opcode(Opcode::FMul),
-            "fdiv" => Token::Opcode(Opcode::FDiv),
-            "frem" => Token::Opcode(Opcode::FRem),
-            "alloca" => Token::Opcode(Opcode::Alloca),
-            "load" => Token::Opcode(Opcode::Load),
-            "store" => Token::Opcode(Opcode::Store),
-            "offset" => Token::Opcode(Opcode::Offset),
-            "extract" => Token::Opcode(Opcode::Extract),
-            "insert" => Token::Opcode(Opcode::Insert),
-            "elemPtr" => Token::Opcode(Opcode::ElemPtr),
-            "sext" => Token::Opcode(Opcode::Sext),
-            "zext" => Token::Opcode(Opcode::Zext),
-            "trunc" => Token::Opcode(Opcode::Trunc),
-            "itob" => Token::Opcode(Opcode::IToB),
-            "btoi" => Token::Opcode(Opcode::BToI),
-            "sitof" => Token::Opcode(Opcode::SIToF),
-            "uitof" => Token::Opcode(Opcode::UIToF),
-            "ftosi" => Token::Opcode(Opcode::FToSI),
-            "ftoui" => Token::Opcode(Opcode::FToUI),
-            "fext" => Token::Opcode(Opcode::FExt),
-            "ftrunc" => Token::Opcode(Opcode::FTrunc),
-            "itop" => Token::Opcode(Opcode::IToP),
-            "ptoi" => Token::Opcode(Opcode::PToI),
-            "iconst" => Token::Opcode(Opcode::IConst),
-            "fconst" => Token::Opcode(Opcode::FConst),
-            "bconst" => Token::Opcode(Opcode::BConst),
-            "null" => Token::Opcode(Opcode::Null),
-            "undef" => Token::Opcode(Opcode::Undef),
-            "stackslot" => Token::Opcode(Opcode::StackSlot),
-            "globaladdr" => Token::Opcode(Opcode::GlobalAddr),
-            "eq" => Token::CmpOpcode(CompareOpcode::Eq),
-            "ne" => Token::CmpOpcode(CompareOpcode::Ne),
-            "ugt" => Token::CmpOpcode(CompareOpcode::Ugt),
-            "ult" => Token::CmpOpcode(CompareOpcode::Ult),
-            "uge" => Token::CmpOpcode(CompareOpcode::Uge),
-            "ule" => Token::CmpOpcode(CompareOpcode::Ule),
-            "sgt" => Token::CmpOpcode(CompareOpcode::Sgt),
-            "slt" => Token::CmpOpcode(CompareOpcode::Slt),
-            "sge" => Token::CmpOpcode(CompareOpcode::Sge),
-            "sle" => Token::CmpOpcode(CompareOpcode::Sle),
-            "ord" => Token::CmpOpcode(CompareOpcode::Ord),
-            "uno" => Token::CmpOpcode(CompareOpcode::Uno),
-            "ueq" => Token::CmpOpcode(CompareOpcode::Ueq),
-            "une" => Token::CmpOpcode(CompareOpcode::Une),
-            "oeq" => Token::CmpOpcode(CompareOpcode::Oeq),
-            "one" => Token::CmpOpcode(CompareOpcode::One),
-            "ogt" => Token::CmpOpcode(CompareOpcode::Ogt),
-            "olt" => Token::CmpOpcode(CompareOpcode::Olt),
-            "oge" => Token::CmpOpcode(CompareOpcode::Oge),
-            "ole" => Token::CmpOpcode(CompareOpcode::Ole),
-            "true" => Token::BoolLit(true),
-            "false" => Token::BoolLit(false),
-            "NaN" => Token::FloatLitNaN,
-            x => self.try_lex_unknown(x, index),
+        let tok = match ch {
+            '%' => match self.try_lex_ident_without_first() {
+                Some(ident) => Token::LocalIdent(ident),
+                None => Token::Unknown(self.last_consumed_as_str()),
+            },
+            '$' => match self.try_lex_ident_without_first() {
+                Some(ident) => Token::StackIdent(ident),
+                None => Token::Unknown(self.last_consumed_as_str()),
+            },
+            '@' => match self.try_lex_ident_without_first() {
+                Some(ident) => Token::GlobalIdent(ident),
+                None => Token::Unknown(self.last_consumed_as_str()),
+            },
+            '{' => Token::CurlyOpen,
+            '}' => Token::CurlyClose,
+            '(' => Token::ParenOpen,
+            ')' => Token::ParenClose,
+            '[' => Token::SquareOpen,
+            ']' => Token::SquareClose,
+            ':' => Token::Colon,
+            ',' => Token::Comma,
+            '=' => Token::Eq,
+            '.' => self.try_lex_variadic(),
+            '0' => self.try_lex_prefixed_literal(),
+            '-' => self.try_lex_decimal(),
+            c if c.is_ascii_digit() => self.try_lex_decimal(),
+            c if c.is_ascii_alphabetic() || c == '_' => self.try_lex_ident_with_first(),
+            c => Token::Unknown(self.last_consumed_as_str()),
         };
 
         Some(TokPair {
             tok,
-            line: self.line as u32,
-            col: self.col as u32,
+            line: line as u32,
+            col: col as u16,
+            len: (self.current - start) as u16,
         })
     }
 
-    fn try_lex_unknown(&mut self, tok: &'a str, index: usize) -> Token<'a> {
-        if !tok.is_ascii() || tok.is_empty() {
-            return Token::Unknown(tok);
+    // used to directly lex identifiers from a starting index onwards, implementation
+    // of the main two lex identifier methods
+    fn lex_ident_raw(&mut self, start: usize) -> &'a str {
+        while let Some(c) = self.peek_next() {
+            if !(c.is_ascii_alphanumeric() || c == '.' || c == '_') {
+                break;
+            }
+
+            self.consume_next();
         }
 
-        let mut chs = tok.chars();
-
-        match chs.next().expect("just checked if empty") {
-            '0' => self.try_lex_formatted_lit(tok, chs),
-            c if c.is_ascii_alphabetic() => Token::LabelIdent(self.try_lex_ident(tok, chs, index)),
-            d if d.is_ascii_digit() || d == '-' => self.try_lex_int_or_float_lit(tok, chs, index),
-            _ => Token::Unknown(tok),
-        }
+        &self.source[start..self.current]
     }
 
-    fn try_lex_formatted_lit(&self, tok: &'a str, chars: Chars<'a>) -> Token<'a> {
-        if tok.starts_with("0x") {
-            if chars
-                .skip(2)
-                .any(|c| !(c.is_ascii_digit() || ('a' <= c && c <= 'f') || ('A' <= c && c <= 'F')))
-            {
-                Token::Unknown(tok)
-            } else if tok.starts_with("0xfp") {
-                Token::FloatLitRaw(tok)
-            } else {
-                Token::IntLitHex(tok)
-            }
-        } else if tok.starts_with("0o") {
-            if chars.skip(2).any(|c| !('0' <= c && c <= '7')) {
-                Token::Unknown(tok)
-            } else {
-                Token::IntLitOctal(tok)
-            }
-        } else if tok.starts_with("0b") {
-            if chars.skip(2).any(|c| c != '0' && c != '1') {
-                Token::Unknown(tok)
-            } else {
-                Token::IntLitBinary(tok)
-            }
+    // lexes an identifier where the first character hasn't been consumed yet. If no
+    // identifier-compatible characters are lexed, this returns `None`
+    //
+    // this is only used for prefixed identifiers like `@foo` or `$bar`
+    fn try_lex_ident_without_first(&mut self) -> Option<&'a str> {
+        let full = self.lex_ident_raw(self.current);
+
+        (!full.is_empty()).then_some(full)
+    }
+
+    // lexes an identifier where the first character has been consumed
+    fn try_lex_ident_with_first(&mut self) -> Token<'a> {
+        let full = self.lex_ident_raw(self.current - 1);
+
+        // we binary-search the array we sorted at compile time, and use that as our fast
+        // lookup for "is this identifier actually a keyword?"
+        if let Ok(idx) = SORTED_IDENT_TOKENS.binary_search_by_key(&full, |(s, _)| *s) {
+            SORTED_IDENT_TOKENS[idx].1
         } else {
-            // we don't support `0123`, only `123`
-            Token::Unknown(tok)
+            Token::LabelIdent(full)
         }
     }
 
-    fn try_lex_ident(&mut self, tok: &'a str, chars: Chars<'a>, begin_at: usize) -> &'a str {
-        // weird case for something like `builtin.x86_64.nop`, it will split that
-        // into "builtin.x86_64", ".", "nop". it does this when there's a digit then a `.`
-        match chars.last() {
-            // we don't want to start the loop unless we need to
-            Some(last) if last.is_ascii_digit() => {
-                let mut end_at = begin_at + tok.len();
-                let mut need_continue = true;
+    // lexes decimal numbers where the first character has already been consumed
+    //
+    // supports an optional `-` sign and optional fractional part
+    fn try_lex_decimal(&mut self) -> Token<'a> {
+        let start = self.current - 1;
 
-                'outer: while need_continue {
-                    // if the next token is a "." or an alphanumeric/dot/underscore identifier,
-                    // keep parsing until we hit the end.
-                    //
-                    //
-                    let (index, included_tok) = match self.words.peek() {
-                        Some((_, ".")) => {
-                            // need_continue is maintained, if prev piece needed a continue
-                            // and we hit a dot we still need to continue
-                            self.words.next().unwrap()
-                        }
-                        Some((_, s)) => {
-                            // this will get eaten later
-                            if !s.is_ascii() {
-                                break 'outer;
-                            }
-
-                            let mut last = char::default();
-
-                            for ch in s.chars() {
-                                last = ch;
-
-                                if !(ch.is_ascii_alphanumeric() || ch == '.' || ch == '_') {
-                                    break 'outer;
-                                }
-                            }
-
-                            // need_continue is dependent on whether or not `last` is a digit, just
-                            // like when we first started the loop
-                            need_continue = last.is_ascii_digit();
-
-                            self.words.next().unwrap()
-                        }
-                        _ => break,
-                    };
-
-                    end_at = index + included_tok.len();
-                }
-
-                &self.source[begin_at..end_at]
+        // eat while c is a digit or `.`
+        while let Some(c) = self.peek_next() {
+            if !(c.is_ascii_digit() || c == '.') {
+                break;
             }
-            _ => tok,
-        }
-    }
 
-    fn try_lex_int_or_float_lit(
-        &mut self,
-        tok: &'a str,
-        mut chars: Chars<'a>,
-        begins_at: usize,
-    ) -> Token<'a> {
-        if tok.contains('e') {
-            // the unicode word splitter doesn't split some scientific notation
-            // correctly, so we'd have to do special handling here.
-            //
-            // e.g. "1.0e-9" is split as "1.0e", "-", "9"
-            panic!("scientific notation not implemented")
+            self.consume_next();
         }
 
-        if !chars.all(|c| c.is_ascii_digit() || c == '.') {
-            return Token::Unknown(tok);
-        }
+        let full = &self.source[start..self.current];
 
-        // negatives require us to take the rest manually
-        if tok == "-" {
-            // ensure we never recurse more than once
-            let &(index, next) = match self.words.peek() {
-                Some((_, "-")) | None => return Token::Unknown(tok),
-                Some(s) => s,
-            };
-
-            let full = &self.source[begins_at..(index + next.len())];
-
-            // we go ahead and do the parsing logic on the next, it determines the
-            // result for full too (since full is just the inner + a negative sign)
-            match self.try_lex_int_or_float_lit(next, next.chars(), index) {
-                Token::FloatLitStandard(_) => {
-                    self.words.next(); // consume the token we already pre-lexed
-
-                    Token::FloatLitStandard(full)
-                }
-                Token::IntLitDecimal(_) => {
-                    self.words.next(); // consume the token we already pre-lexed
-
-                    Token::IntLitDecimal(full)
-                }
-                Token::Unknown(_) => Token::Unknown(tok),
-                _ => unreachable!(),
-            }
-        } else if tok.contains('.') {
-            Token::FloatLitStandard(tok)
+        if full.contains('.') {
+            Token::FloatLitStandard(full)
         } else {
-            Token::IntLitDecimal(tok)
+            Token::IntLitDecimal(full)
         }
     }
 
-    fn take_next_word(&mut self) -> Option<(usize, &'a str)> {
+    // lexes `...` where the first `.` has already been consumed
+    fn try_lex_variadic(&mut self) -> Token<'a> {
+        let start = self.current - 1;
+
+        // try to lex 2 more `.`s, if we fail we mark all the ones we
+        // consumed as an unknown token. if we succeed, we break out of the loop
+        for _ in 0..2 {
+            if let Some('.') = self.peek_next() {
+                self.consume_next();
+            } else {
+                return Token::Unknown(&self.source[start..self.current]);
+            }
+        }
+
+        Token::Variadic
+    }
+
+    // lexes integer literals that start with 0{letters}, where the `0` has already been consumed
+    //
+    // e.g. `0xdeadbeef`, `0b101`, `0xfpFFFFFFFF`
+    fn try_lex_prefixed_literal(&mut self) -> Token<'a> {
+        let start = self.current - 1;
+        let next = match self.peek_next() {
+            Some(ch) => ch,
+            None => return Token::IntLitDecimal(&self.source[start..(start + 1)]),
+        };
+
+        match next {
+            'x' => {
+                self.consume_next();
+                self.consume_while(|c| {
+                    c.is_ascii_digit() || ('a'..='f').contains(&c) || ('A'..='F').contains(&c)
+                });
+
+                Token::IntLitHex(&self.source[start..self.current])
+            }
+            'o' => {
+                self.consume_next();
+                self.consume_while(|c| ('0'..='7').contains(&c));
+
+                Token::IntLitOctal(&self.source[start..self.current])
+            }
+            'b' => {
+                self.consume_next();
+                self.consume_while(|c| c == '0' || c == '1');
+
+                Token::IntLitBinary(&self.source[start..self.current])
+            }
+            'f' => {
+                self.consume_next();
+                self.consume_while(|c| {
+                    c.is_ascii_digit() || ('a'..='f').contains(&c) || ('A'..='F').contains(&c)
+                });
+
+                Token::FloatLitRaw(&self.source[start..self.current])
+            }
+            _ => Token::IntLitDecimal(&self.source[start..self.current]),
+        }
+    }
+
+    fn take_next(&mut self) -> Option<char> {
         // if we have any 'words', try to take the next. we also try to skip any
         // whitespace and comments while we do that, they are ignored at lex time.
-        while let Some((index, string)) = self.words.next() {
-            let trimmed = string.trim();
-
+        while let Some(ch) = self.consume_next() {
             // if we hit whitespace, skip it and try to take next token
-            if trimmed.is_empty() {
+            if ch.is_ascii_whitespace() {
                 continue;
             }
 
             // if we get the beginning of a comment, skip until newline or EOF and try to loop again
-            if trimmed == ";" {
+            if ch == ';' {
                 // this covers both LF and CRLF
-                while self.words.peek().is_some_and(|&(_, s)| !s.contains("\n")) {
-                    self.words.next();
+                while self.peek_next().is_some_and(|c| c != '\n') {
+                    self.consume_next();
                 }
 
                 // consume the newline, if it exists. if we're already at the end,
                 // this doesn't actually do anything
-                self.words.next();
+                self.consume_next();
 
                 continue;
             }
 
-            return Some((index, trimmed));
+            return Some(ch);
         }
 
         // we hit EOF inside the loop
-        return None;
+        None
+    }
+
+    fn consume_next(&mut self) -> Option<char> {
+        let ch = self.chars.next();
+
+        if let Some(ch) = ch {
+            if ch == b'\n' {
+                self.line += 1;
+                self.col = 0;
+            } else {
+                self.col += 1;
+            }
+
+            self.current += 1;
+        }
+
+        ch.map(|ch| ch as char)
+    }
+
+    fn consume_while(&mut self, f: impl Fn(char) -> bool) {
+        while let Some(ch) = self.peek_next() {
+            if f(ch) {
+                self.consume_next();
+            } else {
+                return;
+            }
+        }
+    }
+
+    #[inline]
+    fn peek_next(&mut self) -> Option<char> {
+        self.chars.peek().map(|&ch| ch as char)
+    }
+
+    #[inline]
+    fn last_consumed_as_str(&self) -> &'a str {
+        &self.source[self.current - 1..self.current]
     }
 }

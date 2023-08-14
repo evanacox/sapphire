@@ -16,8 +16,8 @@ use smallvec::SmallVec;
 pub struct SigBuilder {
     vararg: bool,
     abi: CallConv,
-    ret: Option<(Type, RetAttributes)>,
-    params: SmallVec<[(Type, ParamAttributes); 4]>,
+    ret: RetTy,
+    params: SmallVec<[ParamTy; 4]>,
 }
 
 impl SigBuilder {
@@ -62,7 +62,7 @@ impl SigBuilder {
     }
 
     /// Adds an attribute to the return value of the function
-    pub fn ret_with_attribute(self, ret: Option<(Type, RetAttributes)>) -> Self {
+    pub fn ret_with_attribute(self, ret: RetTy) -> Self {
         Self {
             vararg: self.vararg,
             abi: self.abi,
@@ -355,6 +355,11 @@ impl<'m> FuncBuilder<'m> {
     /// Gets the [`Signature`] of the function being built.
     pub fn current_signature(&self) -> &Signature {
         self.function(self.func).signature()
+    }
+
+    /// Attempts to get the current block
+    pub fn current_block(&self) -> Block {
+        self.current.unwrap()
     }
 
     /// Returns the data-flow graph for the function

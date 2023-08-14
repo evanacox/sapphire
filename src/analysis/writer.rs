@@ -165,7 +165,7 @@ pub(crate) fn stringify_ty(ctx: &TypePool, ty: Type) -> String {
         }
         UType::Array(arr) => {
             format!(
-                "[{}; {}]",
+                "[{} x {}]",
                 stringify_ty(ctx, arr.element(ctx)),
                 arr.len(ctx)
             )
@@ -911,7 +911,7 @@ impl<'m> SIRVisitor<'m> for WriterImpl<'m> {
         let result = if is_nan {
             format!("fconst {ty} NaN")
         } else {
-            format!("fconst {ty} 0xfp{value:020X}")
+            format!("fconst {ty} 0f{value:020X}")
         };
 
         self.state.whole += &result;

@@ -226,4 +226,9 @@ impl Module {
     pub fn identity(&self) -> ModuleIdentity {
         ModuleIdentity(self.identity.as_ref() as *const _ as usize)
     }
+
+    /// Gets a [`Str`] referring to the module's name
+    pub fn name(&self) -> Str {
+        self.name_ref
+    }
 }
