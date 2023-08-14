@@ -46,12 +46,9 @@ libc = { version = "0.2.147", optional = true }
 [dependencies]
 ahash = "0.8.1"
 paste = "1.0.11"
-pest = "2.5.2"
-pest_derive = "2.5.2"
 smallbitvec = "2.5.1"
 smallvec = { version = "1.10.0", features = ["const_generics", "const_new"] }
 static_assertions = "1.1.0"
-unicode-segmentation = "1.10.1"
 
 # enable-serde
 serde = { version = "1.0.151", features = ["derive", "rc"], optional = true }
@@ -66,9 +63,10 @@ bpaf = { version = "0.9.0", optional = true }
 
 # playground
 tempus_fugit = { version = "0.11", optional = true }
+rand = { version = "0.8.1", optional = true }
 
 [features]
 default = ["enable-serde", "dev-tools"]
 dev-tools = ["dep:ansi_term", "dep:diff", "dep:threadpool", "dep:backtrace", "dep:bpaf", "dep:windows-sys", "dep:libc"]
 enable-serde = ["dep:serde", "dep:serde_test", "smallvec/serde"]
-playground = ["dep:tempus_fugit"]
+playground = ["dep:tempus_fugit", "dep:rand"]

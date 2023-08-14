@@ -8,147 +8,183 @@
 //                                                                           //
 //======---------------------------------------------------------------======//
 
-use sapphire::codegen::x86_64::*;
-use sapphire::codegen::*;
-use sapphire::ir::*;
+use rand::prelude::*;
+use rand::{
+    distributions::Distribution, distributions::Uniform, rngs::ThreadRng, seq::SliceRandom, Rng,
+};
+use sapphire::reader2;
+use sapphire::utility::SaHashSet;
+use std::fs::File;
+use std::io;
+use std::io::Write;
+use tempus_fugit::measure;
 
-#[allow(unused)]
-fn playground1(module: &mut Module) {
-    let builtin_noop = module.declare_function("builtin.x86_64.noop", SigBuilder::new().build());
+macro_rules! write_single_inst {
+    ($i:expr, $rng:expr, $file:expr, $inst_dist:expr, $ty_dist:expr, $i8s:expr, $i16s:expr, $i32s:expr, $i64s:expr) => {{
+        let opc = match $inst_dist.sample(&mut $rng) {
+            0 => "iadd",
+            1 => "isub",
+            2 => "imul",
+            3 => "sdiv",
+            4 => "udiv",
+            5 => "srem",
+            6 => "urem",
+            7 => "and",
+            8 => "or",
+            9 => "xor",
+            10 => "shl",
+            11 => "ashr",
+            12 => "lshr",
+            _ => unreachable!(),
+        };
 
-    let mut b = module.define_function(
-        "main",
-        SigBuilder::new()
-            .params(&[Type::i32(), Type::ptr()])
-            .ret(Some(Type::i32()))
-            .build(),
-    );
+        let (ty, vec) = match $ty_dist.sample(&mut $rng) {
+            0 => ("i8", &mut $i8s),
+            1 => ("i16", &mut $i16s),
+            2 => ("i32", &mut $i32s),
+            3 => ("i64", &mut $i64s),
+            _ => unreachable!(),
+        };
 
-    let bb0 = b.create_block("bb0");
-    let bb1 = b.create_block("bb1");
-    let bb2 = b.create_block("bb2");
-    let params = b.append_entry_params(bb0, DebugInfo::fake());
-    let v0 = params[0];
-    let v1 = params[1];
-    b.switch_to(bb0);
+        let last = vec[vec.len() - 1];
+        let second_to_last = vec[vec.len() - 2];
+        let line = format!("  %{} = {opc} {ty} %{second_to_last}, %{last}\n", $i);
 
-    let v2 = b.append().iconst(Type::i32(), 0, DebugInfo::fake());
-    let v3 = b.append().icmp(ICmpOp::EQ, v0, v2, DebugInfo::fake());
+        $file.write_all(line.as_bytes())?;
 
-    let sig = {
-        let sig = b.function(builtin_noop).signature().clone();
-        b.import_signature(&sig)
-    };
-    // b.append().call(builtin_noop, sig, &[], DebugInfo::fake());
-    b.append().condbr(
-        v3,
-        BlockWithParams::new(bb2, &[v0, v1]),
-        BlockWithParams::to(bb1),
-        DebugInfo::fake(),
-    );
-
-    b.switch_to(bb1);
-    let v4 = b.append().iconst(Type::i32(), 16, DebugInfo::fake());
-    let v5 = b.append().iconst(Type::i32(), 0xFF, DebugInfo::fake());
-    let v6 = b.append().and(v4, v5, DebugInfo::fake());
-    b.append().ret(Some(v6), DebugInfo::fake());
-
-    b.switch_to(bb2);
-    b.append_block_param(bb2, Type::i32(), DebugInfo::fake());
-    b.append_block_param(bb2, Type::ptr(), DebugInfo::fake());
-
-    let (v7, v8) = {
-        let params = b.block_params(bb2);
-
-        (params[0], params[1])
-    };
-
-    b.append()
-        .br(BlockWithParams::new(bb2, &[v7, v8]), DebugInfo::fake());
-
-    b.define();
+        vec.push($i);
+    }};
 }
 
-#[allow(unused)]
-fn playground2(module: &mut Module) {
-    let mut b = module.define_function(
-        "main",
-        SigBuilder::new()
-            .params(&[Type::i32(), Type::ptr()])
-            .ret(Some(Type::i32()))
-            .build(),
-    );
+fn generate_name(rng: &mut ThreadRng) -> String {
+    const ALPHABET: &'static [u8] =
+        b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz1234567890_.";
 
-    let bb0 = b.create_block("bb0");
-    let bb1 = b.create_block("bb1");
-    let bb2 = b.create_block("bb2");
-    let bb3 = b.create_block("bb3");
-    let bb4 = b.create_block("bb4");
-    let bb5 = b.create_block("bb5");
+    loop {
+        let mut name = String::default();
 
-    b.append_entry_params(bb0, DebugInfo::fake());
+        for _ in 0..rng.gen_range(5..15) {
+            name.push(ALPHABET.choose(rng).copied().unwrap() as char);
+        }
 
-    b.switch_to(bb0);
-    b.append().br(BlockWithParams::to(bb1), DebugInfo::fake());
-
-    b.switch_to(bb1);
-    b.append().br(BlockWithParams::to(bb2), DebugInfo::fake());
-
-    b.switch_to(bb2);
-    b.append().br(BlockWithParams::to(bb3), DebugInfo::fake());
-
-    b.switch_to(bb3);
-    b.append().br(BlockWithParams::to(bb4), DebugInfo::fake());
-
-    b.switch_to(bb4);
-    b.append().br(BlockWithParams::to(bb5), DebugInfo::fake());
-
-    b.switch_to(bb5);
-    let v0 = b.append().iconst(Type::i32(), 42, DebugInfo::fake());
-    b.append().ret_val(v0, DebugInfo::fake());
-
-    b.define();
+        if name.chars().next().is_some_and(|c| c.is_ascii_alphabetic()) {
+            break name;
+        }
+    }
 }
 
-fn playground3(module: &mut Module) {
-    let mut b = module.define_function(
-        "main",
-        SigBuilder::new()
-            .params(&[Type::i32(), Type::ptr()])
-            .ret(Some(Type::i32()))
-            .build(),
-    );
+fn generate_sir() -> io::Result<()> {
+    let mut seen = SaHashSet::default();
+    let mut rng = thread_rng();
+    let mut file = File::create("/tmp/generated.sir")?;
 
-    let bb0 = b.create_block("bb0");
-    let params = b.append_entry_params(bb0, DebugInfo::fake());
-    let v0 = params[0];
+    let mut i8s = vec![2, 3];
+    let mut i16s = vec![4, 5];
+    let mut i32s = vec![0, 1];
+    let mut i64s = vec![6, 7];
 
-    b.switch_to(bb0);
+    file.write_all(b"fn void @test(i32, i32) {\n")?;
+    file.write_all(b"entry(i32 %0, i32 %1):\n")?;
+    file.write_all(b"  %2 = trunc i8, i32 %0\n")?;
+    file.write_all(b"  %3 = trunc i8, i32 %1\n")?;
+    file.write_all(b"  %4 = trunc i16, i32 %0\n")?;
+    file.write_all(b"  %5 = trunc i16, i32 %1\n")?;
+    file.write_all(b"  %6 = sext i64, i32 %0\n")?;
+    file.write_all(b"  %7 = zext i64, i32 %1\n")?;
 
-    let v2 = b.append().iconst(Type::i32(), 1, DebugInfo::fake());
-    let mut prev = b.append().iadd(v0, v2, DebugInfo::fake());
+    let inst_dist = Uniform::<i32>::new_inclusive(0, 12);
+    let ty_dist = Uniform::<i32>::new_inclusive(0, 3);
+    let param_dist = Uniform::<i32>::new_inclusive(0, 10);
 
-    for _ in 0..1000000 {
-        let next = b.append().iadd(prev, v2, DebugInfo::fake());
-
-        prev = next;
+    // generate an initial set of instructions, fill up our lists of values
+    for i in 8..100 {
+        write_single_inst!(i, rng, file, inst_dist, ty_dist, i8s, i16s, i32s, i64s);
     }
 
-    b.append().ret_val(prev, DebugInfo::fake());
+    let mut i = 100;
 
-    b.define();
+    while i <= 2_000_000 {
+        // end the block roughly every 15 instructions, generate a new one and branch
+        // to that new block. new block will have random amount of parameters
+        if rng.gen_ratio(1, 15) {
+            let name = loop {
+                let n = generate_name(&mut rng);
+
+                if !seen.contains(&n) {
+                    break n;
+                }
+            };
+
+            seen.insert(name.clone());
+
+            let n_params = param_dist.sample(&mut rng);
+
+            if n_params == 0 {
+                file.write_all(format!("  br {name}\n").as_bytes())?;
+                file.write_all(format!("{name}:\n").as_bytes())?;
+            } else {
+                let mut args = String::default();
+                let mut params = String::default();
+
+                for j in 0..(n_params as usize) {
+                    let (ty, vec) = match ty_dist.sample(&mut rng) {
+                        0 => ("i8", &mut i8s),
+                        1 => ("i16", &mut i16s),
+                        2 => ("i32", &mut i32s),
+                        3 => ("i64", &mut i64s),
+                        _ => unreachable!(),
+                    };
+
+                    args += &format!("{ty} %{}", vec[vec.len() - j - 1]);
+                    params += &format!("{ty} %{}", (i as usize) + j);
+
+                    if j != (n_params as usize) - 1 {
+                        args += ", ";
+                        params += ", ";
+                    }
+                }
+
+                file.write_all(format!("  br {name}({args})\n").as_bytes())?;
+                file.write_all(format!("{name}({params}):\n").as_bytes())?;
+
+                i += n_params;
+            }
+        } else {
+            write_single_inst!(i, rng, file, inst_dist, ty_dist, i8s, i16s, i32s, i64s);
+
+            i += 1;
+        }
+    }
+
+    file.write_all(b"  ret void\n")?;
+    file.write_all(b"}\n")?;
+
+    Ok(())
 }
 
-fn main() {
-    let mut module = Module::new("playground");
+fn main() -> io::Result<()> {
+    let file = std::env::args().skip(1).next().unwrap();
 
-    playground3(&mut module);
+    if file == "--generate" {
+        generate_sir()?;
 
-    // transforms::verify_module_panic(&module);
+        return Ok(());
+    }
 
-    let target = PresetTargets::linux_x86_64(CodegenOptions::default());
-    let backend = PresetBackends::x86_64_unoptimized(module, target);
-    let string = backend.assembly(X86_64Assembly::GNUIntel, TargetPair::X86_64Linux, false);
+    let source = std::fs::read_to_string(&file)?;
 
-    println!("{string}");
+    let (module, reader2) = measure! {{
+        let module = reader2::parse_sir(&file, &source);
+
+        std::hint::black_box(module)
+    }};
+
+    println!("reader2 took {reader2}\n\n");
+
+    match module {
+        Ok(_) => {}
+        Err(e) => println!("{e}"),
+    }
+
+    Ok(())
 }
