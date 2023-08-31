@@ -31,25 +31,43 @@ pub enum VariableLocation {
 
 /// A representation of the specific available registers on a particular ABI.
 pub struct AvailableRegisters {
-    /// All registers that are callee-preserved (must be preserved by callee)
-    pub preserved: &'static [PReg],
+    /// All registers that are callee-preserved (must be preserved by callee).
+    ///
+    /// The tuple is (integral, floating-point registers)
+    pub preserved: (&'static [PReg], &'static [PReg]),
     /// All registers that are callee-clobbered (must be preserved by caller)
-    pub clobbered: &'static [PReg],
+    ///
+    /// The tuple is (integral, floating-point registers)
+    pub clobbered: (&'static [PReg], &'static [PReg]),
     /// Registers that are not able to be allocated, that register should
     /// be treated as not being under the control of the register allocator.
-    pub unavailable: &'static [PReg],
+    ///
+    /// The tuple is (integral, floating-point registers)
+    pub unavailable: (&'static [PReg], &'static [PReg]),
     /// A suggested set of "high priority" registers when a register allocator has no
     /// reason to use any other registers.
     ///
     /// These will be preferred over other registers if any are available, and it is assumed
     /// that occurring earlier in the list means higher relative priority.
-    pub high_priority_temporaries: &'static [PReg],
+    ///
+    /// The tuple is (integral, floating-point registers)
+    pub high_priority_temporaries: (&'static [PReg], &'static [PReg]),
 }
 
 dense_arena_key! {
     /// Used by [`StackFrame::register_use_def_call`] and [`StackFrame::call_use_defs`]
     /// as a unique identifier for a `call` in a function.
     pub struct CallUseDefId;
+}
+
+/// Use-def information for a `call`-like instruction
+pub struct CallUseDef<'a> {
+    /// **All** registers used, this is usually the list of parameters in registers
+    pub uses: &'a [PReg],
+    /// The list of integer registers defined by the call
+    pub integral_defs: &'a [PReg],
+    /// The list of floating-point registers defined by the call
+    pub float_defs: &'a [PReg],
 }
 
 /// Interface for a generic "stack frame" that a target can implement. This is used by the code generator
@@ -90,10 +108,10 @@ pub trait StackFrame<Arch: Architecture> {
     ///
     /// This is called by the calling convention when a `call`-like instruction is
     /// generated, with a list of used registers and a list of defined registers.
-    fn register_use_def_call(&mut self, uses: &[PReg], defs: &[PReg]) -> CallUseDefId;
+    fn register_use_def_call(&mut self, use_def: CallUseDef<'_>) -> CallUseDefId;
 
     /// Returns the use-def information previously given to [`Self::register_use_def_call`].
-    fn call_use_defs(&self, id: CallUseDefId) -> (&[PReg], &[PReg]);
+    fn call_use_defs(&self, id: CallUseDefId) -> CallUseDef<'_>;
 
     /// Returns the use-def information of a `ret` instruction
     fn ret_uses(&self) -> &[PReg];

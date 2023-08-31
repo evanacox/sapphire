@@ -39,10 +39,7 @@ pub struct UnconditionalBranch {
 }
 
 /// A collector that can have registers added to it.
-///
-/// Each register has an associated size (in bytes) that are being used
-/// out of it, this is to minimize stack usage
-pub type RegCollector<const N: usize> = SmallVec<[(Reg, u32); N]>;
+pub type RegCollector<const N: usize> = SmallVec<[Reg; N]>;
 
 /// Defines the API for a machine instruction.
 ///

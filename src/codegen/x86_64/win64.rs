@@ -10,7 +10,7 @@
 
 use crate::codegen::x86_64::{Inst, X86_64};
 use crate::codegen::{
-    AvailableRegisters, CallUseDefId, CallingConv, Ctx, FramelessCtx, PReg, StackFrame,
+    AvailableRegisters, CallUseDef, CallUseDefId, CallingConv, Ctx, FramelessCtx, PReg, StackFrame,
     VariableLocation, WriteableReg,
 };
 use crate::ir;
@@ -66,11 +66,11 @@ impl StackFrame<X86_64> for WindowsX64StackFrame {
         todo!()
     }
 
-    fn register_use_def_call(&mut self, uses: &[PReg], defs: &[PReg]) -> CallUseDefId {
+    fn register_use_def_call(&mut self, use_def: CallUseDef<'_>) -> CallUseDefId {
         todo!()
     }
 
-    fn call_use_defs(&self, id: CallUseDefId) -> (&[PReg], &[PReg]) {
+    fn call_use_defs(&self, id: CallUseDefId) -> CallUseDef<'_> {
         todo!()
     }
 

@@ -544,7 +544,7 @@ impl<'module, 'target, Arch: Architecture> LoweringContext<'module, 'target, Arc
             RegClass::Float => {
                 self.next_float_vreg_id += 1;
 
-                VReg::int(self.next_float_vreg_id - 1)
+                VReg::float(self.next_float_vreg_id - 1)
             }
         };
 

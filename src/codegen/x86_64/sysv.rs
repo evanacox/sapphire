@@ -15,7 +15,7 @@ use crate::codegen::x86_64::{
     Width, ALU, X86_64,
 };
 use crate::codegen::{
-    AvailableRegisters, CallUseDefId, CallingConv, CodegenOptions, Ctx, FramelessCtx,
+    AvailableRegisters, CallUseDef, CallUseDefId, CallingConv, CodegenOptions, Ctx, FramelessCtx,
     LoweringContext, PReg, Reg, RegClass, StackFrame, Target, VariableLocation, WriteableReg,
 };
 use crate::ir;
@@ -27,7 +27,7 @@ use crate::utility::SaHashMap;
 use smallvec::SmallVec;
 use std::iter;
 
-const CALLEE_PRESERVED: [PReg; 6] = [
+const INTEGRAL_CALLEE_PRESERVED: [PReg; 6] = [
     X86_64::RBX,
     X86_64::R12,
     X86_64::R13,
@@ -36,16 +36,37 @@ const CALLEE_PRESERVED: [PReg; 6] = [
     X86_64::RBP,
 ];
 
-const CALLER_PRESERVED: [PReg; 9] = [
+const FLOAT_CALLEE_PRESERVED: [PReg; 0] = [];
+
+const INTEGRAL_CALLER_PRESERVED: [PReg; 9] = [
     X86_64::RAX,
-    X86_64::RCX,
     X86_64::RDX,
+    X86_64::RCX,
     X86_64::RDI,
     X86_64::RSI,
     X86_64::R8,
     X86_64::R9,
     X86_64::R10,
     X86_64::R11,
+];
+
+const FLOAT_CALLER_PRESERVED: [PReg; 16] = [
+    X86_64::xmm(0),
+    X86_64::xmm(1),
+    X86_64::xmm(2),
+    X86_64::xmm(3),
+    X86_64::xmm(4),
+    X86_64::xmm(5),
+    X86_64::xmm(6),
+    X86_64::xmm(7),
+    X86_64::xmm(8),
+    X86_64::xmm(9),
+    X86_64::xmm(10),
+    X86_64::xmm(11),
+    X86_64::xmm(12),
+    X86_64::xmm(13),
+    X86_64::xmm(14),
+    X86_64::xmm(15),
 ];
 
 #[allow(clippy::upper_case_acronyms)]
@@ -157,6 +178,8 @@ impl SignatureABI {
             }
         }
 
+        assert_ne!(X86_64::xmm(0), X86_64::RAX);
+
         Self {
             params: locations,
             ret,
@@ -164,7 +187,7 @@ impl SignatureABI {
     }
 }
 
-type UseDefPair = (Box<[PReg]>, Box<[PReg]>);
+type UseDefTriple = (Box<[PReg]>, Box<[PReg]>, Box<[PReg]>);
 
 /// An implementation of [`StackFrame`] for the System-V ABI.
 ///
@@ -178,7 +201,7 @@ pub struct SystemVStackFrame {
     slot_distance_from_rbp: SecondaryMap<StackSlot, usize>,
     preserved_regs_used: SmallVec<[PReg; 8]>,
     signature_abi: SignatureABI,
-    call_use_defs: ArenaMap<CallUseDefId, UseDefPair>,
+    call_use_defs: ArenaMap<CallUseDefId, UseDefTriple>,
 }
 
 macro_rules! manipulate_rsp {
@@ -432,7 +455,23 @@ impl StackFrame<X86_64> for SystemVStackFrame {
                 let ty = def.dfg.ty(val);
 
                 match ty.unpack() {
-                    UType::Float(_) | UType::Int(_) | UType::Bool(_) | UType::Ptr(_) => {
+                    UType::Int(_) | UType::Bool(_) | UType::Ptr(_) => {
+                        let reg = self.signature_abi.ret[0];
+                        let result = ctx.result_reg(val, reg.class());
+
+                        ctx.begin_fixed_interval(reg);
+
+                        zeroing_mov(
+                            WriteableReg::from_reg(Reg::from_preg(reg)),
+                            RegMemImm::Reg(result),
+                            ty,
+                            ctx,
+                        );
+
+                        ctx.emit(Inst::Ret(Ret {}));
+                        ctx.end_fixed_interval(reg, 0);
+                    }
+                    UType::Float(_) => {
                         let reg = self.signature_abi.ret[0];
                         let result = ctx.result_reg(val, reg.class());
 
@@ -478,17 +517,23 @@ impl StackFrame<X86_64> for SystemVStackFrame {
         }
     }
 
-    fn register_use_def_call(&mut self, uses: &[PReg], defs: &[PReg]) -> CallUseDefId {
-        let uses_box = Box::from(uses);
-        let defs_box = Box::from(defs);
+    fn register_use_def_call(&mut self, use_def: CallUseDef<'_>) -> CallUseDefId {
+        let uses_box = Box::from(use_def.uses);
+        let int_defs_box = Box::from(use_def.integral_defs);
+        let float_defs_box = Box::from(use_def.float_defs);
 
-        self.call_use_defs.insert((uses_box, defs_box))
+        self.call_use_defs
+            .insert((uses_box, int_defs_box, float_defs_box))
     }
 
-    fn call_use_defs(&self, id: CallUseDefId) -> (&[PReg], &[PReg]) {
-        let (uses, defs) = &self.call_use_defs[id];
+    fn call_use_defs(&self, id: CallUseDefId) -> CallUseDef<'_> {
+        let (uses, int_defs, float_defs) = &self.call_use_defs[id];
 
-        (uses, defs)
+        CallUseDef {
+            uses,
+            integral_defs: int_defs,
+            float_defs,
+        }
     }
 
     fn ret_uses(&self) -> &[PReg] {
@@ -553,9 +598,9 @@ impl StackFrame<X86_64> for SystemVStackFrame {
         // if it isn't available to allocate then we manage rbp and don't have to tell the
         // register allocator to preserve it
         let callee_preserved = if self.will_omit_fp() {
-            &CALLEE_PRESERVED[..6]
+            &INTEGRAL_CALLEE_PRESERVED[..6]
         } else {
-            &CALLEE_PRESERVED[..5]
+            &INTEGRAL_CALLEE_PRESERVED[..5]
         };
 
         const UNAVAILABLE: [PReg; 3] = [X86_64::RIP, X86_64::RSP, X86_64::RBP];
@@ -566,13 +611,14 @@ impl StackFrame<X86_64> for SystemVStackFrame {
             &UNAVAILABLE[0..3]
         };
 
-        const HIGH_PRIORITY: [PReg; 3] = [X86_64::RAX, X86_64::RCX, X86_64::RDX];
+        const INTEGRAL_HIGH_PRIORITY: [PReg; 3] = [X86_64::RAX, X86_64::RCX, X86_64::RDX];
+        const FLOAT_HIGH_PRIORITY: [PReg; 3] = [X86_64::xmm(0), X86_64::xmm(1), X86_64::xmm(2)];
 
         AvailableRegisters {
-            preserved: callee_preserved,
-            clobbered: &CALLER_PRESERVED,
-            unavailable: un_allocatable,
-            high_priority_temporaries: &HIGH_PRIORITY,
+            preserved: (callee_preserved, &FLOAT_CALLEE_PRESERVED),
+            clobbered: (&INTEGRAL_CALLER_PRESERVED, &FLOAT_CALLER_PRESERVED),
+            unavailable: (un_allocatable, &[]),
+            high_priority_temporaries: (&INTEGRAL_HIGH_PRIORITY, &FLOAT_HIGH_PRIORITY),
         }
     }
 
@@ -650,14 +696,19 @@ impl SystemVCallingConv {
 
         // any remaining preserved registers, we mark them with fixed intervals
         // that only overlap the call instruction and any `mov`s after it
-        for &reg in CALLER_PRESERVED
+        for &reg in INTEGRAL_CALLER_PRESERVED
             .iter()
+            .chain(FLOAT_CALLER_PRESERVED.iter())
             .filter(|&preg| !used_regs.contains(preg))
         {
             ctx.begin_fixed_interval(reg);
         }
 
-        let id = fr.register_use_def_call(&used_regs, &CALLER_PRESERVED);
+        let id = fr.register_use_def_call(CallUseDef {
+            uses: &used_regs,
+            integral_defs: &INTEGRAL_CALLER_PRESERVED,
+            float_defs: &FLOAT_CALLER_PRESERVED,
+        });
 
         emit_call(id, (def, fr, ctx));
 
@@ -665,19 +716,46 @@ impl SystemVCallingConv {
         //
         // if we change the stack or have a return value, we'll have an extra inst (or two), so we need to record that
         let following_count = result.is_some() as usize + (stack_change != 0) as usize;
-        debug_assert_eq!(CALLER_PRESERVED[0], X86_64::RAX);
-        ctx.end_fixed_intervals(&CALLER_PRESERVED[1..], following_count);
 
-        if let Some(result) = result {
-            zeroing_mov(
-                result,
-                RegMemImm::Reg(Reg::from_preg(X86_64::RAX)),
-                sig.return_ty().unwrap(),
-                ctx,
-            );
+        match sig.return_ty().map(|ty| ty.unpack()) {
+            // i32, ptr, bool
+            Some(UType::Int(_)) | Some(UType::Ptr(_)) | Some(UType::Bool(_)) => {
+                // INTEGRAL_CALLER_PRESERVED[0] is rax
+                ctx.end_fixed_intervals(&INTEGRAL_CALLER_PRESERVED[1..], following_count);
+                ctx.end_fixed_intervals(&FLOAT_CALLER_PRESERVED, following_count);
+
+                zeroing_mov(
+                    result.unwrap(),
+                    RegMemImm::Reg(Reg::from_preg(X86_64::RAX)),
+                    sig.return_ty().unwrap(),
+                    ctx,
+                );
+
+                ctx.end_fixed_interval(X86_64::RAX, (stack_change != 0) as usize);
+            }
+            // f32, f64
+            Some(UType::Float(_)) => {
+                // FLOAT_CALLER_PRESERVED[0] is xmm0
+                ctx.end_fixed_intervals(&INTEGRAL_CALLER_PRESERVED, following_count);
+                ctx.end_fixed_intervals(&FLOAT_CALLER_PRESERVED[1..], following_count);
+
+                zeroing_mov(
+                    result.unwrap(),
+                    RegMemImm::Reg(Reg::from_preg(X86_64::xmm(0))),
+                    sig.return_ty().unwrap(),
+                    ctx,
+                );
+
+                ctx.end_fixed_interval(X86_64::xmm(0), (stack_change != 0) as usize);
+            }
+            // { T... }, [T; N]
+            Some(_) => todo!("aggregates that fit in registers"),
+            // void
+            None => {
+                ctx.end_fixed_intervals(&INTEGRAL_CALLER_PRESERVED, following_count);
+                ctx.end_fixed_intervals(&FLOAT_CALLER_PRESERVED, following_count);
+            }
         }
-
-        ctx.end_fixed_interval(X86_64::RAX, (stack_change != 0) as usize);
 
         // restore stack to what it was before the call happened
         if stack_change != 0 {

@@ -161,20 +161,20 @@ macro_rules! generic_reg {
              ///
              /// This is intended for usage in storing registers in an array.
             #[inline]
-            pub fn identity(self) -> usize {
+            pub const fn identity(self) -> usize {
                 self.data as usize
             }
 
             /// Gets the physical "number" of the register that identifies it **within the
             /// class of that register**. This value may overlap with other register classes.
             #[inline]
-            pub fn hw_number(self) -> usize {
+            pub const fn hw_number(self) -> usize {
                 (self.data >> 1) as usize
             }
 
             /// Gets what type of register this register is for.
             #[inline]
-            pub fn class(self) -> RegClass {
+            pub const fn class(self) -> RegClass {
                 if self.data & 1 == 0 {
                     RegClass::Int
                 } else {
@@ -286,6 +286,23 @@ impl Reg {
     #[inline]
     pub const fn is_preg(self) -> bool {
         !self.is_vreg()
+    }
+
+    /// Gets the register class of the underlying register, regardless of whether
+    /// the underlying register is a virtual register or physical register.
+    #[inline]
+    pub const fn class(self) -> RegClass {
+        if self.is_preg() {
+            (PReg {
+                data: (self.data >> 1) as u8,
+            })
+            .class()
+        } else {
+            (VReg {
+                data: self.data >> 1,
+            })
+            .class()
+        }
     }
 }
 
@@ -520,9 +537,11 @@ impl PresetTargets {
     /// Returns a [`Target`] that is configured for the x86-64 System V ABI
     /// on x86-64 macOS.
     #[inline]
-    pub fn mac_os_x86_64(options: CodegenOptions) -> Target<X86_64> {
+    pub fn mac_os_x86_64() -> Target<X86_64> {
         Target {
-            options,
+            options: CodegenOptions {
+                omit_frame_pointer: false,
+            },
             platform: Box::new(MacOSX86_64),
             aggregate_type_layouts: SaHashMap::default(),
             _unused: PhantomData,

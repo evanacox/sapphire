@@ -10,7 +10,7 @@
 
 use crate::codegen::x86_64::{Inst, SystemVStackFrame, X86_64};
 use crate::codegen::{
-    AvailableRegisters, CallUseDefId, FramelessCtx, PReg, StackFrame, VariableLocation,
+    AvailableRegisters, CallUseDef, CallUseDefId, FramelessCtx, PReg, StackFrame, VariableLocation,
     WriteableReg,
 };
 use crate::ir::{FunctionMetadata, RetInst, StackSlot, Value};
@@ -58,11 +58,11 @@ impl StackFrame<X86_64> for Debug3RegStackFrame {
         self.frame.preserved_reg_used(reg)
     }
 
-    fn register_use_def_call(&mut self, uses: &[PReg], defs: &[PReg]) -> CallUseDefId {
-        self.frame.register_use_def_call(uses, defs)
+    fn register_use_def_call(&mut self, use_def: CallUseDef<'_>) -> CallUseDefId {
+        self.frame.register_use_def_call(use_def)
     }
 
-    fn call_use_defs(&self, id: CallUseDefId) -> (&[PReg], &[PReg]) {
+    fn call_use_defs(&self, id: CallUseDefId) -> CallUseDef<'_> {
         self.frame.call_use_defs(id)
     }
 
@@ -79,11 +79,13 @@ impl StackFrame<X86_64> for Debug3RegStackFrame {
     }
 
     fn registers(&self) -> AvailableRegisters {
+        const CLOBBERED_FLOATS: [PReg; 3] = [X86_64::xmm(8), X86_64::xmm(9), X86_64::xmm(10)];
+
         AvailableRegisters {
-            preserved: &[],
-            clobbered: &[X86_64::R8, X86_64::R9, X86_64::R10],
-            unavailable: &[X86_64::RIP, X86_64::RSP, X86_64::RBP],
-            high_priority_temporaries: &[],
+            preserved: (&[], &[]),
+            clobbered: (&[X86_64::R8, X86_64::R9, X86_64::R10], &CLOBBERED_FLOATS),
+            unavailable: (&[X86_64::RIP, X86_64::RSP, X86_64::RBP], &[]),
+            high_priority_temporaries: (&[], &[]),
         }
     }
 

@@ -40,6 +40,23 @@ fn into_mac_os_symbol_name(name: &str, is_mac: bool) -> String {
     }
 }
 
+#[inline]
+fn format_int_reg(
+    byte: &'static str,
+    word: &'static str,
+    dword: &'static str,
+    qword: &'static str,
+    width: Width,
+) -> &'static str {
+    match width {
+        Width::Byte => byte,
+        Width::Word => word,
+        Width::Dword => dword,
+        Width::Qword => qword,
+        Width::Xmmword => panic!("tried to access 64-bit register as an xmmword"),
+    }
+}
+
 /// Formats the "canonical" assembly form of an x86-64 register
 pub fn format_reg(reg: Reg, width: Width, syntax: X86_64Assembly) -> String {
     let asm_prefix = if syntax == X86_64Assembly::GNU {
@@ -66,102 +83,22 @@ pub fn format_reg(reg: Reg, width: Width, syntax: X86_64Assembly) -> String {
         }
 
         let name = match preg {
-            X86_64::RAX => match width {
-                Width::Byte => "al",
-                Width::Word => "ax",
-                Width::Dword => "eax",
-                Width::Qword => "rax",
-            },
-            X86_64::RBX => match width {
-                Width::Byte => "bl",
-                Width::Word => "bx",
-                Width::Dword => "ebx",
-                Width::Qword => "rbx",
-            },
-            X86_64::RCX => match width {
-                Width::Byte => "cl",
-                Width::Word => "cx",
-                Width::Dword => "ecx",
-                Width::Qword => "rcx",
-            },
-            X86_64::RDX => match width {
-                Width::Byte => "dl",
-                Width::Word => "dx",
-                Width::Dword => "edx",
-                Width::Qword => "rdx",
-            },
-            X86_64::RSI => match width {
-                Width::Byte => "sil",
-                Width::Word => "si",
-                Width::Dword => "esi",
-                Width::Qword => "rsi",
-            },
-            X86_64::RDI => match width {
-                Width::Byte => "dil",
-                Width::Word => "di",
-                Width::Dword => "edi",
-                Width::Qword => "rdi",
-            },
-            X86_64::RBP => match width {
-                Width::Byte => "bpl",
-                Width::Word => "bp",
-                Width::Dword => "ebp",
-                Width::Qword => "rbp",
-            },
-            X86_64::RSP => match width {
-                Width::Byte => "spl",
-                Width::Word => "sp",
-                Width::Dword => "esp",
-                Width::Qword => "rsp",
-            },
-            X86_64::R8 => match width {
-                Width::Byte => "r8b",
-                Width::Word => "r8w",
-                Width::Dword => "r8d",
-                Width::Qword => "r8",
-            },
-            X86_64::R9 => match width {
-                Width::Byte => "r9b",
-                Width::Word => "r9w",
-                Width::Dword => "r9d",
-                Width::Qword => "r9",
-            },
-            X86_64::R10 => match width {
-                Width::Byte => "r10b",
-                Width::Word => "r10w",
-                Width::Dword => "r10d",
-                Width::Qword => "r10",
-            },
-            X86_64::R11 => match width {
-                Width::Byte => "r11b",
-                Width::Word => "r11w",
-                Width::Dword => "r11d",
-                Width::Qword => "r11",
-            },
-            X86_64::R12 => match width {
-                Width::Byte => "r12b",
-                Width::Word => "r12w",
-                Width::Dword => "r12d",
-                Width::Qword => "r12",
-            },
-            X86_64::R13 => match width {
-                Width::Byte => "r13b",
-                Width::Word => "r13w",
-                Width::Dword => "r13d",
-                Width::Qword => "r13",
-            },
-            X86_64::R14 => match width {
-                Width::Byte => "r14b",
-                Width::Word => "r14w",
-                Width::Dword => "r14d",
-                Width::Qword => "r14",
-            },
-            X86_64::R15 => match width {
-                Width::Byte => "r15b",
-                Width::Word => "r15w",
-                Width::Dword => "r15d",
-                Width::Qword => "r15",
-            },
+            X86_64::RAX => format_int_reg("al", "ax", "eax", "rax", width),
+            X86_64::RBX => format_int_reg("bl", "bx", "ebx", "rbx", width),
+            X86_64::RCX => format_int_reg("cl", "cx", "ecx", "rcx", width),
+            X86_64::RDX => format_int_reg("dl", "dx", "edx", "rdx", width),
+            X86_64::RSI => format_int_reg("sil", "si", "esi", "rsi", width),
+            X86_64::RDI => format_int_reg("dil", "di", "edi", "rdi", width),
+            X86_64::RBP => format_int_reg("bpl", "bp", "ebp", "rbp", width),
+            X86_64::RSP => format_int_reg("spl", "sp", "esp", "rsp", width),
+            X86_64::R8 => format_int_reg("r8b", "r8w", "r8d", "r8", width),
+            X86_64::R9 => format_int_reg("r9b", "r9w", "r9d", "r9", width),
+            X86_64::R10 => format_int_reg("r10b", "r10w", "r10d", "r10", width),
+            X86_64::R11 => format_int_reg("r11b", "r11w", "r11d", "r11", width),
+            X86_64::R12 => format_int_reg("r12b", "r12w", "r12d", "r12", width),
+            X86_64::R13 => format_int_reg("r13b", "r13w", "r13d", "r13", width),
+            X86_64::R14 => format_int_reg("r14b", "r14w", "r14d", "r14", width),
+            X86_64::R15 => format_int_reg("r15b", "r15w", "r15d", "r15", width),
             _ => unreachable!(),
         };
 
@@ -531,6 +468,9 @@ impl AsmEmitter {
             Inst::Movzx(movzx) => self.emit_movzx(movzx),
             Inst::MovStore(mov) => self.emit_mov_store(mov),
             Inst::Movabs(movabs) => self.emit_movabs(movabs),
+            Inst::Movaps(movaps) => self.emit_movaps(movaps),
+            Inst::MovFloatLoad(movs) => self.emit_movs_load(movs),
+            Inst::MovFloatStore(movs) => self.emit_movs_store(movs),
             Inst::Lea(lea) => self.emit_lea(lea),
             Inst::ALU(alu) => self.emit_alu(alu),
             Inst::Not(not) => self.emit_not(not),
@@ -541,6 +481,8 @@ impl AsmEmitter {
             Inst::Cqo(_) => "cqo".into(),
             Inst::Div(div) => self.emit_div(div),
             Inst::IDiv(idiv) => self.emit_idiv(idiv),
+            Inst::PXor(pxor) => self.emit_pxor(pxor),
+            Inst::FloatArith(arith) => self.emit_float_alu(arith),
             Inst::Cmp(cmp) => self.emit_cmp(cmp),
             Inst::Test(test) => self.emit_test(test),
             Inst::Set(set) => self.emit_set(set),
@@ -662,18 +604,10 @@ impl AsmEmitter {
         let reference = self.emit_indirect_address(loc);
         let prefix = match self.mode {
             X86_64Assembly::GNU => "",
-            X86_64Assembly::NASM => match width {
-                Width::Byte => "byte ",
-                Width::Word => "word ",
-                Width::Dword => "dword ",
-                Width::Qword => "qword ",
-            },
-            X86_64Assembly::GNUIntel | X86_64Assembly::MASM => match width {
-                Width::Byte => "byte ptr ",
-                Width::Word => "word ptr ",
-                Width::Dword => "dword ptr ",
-                Width::Qword => "qword ptr ",
-            },
+            X86_64Assembly::NASM => format_int_reg("byte ", "word ", "dword ", "qword ", width),
+            X86_64Assembly::GNUIntel | X86_64Assembly::MASM => {
+                format_int_reg("byte ptr ", "word ptr ", "dword ptr ", "qword ptr ", width)
+            }
         };
 
         format!("{prefix}{reference}")
@@ -702,12 +636,7 @@ impl AsmEmitter {
 
     fn suffix(&self, width: Width) -> &'static str {
         if self.mode == X86_64Assembly::GNU {
-            match width {
-                Width::Byte => "b",
-                Width::Word => "w",
-                Width::Dword => "l",
-                Width::Qword => "q",
-            }
+            format_int_reg("b", "w", "l", "q", width)
         } else {
             ""
         }
@@ -766,6 +695,32 @@ impl AsmEmitter {
         let (lhs, rhs) = self.reorder_operands(value, dest);
 
         format!("movabs {lhs}, {rhs}")
+    }
+
+    fn emit_movaps(&self, movaps: Movaps) -> String {
+        let src = self.emit_reg(movaps.src, Width::Qword);
+        let dest = self.emit_reg(movaps.dest.to_reg(), Width::Qword);
+        let (lhs, rhs) = self.reorder_operands(src, dest);
+
+        format!("movaps {lhs}, {rhs}")
+    }
+
+    fn emit_movs_load(&self, movs: MovFloatLoad) -> String {
+        let src = self.emit_rmi(RegMemImm::Mem(movs.src), Width::Qword);
+        let dest = self.emit_reg(movs.dest.to_reg(), Width::Qword);
+        let suffix = Self::float_op_suffix(movs.format);
+        let (lhs, rhs) = self.reorder_operands(src, dest);
+
+        format!("movs{suffix} {lhs}, {rhs}")
+    }
+
+    fn emit_movs_store(&self, movs: MovFloatStore) -> String {
+        let src = self.emit_reg(movs.src, Width::Qword);
+        let dest = self.emit_rmi(RegMemImm::Mem(movs.dest), Width::Qword);
+        let suffix = Self::float_op_suffix(movs.format);
+        let (lhs, rhs) = self.reorder_operands(src, dest);
+
+        format!("movs{suffix} {lhs}, {rhs}")
     }
 
     fn emit_lea(&self, lea: Lea) -> String {
@@ -831,6 +786,35 @@ impl AsmEmitter {
         let suffix = self.suffix(idiv.width);
 
         format!("idiv{suffix} {src}")
+    }
+
+    fn emit_pxor(&self, pxor: PXor) -> String {
+        let src = self.emit_reg(pxor.rhs, Width::Xmmword);
+        let dest = self.emit_reg(pxor.lhs.to_reg(), Width::Xmmword);
+        let (lhs, rhs) = self.reorder_operands(src, dest);
+
+        format!("pxor {lhs}, {rhs}")
+    }
+
+    fn emit_float_alu(&self, arith: FloatArith) -> String {
+        let width = match arith.format {
+            FloatFormat::Single => Width::Dword,
+            FloatFormat::Double => Width::Qword,
+        };
+
+        let src = self.emit_rmi(arith.rhs.into(), width);
+        let dest = self.emit_reg(arith.lhs.to_reg(), width);
+        let suffix = Self::float_op_suffix(arith.format);
+        let opc = match arith.opc {
+            FloatArithOpcode::Add => "adds",
+            FloatArithOpcode::Sub => "subs",
+            FloatArithOpcode::Mul => "muls",
+            FloatArithOpcode::Div => "divs",
+        };
+
+        let (lhs, rhs) = self.reorder_operands(src, dest);
+
+        format!("{opc}{suffix} {lhs}, {rhs}")
     }
 
     fn emit_cmp(&self, cmp: Cmp) -> String {
@@ -903,6 +887,13 @@ impl AsmEmitter {
             ConditionCode::NS => "ns",
             ConditionCode::O => "o",
             ConditionCode::NO => "no",
+        }
+    }
+
+    fn float_op_suffix(format: FloatFormat) -> &'static str {
+        match format {
+            FloatFormat::Single => "s",
+            FloatFormat::Double => "d",
         }
     }
 

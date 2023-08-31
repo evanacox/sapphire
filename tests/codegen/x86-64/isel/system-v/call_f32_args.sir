@@ -1,0 +1,19 @@
+; MATCH-SECTION
+;
+; wrap:
+;     movaps vf2, xmm1
+;     movaps vf1, xmm0
+;     movaps xmm1, vf1
+;     movaps xmm0, vf2
+;     call takes_returns_f32
+;     movaps vf0, xmm0
+;     movaps xmm0, vf0
+;     ret
+;;
+fn f32 @takes_returns_f32(f32, f32)
+
+fn f32 @wrap(f32, f32) {
+entry(f32 %0, f32 %1):
+  %2 = call f32 @takes_returns_f32(f32 %1, f32 %0)
+  ret f32 %2
+}
