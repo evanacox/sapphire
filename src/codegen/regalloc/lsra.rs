@@ -12,7 +12,7 @@ use crate::arena::{SecondaryMap, SecondarySet};
 use crate::codegen::regalloc::allocator::{defs, uses};
 use crate::codegen::{
     Allocation, Architecture, AvailableRegisters, ConservativeLiveIntervals, FixedIntervals,
-    LiveInterval, MIRFunction, MachInst, PReg, ProgramPoint, ProgramPointsIterator, Reg,
+    LiveInterval, MIRFunction, MachInst, PReg, ProgramPoint, ProgramPointsIterator, Reg, RegClass,
     RegisterAllocator, RegisterMapping, SpillReload, StackFrame, VariableLocation,
 };
 use crate::ir::FunctionMetadata;
@@ -126,8 +126,10 @@ impl<'a> LinearScanRegAlloc<'a> {
             spill_points.insert(pair, live.take_reload_points(pair.reg()));
         }
 
-        for &reg in available.preserved {
-            preserved.insert(reg);
+        for set in [available.preserved.0, available.preserved.1] {
+            for &reg in set {
+                preserved.insert(reg);
+            }
         }
 
         Self {
@@ -151,13 +153,8 @@ impl<'a> LinearScanRegAlloc<'a> {
         while let Some(Reverse(interval)) = self.intervals.pop() {
             self.expire_old_intervals(interval, frame);
 
-            // if this is true we need more registers than the target has, so we have to spill
-            if self.active.len() == self.pool.max_simultaneous_live() {
-                self.spill_at_interval(interval, frame);
-            } else {
-                // we still might spill if every available register is fixed somehow
-                self.maybe_allocate(interval, frame);
-            }
+            // we still might spill if every available register is fixed somehow
+            self.maybe_allocate(interval, frame);
         }
     }
 
@@ -188,7 +185,7 @@ impl<'a> LinearScanRegAlloc<'a> {
                 }
             }
             // if we didn't get a valid register, spill the interval anyway
-            // and then return. should happen very very rarely
+            // and then return
             None => {
                 self.spill_at_interval(interval, frame);
             }
@@ -208,7 +205,7 @@ impl<'a> LinearScanRegAlloc<'a> {
             Some(reg) => *reg,
             None => match self.ends_by_copy_to.get(&pair) {
                 Some(reg) => *reg,
-                None => return self.pool.try_take_any(pair.live(), self.fixed),
+                None => return self.pool.try_take_any(pair, self.fixed),
             },
         };
 
@@ -228,17 +225,17 @@ impl<'a> LinearScanRegAlloc<'a> {
                         reg
                     } else {
                         // if `associated` was spilled, we bail
-                        return self.pool.try_take_any(pair.live(), self.fixed);
+                        return self.pool.try_take_any(pair, self.fixed);
                     }
                 } else {
                     // if it overlaps we bail
-                    return self.pool.try_take_any(pair.live(), self.fixed);
+                    return self.pool.try_take_any(pair, self.fixed);
                 }
             }
         };
 
         self.pool
-            .try_take_specific_register(preferred, pair.live(), self.fixed)
+            .try_take_specific_register(preferred, pair, self.fixed)
     }
 
     fn expire_old_intervals<Arch: Architecture>(
@@ -295,9 +292,14 @@ impl<'a> LinearScanRegAlloc<'a> {
 
             self.spill_other_interval(interval, spill, frame)
         } else {
-            let &maybe_spill = self
+            let (i, &maybe_spill) = self
                 .active
-                .last()
+                .iter()
+                .enumerate()
+                .rev()
+                .find(|(i, pair)| {
+                    !pair.live().is_spill_interval() && pair.reg().class() == interval.reg().class()
+                })
                 .expect("spilling while nothing is active?");
 
             // if the last active interval ends after our current interval, try to spill that instead.
@@ -432,7 +434,7 @@ impl<'a, Arch: Architecture> RegisterAllocator<Arch> for LinearScanRegAlloc<'a> 
             let uses = uses!(inst, frame);
             let defs = defs!(inst, frame);
 
-            for (reg, _) in uses {
+            for reg in uses {
                 let (loc, preg) = rewrites_for_reg!(reg, lsra, pp);
 
                 pairs.push((reg, preg));
@@ -448,7 +450,7 @@ impl<'a, Arch: Architecture> RegisterAllocator<Arch> for LinearScanRegAlloc<'a> 
                 }
             }
 
-            for (reg, _) in defs {
+            for reg in defs {
                 let (loc, preg) = rewrites_for_reg!(reg, lsra, pp);
 
                 pairs.push((reg, preg));
@@ -473,14 +475,15 @@ impl<'a, Arch: Architecture> RegisterAllocator<Arch> for LinearScanRegAlloc<'a> 
 
 struct RegisterPool {
     priority: SecondaryMap<PReg, i32>,
-    register_queue: Vec<PReg>,
-    total: usize,
+    int_register_queue: Vec<PReg>,
+    float_register_queue: Vec<PReg>,
 }
 
 impl RegisterPool {
     fn from(metadata: FunctionMetadata, registers: AvailableRegisters) -> Self {
         let mut priority = SecondaryMap::default();
-        let mut register_queue = Vec::default();
+        let mut int_register_queue = Vec::default();
+        let mut float_register_queue = Vec::default();
 
         // 0 => clobbered, 1 => preserved, 2 => high priority
         let order = [
@@ -499,39 +502,44 @@ impl RegisterPool {
         // order is [clobbered, preserved, high_priority]
         let priorities = [500, 100, 1000];
 
-        for (i, &register_subset) in order.iter().enumerate() {
-            for (j, &preg) in register_subset.iter().enumerate().rev() {
-                // each register gets a relative priority within its own array, so
-                // putting the register first makes the allocator prefer it.
-                priority.insert(preg, (priorities[i] - j) as i32);
-                register_queue.push(preg);
+        for (i, &(int_subset, float_subset)) in order.iter().enumerate() {
+            for set in [int_subset, float_subset] {
+                for (j, &preg) in set.iter().enumerate().rev() {
+                    // each register gets a relative priority within its own array, so
+                    // putting the register first makes the allocator prefer it.
+                    priority.insert(preg, (priorities[i] - j) as i32);
+
+                    match preg.class() {
+                        RegClass::Int => int_register_queue.push(preg),
+                        RegClass::Float => float_register_queue.push(preg),
+                    }
+                }
             }
         }
 
         // higher priority -> sorted later in the queue
-        register_queue.sort_unstable_by_key(|&val| priority[val]);
-        register_queue.dedup();
+        for vec in [&mut int_register_queue, &mut float_register_queue] {
+            vec.sort_unstable_by_key(|&val| priority[val]);
+            vec.dedup();
+        }
 
         Self {
-            total: register_queue.len(),
             priority,
-            register_queue,
+            int_register_queue,
+            float_register_queue,
         }
     }
 
-    #[inline]
-    fn max_simultaneous_live(&self) -> usize {
-        self.total
-    }
-
     fn make_register_available(&mut self, preg: PReg) {
+        let queue = match preg.class() {
+            RegClass::Int => &mut self.int_register_queue,
+            RegClass::Float => &mut self.float_register_queue,
+        };
+
         // insert while maintaining sorted order
-        match self
-            .register_queue
-            .binary_search_by_key(&self.priority[preg], |&preg| self.priority[preg])
-        {
+        match queue.binary_search_by_key(&self.priority[preg], |&preg| self.priority[preg]) {
             Ok(pos) => panic!("somehow duplicated a register"),
-            Err(pos) => self.register_queue.insert(pos, preg),
+            Err(pos) => queue.insert(pos, preg),
         }
     }
 
@@ -539,35 +547,35 @@ impl RegisterPool {
     //
     // a register is "valid" at a given interval if no fixed intervals overlap with
     // the interval being allocated for.
-    fn try_take_any(&mut self, interval: LiveInterval, fixed: &FixedIntervals) -> Option<PReg> {
-        // we review possible candidates in order of decreasing priority
-        let mut iter = self.register_queue.iter().enumerate().rev();
+    fn try_take_any(&mut self, pair: RegLivePair, fixed: &FixedIntervals) -> Option<PReg> {
+        let queue = self.queue_for(pair.reg());
+        let possible_next = {
+            // we review possible candidates in order of decreasing priority
+            let mut iter = queue.iter().enumerate().rev();
 
-        // basic idea: find the highest priority register that isn't defined in
-        // a fixed interval that overlaps with `interval`.
-        //
-        // this is a fallible operation, we may hit a position where the only available registers
-        // are taken via fixed registers, so we need to deal with that case at the call site
-        let possible_next = loop {
-            // if we run out of registers, we're in that fail state detailed above
-            let (i, preg) = match iter.next() {
-                Some((i, &preg)) => (i, preg),
-                None => break None,
-            };
+            // basic idea: find the highest priority register that isn't defined in
+            // a fixed interval that overlaps with `interval`.
+            //
+            // this is a fallible operation, we may hit a position where the only available registers
+            // are taken via fixed registers, so we need to deal with that case at the call site
+            loop {
+                // if we run out of registers, we're in that fail state detailed above
+                let (i, preg) = match iter.next() {
+                    Some((i, &preg)) => (i, preg),
+                    None => break None,
+                };
 
-            // if none of the fixed intervals for `preg` overlap the current interval, we
-            // take this register. if any do, we go to the next one and repeat the process
-            if self.is_valid_at(preg, interval, fixed) {
-                break Some(i);
+                // if none of the fixed intervals for `preg` overlap the current interval, we
+                // take this register. if any do, we go to the next one and repeat the process
+                if Self::is_valid_at(preg, pair.live(), fixed) {
+                    break Some(i);
+                }
             }
         };
 
-        match possible_next {
-            // we can't swap_remove here due to needing to maintain sorted order
-            // but the array is so small it doesn't really matter at all
-            Some(i) => Some(self.register_queue.remove(i)),
-            None => None,
-        }
+        // we can't swap_remove here due to needing to maintain sorted order
+        // but the array is so small it doesn't really matter at all
+        possible_next.map(|i| queue.remove(i))
     }
 
     // tries to take a specific preferred register if possible, if it isn't tries to
@@ -575,35 +583,43 @@ impl RegisterPool {
     fn try_take_specific_register(
         &mut self,
         preferred: PReg,
-        interval: LiveInterval,
+        pair: RegLivePair,
         fixed: &FixedIntervals,
     ) -> Option<PReg> {
+        let queue = self.queue_for(pair.reg());
+        let found = queue.iter().position(move |&reg| reg == preferred);
+
         // is preferred even in the queue at all? we can't take that specific
         // one if it's already taken by another interval
-        match self
-            .register_queue
-            .iter()
-            .position(move |&reg| reg == preferred)
-        {
+        match found {
             // if preferred is both in the queue and valid at the interval,
             // we will take preferred and use it as our target register.
-            Some(index) if self.is_valid_at(preferred, interval, fixed) => {
-                self.register_queue.remove(index);
+            Some(index) if Self::is_valid_at(preferred, pair.live(), fixed) => {
+                queue.remove(index);
 
                 Some(preferred)
             }
             // otherwise we just default to the normal "try and get anything" case
-            _ => self.try_take_any(interval, fixed),
+            _ => self.try_take_any(pair, fixed),
         }
     }
 
     // a register is "valid" at a given interval if no fixed intervals overlap with
     // the interval being allocated for.
     #[inline]
-    fn is_valid_at(&self, preg: PReg, interval: LiveInterval, fixed: &FixedIntervals) -> bool {
+    fn is_valid_at(preg: PReg, interval: LiveInterval, fixed: &FixedIntervals) -> bool {
         !fixed
             .intervals_for(preg)
             .iter()
             .any(move |&fixed| interval.overlaps(fixed))
+    }
+
+    // gets the queue for the integer class associated with `reg`
+    #[inline]
+    fn queue_for(&mut self, reg: Reg) -> &mut Vec<PReg> {
+        match reg.class() {
+            RegClass::Int => &mut self.int_register_queue,
+            RegClass::Float => &mut self.float_register_queue,
+        }
     }
 }

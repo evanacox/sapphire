@@ -98,10 +98,26 @@ pub(in crate::codegen::x86_64) fn zeroing_mov(
     ty: Type,
     ctx: &mut LoweringContext<'_, '_, X86_64>,
 ) {
-    let width = width_dword_minimum(type_into_width(ty, ctx));
+    match ty.unpack() {
+        UType::Int(_) | UType::Ptr(_) | UType::Bool(_) => {
+            let width = width_dword_minimum(type_into_width(ty, ctx));
 
-    // we emit it as a `mov` for dwords so that the entire register is cleared
-    ctx.emit(Inst::Mov(Mov { width, src, dest }));
+            // we emit it as a `mov` for dwords so that the entire register is cleared
+            ctx.emit(Inst::Mov(Mov { width, src, dest }));
+        }
+        UType::Float(ty) => match src {
+            RegMemImm::Reg(r) => {
+                ctx.emit(Inst::Movaps(Movaps { src: r, dest }));
+            }
+            RegMemImm::Mem(mem) => ctx.emit(Inst::MovFloatLoad(MovFloatLoad {
+                src: mem,
+                dest,
+                format: ty.format(),
+            })),
+            RegMemImm::Imm(_) => unreachable!(),
+        },
+        _ => todo!("aggregates in registers"),
+    };
 }
 
 fn val_class(val: Value, def: &FunctionDefinition) -> RegClass {
@@ -347,6 +363,7 @@ where
             Width::Word => ctx.emit(Inst::Cwd(Cwd)),
             Width::Dword => ctx.emit(Inst::Cdq(Cdq)),
             Width::Qword => ctx.emit(Inst::Cqo(Cqo)),
+            Width::Xmmword => panic!("tried to generate integral division with xmmwords"),
         }
 
         ctx.emit(Inst::IDiv(IDiv {
@@ -440,6 +457,22 @@ macro_rules! alu {
         $ctx.emit(Inst::ALU(ALU {
             opc: $opc,
             width,
+            lhs,
+            rhs,
+        }));
+    }};
+}
+
+macro_rules! float_alu {
+    ($self:expr, $data:expr, $def:expr, $fr:expr, $ctx:expr, $opc:expr) => {{
+        let dest = $self.curr_result_reg(RegClass::Float, ($def, $fr, $ctx));
+        let lhs = $self.mov(WriteableReg::from_reg(dest), $data.lhs(), ($def, $fr, $ctx));
+        let rhs = $self.rhs_operand_rm($data.rhs(), ($def, $fr, $ctx));
+        let fmt = $data.result_ty().unwrap().as_float().unwrap().format();
+
+        $ctx.emit(Inst::FloatArith(FloatArith {
+            opc: $opc,
+            format: fmt,
             lhs,
             rhs,
         }));
@@ -726,20 +759,20 @@ impl<'mo, 'fr, 'ta, 'ctx> GenericInstVisitor<(), Ctx<'mo, 'fr, 'ta, 'ctx>> for G
         todo!()
     }
 
-    fn visit_fadd(&mut self, data: &CommutativeArithInst, context: Ctx<'_, '_, '_, '_>) {
-        todo!()
+    fn visit_fadd(&mut self, data: &CommutativeArithInst, (def, fr, ctx): Ctx<'_, '_, '_, '_>) {
+        float_alu!(self, data, def, fr, ctx, FloatArithOpcode::Add);
     }
 
-    fn visit_fsub(&mut self, data: &ArithInst, context: Ctx<'_, '_, '_, '_>) {
-        todo!()
+    fn visit_fsub(&mut self, data: &ArithInst, (def, fr, ctx): Ctx<'_, '_, '_, '_>) {
+        float_alu!(self, data, def, fr, ctx, FloatArithOpcode::Sub);
     }
 
-    fn visit_fmul(&mut self, data: &CommutativeArithInst, context: Ctx<'_, '_, '_, '_>) {
-        todo!()
+    fn visit_fmul(&mut self, data: &CommutativeArithInst, (def, fr, ctx): Ctx<'_, '_, '_, '_>) {
+        float_alu!(self, data, def, fr, ctx, FloatArithOpcode::Mul);
     }
 
-    fn visit_fdiv(&mut self, data: &ArithInst, context: Ctx<'_, '_, '_, '_>) {
-        todo!()
+    fn visit_fdiv(&mut self, data: &ArithInst, (def, fr, ctx): Ctx<'_, '_, '_, '_>) {
+        float_alu!(self, data, def, fr, ctx, FloatArithOpcode::Div);
     }
 
     fn visit_frem(&mut self, data: &ArithInst, context: Ctx<'_, '_, '_, '_>) {
@@ -917,8 +950,24 @@ impl<'mo, 'fr, 'ta, 'ctx> GenericInstVisitor<(), Ctx<'mo, 'fr, 'ta, 'ctx>> for G
         }));
     }
 
-    fn visit_fconst(&mut self, data: &FConstInst, context: Ctx<'_, '_, '_, '_>) {
-        todo!()
+    fn visit_fconst(&mut self, data: &FConstInst, (def, fr, ctx): Ctx<'_, '_, '_, '_>) {
+        let (data, format) = {
+            let float = data.result_ty().unwrap().unwrap_float();
+            let c = match float.format() {
+                FloatFormat::Single => Constant::Long(data.value() as u32),
+                FloatFormat::Double => Constant::Quad(data.value()),
+            };
+
+            (ctx.add_constant(c), float.format())
+        };
+
+        let reg = self.curr_result_reg(RegClass::Float, (def, fr, ctx));
+
+        ctx.emit(Inst::MovFloatLoad(MovFloatLoad {
+            format,
+            src: IndirectAddress::RipLocalData(data),
+            dest: WriteableReg::from_reg(reg),
+        }))
     }
 
     fn visit_bconst(&mut self, data: &BConstInst, (def, fr, ctx): Ctx<'_, '_, '_, '_>) {

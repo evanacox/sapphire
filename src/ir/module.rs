@@ -175,7 +175,7 @@ impl Module {
     /// later with [`Self::define_existing_function`], or it can be left
     /// as-is if the function is opaque.
     pub fn declare_function(&mut self, name: &str, sig: Signature) -> Func {
-        debug_assert!(matches!(self.find_function_by_name(name), None));
+        debug_assert!(self.find_function_by_name(name).is_none());
 
         let name = name.to_owned();
         let ctx = self.context.clone();

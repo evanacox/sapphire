@@ -297,9 +297,7 @@ struct ISelMergeAnyMatcher<Arch: Architecture> {
 
 impl<Arch: Architecture> Clone for ISelMergeAnyMatcher<Arch> {
     fn clone(&self) -> Self {
-        Self {
-            _unused: PhantomData,
-        }
+        *self
     }
 }
 
@@ -333,9 +331,7 @@ struct ISelMergePhiMatcher<Arch: Architecture> {
 
 impl<Arch: Architecture> Clone for ISelMergePhiMatcher<Arch> {
     fn clone(&self) -> Self {
-        Self {
-            _unused: PhantomData,
-        }
+        *self
     }
 }
 

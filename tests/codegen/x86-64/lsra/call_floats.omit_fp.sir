@@ -1,0 +1,17 @@
+; MATCH-SECTION
+;
+; do_math:
+;     sub rsp, 8
+;     addsd xmm0, xmm1
+;     call fmod
+;     add rsp, 8
+;     ret
+;;
+fn f64 @fmod(f64)
+
+fn f64 @do_math(f64, f64) {
+entry(f64 %0, f64 %1):
+  %2 = fadd f64 %0, %1
+  %3 = call f64 @fmod(f64 %2)
+  ret f64 %3
+}

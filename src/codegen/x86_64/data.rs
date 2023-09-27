@@ -8,24 +8,25 @@
 //                                                                           //
 //======---------------------------------------------------------------======//
 
-use crate::subtest::{Subtest, TestResult};
-use sapphire::analysis;
-use sapphire::reader2;
-use sapphire::transforms;
+use crate::codegen::{FuncData, MIRBlock};
 
-fn parser_output(name: &str, content: &str) -> TestResult {
-    match reader2::parse_sir(name, content) {
-        Ok(module) => {
-            // this also tests the verifier. Every SIR file we parse should
-            // also correctly verify, anything that doesn't is a bug.
-            transforms::verify_module_panic(&module);
-
-            TestResult::Output(analysis::stringify_module(&module))
-        }
-        Err(err) => TestResult::CompileError(err),
-    }
+/// A single, self-contained constant for x86-64.
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Constant {
+    /// A `.quad` that refers to a label
+    QuadLabel(MIRBlock),
+    /// A `.quad` (8-byte) constant
+    Quad(u64),
+    /// A `.long` (4-byte) constant
+    Long(u32),
+    /// A `.short` (2-byte) constant
+    Short(u16),
+    /// A `.byte` (1-byte) constant
+    Byte(u8),
+    /// An array of constants with a specified relative order
+    Array(Box<[Constant]>),
+    /// A string constant that is **not** null-terminated by default
+    String(Box<[char]>),
 }
 
-pub const fn parse_subtest() -> Subtest {
-    Subtest::new(&["parse"], parser_output)
-}
+impl FuncData for Constant {}

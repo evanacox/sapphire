@@ -880,7 +880,9 @@ impl<'a> Parser<'a> {
         let dbg = self.debug();
         let icmp = matches!(opcode, Opcode::ICmp);
         let cmp_opc = consume!(self, Token::CmpOpcode(_), "icmp or fcmp comparison");
-        let Token::CmpOpcode(opc) = cmp_opc.tok else { unreachable!() };
+        let Token::CmpOpcode(opc) = cmp_opc.tok else {
+            unreachable!()
+        };
 
         if icmp {
             let comparison = match opc {

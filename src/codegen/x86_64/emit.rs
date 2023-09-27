@@ -11,13 +11,13 @@
 use crate::arena::SecondaryMap;
 use crate::codegen::x86_64::*;
 use crate::codegen::{
-    Emitter, Extern, MIRBlock, MIRFunction, MIRModule, PReg, Reg, RegClass, TargetPair,
+    Emitter, Extern, MIRBlock, MIRFuncData, MIRFunction, MIRModule, PReg, Reg, RegClass, TargetPair,
 };
 use crate::ir::{FloatFormat, UType};
 use crate::utility::{SaHashMap, StringPool};
 use smallvec::SmallVec;
+use std::iter;
 use std::str::FromStr;
-use std::{iter, mem};
 
 /// Different assembly formats for x86-64
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Debug, Hash)]
@@ -32,11 +32,20 @@ pub enum X86_64Assembly {
     MASM,
 }
 
-fn into_mac_os_symbol_name(name: &str, is_mac: bool) -> String {
-    if is_mac {
-        format!("_{name}")
-    } else {
-        name.to_string()
+#[inline]
+fn format_int_reg(
+    byte: &'static str,
+    word: &'static str,
+    dword: &'static str,
+    qword: &'static str,
+    width: Width,
+) -> &'static str {
+    match width {
+        Width::Byte => byte,
+        Width::Word => word,
+        Width::Dword => dword,
+        Width::Qword => qword,
+        Width::Xmmword => panic!("tried to access 64-bit register as an xmmword"),
     }
 }
 
@@ -66,102 +75,22 @@ pub fn format_reg(reg: Reg, width: Width, syntax: X86_64Assembly) -> String {
         }
 
         let name = match preg {
-            X86_64::RAX => match width {
-                Width::Byte => "al",
-                Width::Word => "ax",
-                Width::Dword => "eax",
-                Width::Qword => "rax",
-            },
-            X86_64::RBX => match width {
-                Width::Byte => "bl",
-                Width::Word => "bx",
-                Width::Dword => "ebx",
-                Width::Qword => "rbx",
-            },
-            X86_64::RCX => match width {
-                Width::Byte => "cl",
-                Width::Word => "cx",
-                Width::Dword => "ecx",
-                Width::Qword => "rcx",
-            },
-            X86_64::RDX => match width {
-                Width::Byte => "dl",
-                Width::Word => "dx",
-                Width::Dword => "edx",
-                Width::Qword => "rdx",
-            },
-            X86_64::RSI => match width {
-                Width::Byte => "sil",
-                Width::Word => "si",
-                Width::Dword => "esi",
-                Width::Qword => "rsi",
-            },
-            X86_64::RDI => match width {
-                Width::Byte => "dil",
-                Width::Word => "di",
-                Width::Dword => "edi",
-                Width::Qword => "rdi",
-            },
-            X86_64::RBP => match width {
-                Width::Byte => "bpl",
-                Width::Word => "bp",
-                Width::Dword => "ebp",
-                Width::Qword => "rbp",
-            },
-            X86_64::RSP => match width {
-                Width::Byte => "spl",
-                Width::Word => "sp",
-                Width::Dword => "esp",
-                Width::Qword => "rsp",
-            },
-            X86_64::R8 => match width {
-                Width::Byte => "r8b",
-                Width::Word => "r8w",
-                Width::Dword => "r8d",
-                Width::Qword => "r8",
-            },
-            X86_64::R9 => match width {
-                Width::Byte => "r9b",
-                Width::Word => "r9w",
-                Width::Dword => "r9d",
-                Width::Qword => "r9",
-            },
-            X86_64::R10 => match width {
-                Width::Byte => "r10b",
-                Width::Word => "r10w",
-                Width::Dword => "r10d",
-                Width::Qword => "r10",
-            },
-            X86_64::R11 => match width {
-                Width::Byte => "r11b",
-                Width::Word => "r11w",
-                Width::Dword => "r11d",
-                Width::Qword => "r11",
-            },
-            X86_64::R12 => match width {
-                Width::Byte => "r12b",
-                Width::Word => "r12w",
-                Width::Dword => "r12d",
-                Width::Qword => "r12",
-            },
-            X86_64::R13 => match width {
-                Width::Byte => "r13b",
-                Width::Word => "r13w",
-                Width::Dword => "r13d",
-                Width::Qword => "r13",
-            },
-            X86_64::R14 => match width {
-                Width::Byte => "r14b",
-                Width::Word => "r14w",
-                Width::Dword => "r14d",
-                Width::Qword => "r14",
-            },
-            X86_64::R15 => match width {
-                Width::Byte => "r15b",
-                Width::Word => "r15w",
-                Width::Dword => "r15d",
-                Width::Qword => "r15",
-            },
+            X86_64::RAX => format_int_reg("al", "ax", "eax", "rax", width),
+            X86_64::RBX => format_int_reg("bl", "bx", "ebx", "rbx", width),
+            X86_64::RCX => format_int_reg("cl", "cx", "ecx", "rcx", width),
+            X86_64::RDX => format_int_reg("dl", "dx", "edx", "rdx", width),
+            X86_64::RSI => format_int_reg("sil", "si", "esi", "rsi", width),
+            X86_64::RDI => format_int_reg("dil", "di", "edi", "rdi", width),
+            X86_64::RBP => format_int_reg("bpl", "bp", "ebp", "rbp", width),
+            X86_64::RSP => format_int_reg("spl", "sp", "esp", "rsp", width),
+            X86_64::R8 => format_int_reg("r8b", "r8w", "r8d", "r8", width),
+            X86_64::R9 => format_int_reg("r9b", "r9w", "r9d", "r9", width),
+            X86_64::R10 => format_int_reg("r10b", "r10w", "r10d", "r10", width),
+            X86_64::R11 => format_int_reg("r11b", "r11w", "r11d", "r11", width),
+            X86_64::R12 => format_int_reg("r12b", "r12w", "r12d", "r12", width),
+            X86_64::R13 => format_int_reg("r13b", "r13w", "r13d", "r13", width),
+            X86_64::R14 => format_int_reg("r14b", "r14w", "r14d", "r14", width),
+            X86_64::R15 => format_int_reg("r15b", "r15w", "r15d", "r15", width),
             _ => unreachable!(),
         };
 
@@ -225,10 +154,12 @@ impl Emitter<X86_64> for Emit {
     ) -> String {
         let emitter = AsmEmitter {
             mode: format,
-            mac_os: matches!(target, TargetPair::X86_64macOS),
+            pair: target,
             state: String::default(),
             pool: module.symbols().clone(),
             label_count: 0,
+            block_names: SecondaryMap::default(),
+            data_names: SecondaryMap::default(),
             fixed_interval_comments,
         };
 
@@ -248,10 +179,12 @@ type FixedBeginEndAndCallerDefined = (
 
 struct AsmEmitter {
     mode: X86_64Assembly,
-    mac_os: bool,
+    pair: TargetPair,
     state: String,
     pool: StringPool,
     label_count: usize,
+    block_names: SecondaryMap<MIRBlock, String>,
+    data_names: SecondaryMap<MIRFuncData, String>,
     fixed_interval_comments: bool,
 }
 
@@ -267,12 +200,11 @@ impl AsmEmitter {
         self.emit_extern_symbols(module);
 
         for (function, frame) in module.functions() {
-            let name = into_mac_os_symbol_name(
+            let name = self.correct_symbol_name(
                 module
                     .symbols()
                     .get(function.name())
                     .expect("should have name"),
-                self.mac_os,
             );
 
             self.emit_function(&name, function);
@@ -285,14 +217,25 @@ impl AsmEmitter {
         self.state
     }
 
+    #[inline]
+    fn is_mac_os(&self) -> bool {
+        matches!(self.pair, TargetPair::X86_64macOS | TargetPair::Arm64macOS)
+    }
+
+    fn correct_symbol_name(&self, name: &str) -> String {
+        if self.is_mac_os() {
+            format!("_{name}")
+        } else {
+            name.to_string()
+        }
+    }
+
     fn emit_global_symbols(&mut self, module: &MIRModule<Inst>) {
         let strings = module.symbols();
 
         for (function, frame) in module.functions() {
-            let name = into_mac_os_symbol_name(
-                strings.get(function.name()).expect("should have name"),
-                self.mac_os,
-            );
+            let name =
+                self.correct_symbol_name(strings.get(function.name()).expect("should have name"));
 
             let real = match self.mode {
                 X86_64Assembly::GNU | X86_64Assembly::GNUIntel => {
@@ -347,21 +290,138 @@ impl AsmEmitter {
         }
     }
 
+    fn emit_section_text(&mut self) {
+        let s = match self.pair {
+            TargetPair::X86_64Linux | TargetPair::Aarch64Linux | TargetPair::Debug3Reg => {
+                match self.mode {
+                    X86_64Assembly::GNU | X86_64Assembly::GNUIntel => "    .text",
+                    X86_64Assembly::NASM => "    section .text",
+                    X86_64Assembly::MASM => {
+                        panic!("cannot create MASM assembly output when targeting Linux")
+                    }
+                }
+            }
+            TargetPair::X86_64macOS | TargetPair::Arm64macOS => match self.mode {
+                X86_64Assembly::GNU | X86_64Assembly::GNUIntel => "    .text",
+                X86_64Assembly::NASM => "    section __TEXT,__text",
+                X86_64Assembly::MASM => {
+                    panic!("cannot create MASM assembly output when targeting macOS")
+                }
+            },
+            TargetPair::X86_64Windows | TargetPair::Arm64Windows => match self.mode {
+                X86_64Assembly::GNU | X86_64Assembly::GNUIntel => "    .text",
+                X86_64Assembly::NASM => "    section .text",
+                X86_64Assembly::MASM => "_TEXT SEGMENT",
+            },
+        };
+
+        self.state += s;
+        self.state += "\n";
+    }
+
+    fn emit_section_constant(&mut self, constant: &Constant) {
+        const SECTION_NAMES: [[&str; 7]; 2] = [
+            // Linux
+            [
+                ".rodata.cst8,\"aM\",@progbits,8",    // quad-label
+                ".rodata.cst8,\"aM\",@progbits,8",    // quad
+                ".rodata.cst4,\"aM\",@progbits,4",    // long
+                ".rodata.cst2,\"aM\",@progbits,2",    // short
+                ".rodata.cst1,\"aM\",@progbits,1",    // byte
+                ".rodata,\"a\",@progbits",            // array
+                ".rodata.str1.1,\"aMS\",@progbits,1", // string: MUST HAVE .size FOLLOWING IT
+            ],
+            // macOS
+            [
+                "__TEXT,__literal8", // quad-label
+                "__TEXT,__literal8", // quad
+                "__TEXT,__literal4", // long
+                "__TEXT,__const",    // short
+                "__TEXT,__const",    // byte
+                "__TEXT,__const",    // array
+                "__TEXT,__cstring",  // string: MUST HAVE .size FOLLOWING IT
+            ],
+        ];
+
+        fn index_align_of_constant(constant: &Constant) -> (usize, usize) {
+            match &constant {
+                Constant::QuadLabel(_) => (0, 8),
+                Constant::Quad(_) => (1, 8),
+                Constant::Long(_) => (2, 4),
+                Constant::Short(_) => (3, 2),
+                Constant::Byte(_) => (4, 1),
+                Constant::Array(inside) => {
+                    // this is guaranteed to terminate eventually, we'll get the align of the innermost array element
+                    // and then we'll know our minimum alignment for the array as a whole
+                    (5, index_align_of_constant(constant).1)
+                }
+                Constant::String(_) => (6, 1),
+            }
+        }
+
+        let (section_name_index, align) = index_align_of_constant(constant);
+
+        let name = match self.pair {
+            TargetPair::X86_64Linux | TargetPair::Aarch64Linux | TargetPair::Debug3Reg => {
+                if !matches!(
+                    self.mode,
+                    X86_64Assembly::GNU | X86_64Assembly::GNUIntel | X86_64Assembly::NASM
+                ) {
+                    panic!("cannot create MASM assembly output when targeting Linux")
+                }
+
+                SECTION_NAMES[0][section_name_index]
+            }
+            TargetPair::X86_64macOS | TargetPair::Arm64macOS => {
+                if !matches!(
+                    self.mode,
+                    X86_64Assembly::GNU | X86_64Assembly::GNUIntel | X86_64Assembly::NASM
+                ) {
+                    panic!("cannot create MASM assembly output when targeting macOS")
+                }
+
+                SECTION_NAMES[1][section_name_index]
+            }
+            TargetPair::X86_64Windows | TargetPair::Arm64Windows => ".rdata",
+        };
+
+        let line = match self.mode {
+            X86_64Assembly::GNU | X86_64Assembly::GNUIntel => format!("    .section {name}"),
+            X86_64Assembly::NASM => format!("    section {name}"),
+            X86_64Assembly::MASM => "CONST SEGMENT".to_string(),
+        };
+
+        self.state += &line;
+        self.state += "\n";
+
+        match self.mode {
+            X86_64Assembly::GNU | X86_64Assembly::GNUIntel => {
+                self.state += &format!("    .align {align}\n");
+            }
+            X86_64Assembly::NASM => {
+                self.state += &format!("    align {align}\n");
+            }
+            X86_64Assembly::MASM => {
+                // we don't have to worry about it for MASM
+            }
+        }
+    }
+
     fn emit_function_name(&mut self, name: &str, defined_by_caller: &[PReg]) {
+        self.emit_section_text();
+
         let name = match self.mode {
             X86_64Assembly::GNU | X86_64Assembly::GNUIntel => {
-                self.state += "    .text\n";
+                self.state += "    .align 32\n";
 
                 format!("{name}:")
             }
             X86_64Assembly::NASM => {
-                self.state += "    section .text\n";
+                self.state += "    align 32\n";
 
                 format!("{name}:")
             }
             X86_64Assembly::MASM => {
-                self.state += "_TEXT SEGMENT\n";
-
                 format!("{name} PROC")
             }
         };
@@ -391,8 +451,54 @@ impl AsmEmitter {
         self.state += "\n";
     }
 
+    fn emit_single_constant(&mut self, key: MIRFuncData, constant: &Constant) {
+        self.emit_section_constant(constant);
+
+        let constant = match self.mode {
+            X86_64Assembly::GNU | X86_64Assembly::GNUIntel => match constant {
+                Constant::QuadLabel(block) => {
+                    let name = &self.block_names[*block];
+
+                    format!("    .quad {name}")
+                }
+                Constant::Quad(value) => format!("    .quad 0x{value:016x}"),
+                Constant::Long(value) => format!("    .long 0x{value:08x}"),
+                Constant::Short(value) => format!("   .short 0x{value:04x}"),
+                Constant::Byte(value) => format!("   .byte 0x{value:02x}"),
+                Constant::Array(_) => todo!(),
+                Constant::String(_) => todo!(),
+            },
+            X86_64Assembly::NASM => {
+                todo!()
+            }
+            X86_64Assembly::MASM => {
+                todo!()
+            }
+        };
+
+        let label = format!("{}:\n", &self.data_names[key]);
+
+        self.state += &label;
+        self.state += &constant;
+        self.state += "\n";
+    }
+
+    fn emit_function_data(&mut self, function: &MIRFunction<Inst>) {
+        match self.mode {
+            X86_64Assembly::GNU | X86_64Assembly::GNUIntel => {
+                for (key, data) in function.data() {
+                    self.emit_single_constant(key, data);
+                }
+            }
+            X86_64Assembly::NASM => {}
+            X86_64Assembly::MASM => {}
+        }
+    }
+
     fn emit_function(&mut self, name: &str, function: &MIRFunction<Inst>) {
-        let mut block_names = SecondaryMap::with_capacity(function.program_order().len());
+        self.block_names = SecondaryMap::default();
+        self.data_names = SecondaryMap::default();
+
         let (fixed_begin_at, fixed_end_at, defined_by_caller) = self.fixed_begin_end(function);
         let mut i = 0usize;
 
@@ -401,19 +507,46 @@ impl AsmEmitter {
         // skip 1, we don't want to put a label on the first block
         for &block in function.program_order().iter().skip(1) {
             let curr = self.label_count;
-            let next = mem::replace(&mut self.label_count, curr + 1);
+            let name = match self.mode {
+                X86_64Assembly::MASM => format!("$L{curr}"),
+                X86_64Assembly::NASM | X86_64Assembly::GNU | X86_64Assembly::GNUIntel => {
+                    format!(".L{curr}")
+                }
+            };
 
-            block_names.insert(block, format!(".L{next}"));
+            self.label_count += 1;
+            self.block_names.insert(block, name);
+        }
+
+        for (key, _) in function.data() {
+            let curr = self.label_count;
+            let name = match self.mode {
+                X86_64Assembly::MASM => {
+                    let name = self.pool.get(function.name()).unwrap();
+
+                    format!("{name}_const_L{curr}")
+                }
+                X86_64Assembly::NASM | X86_64Assembly::GNU | X86_64Assembly::GNUIntel => {
+                    format!(".LC{curr}")
+                }
+            };
+
+            self.label_count += 1;
+            self.data_names.insert(key, name);
+        }
+
+        if self.mode == X86_64Assembly::MASM {
+            self.emit_function_data(function);
         }
 
         for &block in function.program_order().iter() {
-            if let Some(name) = block_names.get(block) {
+            if let Some(name) = self.block_names.get(block) {
                 self.state += name;
                 self.state += ":\n";
             }
 
             for &inst in function.block(block) {
-                let asm = self.emit_inst(inst, &block_names);
+                let asm = self.emit_inst(inst);
 
                 self.emit_single_inst(i, asm, &fixed_begin_at, &fixed_end_at);
 
@@ -429,6 +562,10 @@ impl AsmEmitter {
                 self.state += "    section \".note.GNU-stack\",\"\",@progbits\n";
             }
             X86_64Assembly::MASM => self.state += "_TEXT ENDS\n",
+        }
+
+        if self.mode != X86_64Assembly::MASM {
+            self.emit_function_data(function);
         }
     }
 
@@ -523,7 +660,7 @@ impl AsmEmitter {
         }
     }
 
-    fn emit_inst(&self, inst: Inst, block_names: &SecondaryMap<MIRBlock, String>) -> String {
+    fn emit_inst(&self, inst: Inst) -> String {
         match inst {
             Inst::Nop(_) => "nop".into(),
             Inst::Mov(mov) => self.emit_mov(mov),
@@ -531,6 +668,9 @@ impl AsmEmitter {
             Inst::Movzx(movzx) => self.emit_movzx(movzx),
             Inst::MovStore(mov) => self.emit_mov_store(mov),
             Inst::Movabs(movabs) => self.emit_movabs(movabs),
+            Inst::Movaps(movaps) => self.emit_movaps(movaps),
+            Inst::MovFloatLoad(movs) => self.emit_movs_load(movs),
+            Inst::MovFloatStore(movs) => self.emit_movs_store(movs),
             Inst::Lea(lea) => self.emit_lea(lea),
             Inst::ALU(alu) => self.emit_alu(alu),
             Inst::Not(not) => self.emit_not(not),
@@ -541,6 +681,8 @@ impl AsmEmitter {
             Inst::Cqo(_) => "cqo".into(),
             Inst::Div(div) => self.emit_div(div),
             Inst::IDiv(idiv) => self.emit_idiv(idiv),
+            Inst::PXor(pxor) => self.emit_pxor(pxor),
+            Inst::FloatArith(arith) => self.emit_float_alu(arith),
             Inst::Cmp(cmp) => self.emit_cmp(cmp),
             Inst::Test(test) => self.emit_test(test),
             Inst::Set(set) => self.emit_set(set),
@@ -548,7 +690,7 @@ impl AsmEmitter {
             Inst::Pop(pop) => self.emit_pop(pop),
             Inst::Call(call) => self.emit_call(call),
             Inst::IndirectCall(indirectcall) => self.emit_indirectcall(indirectcall),
-            Inst::Jump(jump) => self.emit_jump(jump, block_names),
+            Inst::Jump(jump) => self.emit_jump(jump),
             Inst::Ret(_) => "ret".into(),
             Inst::Ud2(_) => "ud2".into(),
         }
@@ -646,6 +788,24 @@ impl AsmEmitter {
                     format!("[{e1} + {e2}*{integral} + {offset}]")
                 }
             }
+            IndirectAddress::RipLocalData(data) => {
+                let string = &self.data_names[data];
+
+                match self.mode {
+                    X86_64Assembly::GNU => format!("{string}(%rip)"),
+                    X86_64Assembly::NASM => format!("[rel {string}]"),
+                    X86_64Assembly::GNUIntel | X86_64Assembly::MASM => format!("{string}[rip]"),
+                }
+            }
+            IndirectAddress::RipLocalLabel(bb) => {
+                let string = &self.block_names[bb];
+
+                match self.mode {
+                    X86_64Assembly::GNU => format!("{string}(%rip)"),
+                    X86_64Assembly::NASM => format!("[rel {string}]"),
+                    X86_64Assembly::GNUIntel | X86_64Assembly::MASM => format!("{string}[rip]"),
+                }
+            }
             IndirectAddress::RipGlobal(global) => {
                 let string = self.pool.get(global).expect("invalid symbol key");
 
@@ -662,18 +822,10 @@ impl AsmEmitter {
         let reference = self.emit_indirect_address(loc);
         let prefix = match self.mode {
             X86_64Assembly::GNU => "",
-            X86_64Assembly::NASM => match width {
-                Width::Byte => "byte ",
-                Width::Word => "word ",
-                Width::Dword => "dword ",
-                Width::Qword => "qword ",
-            },
-            X86_64Assembly::GNUIntel | X86_64Assembly::MASM => match width {
-                Width::Byte => "byte ptr ",
-                Width::Word => "word ptr ",
-                Width::Dword => "dword ptr ",
-                Width::Qword => "qword ptr ",
-            },
+            X86_64Assembly::NASM => format_int_reg("byte ", "word ", "dword ", "qword ", width),
+            X86_64Assembly::GNUIntel | X86_64Assembly::MASM => {
+                format_int_reg("byte ptr ", "word ptr ", "dword ptr ", "qword ptr ", width)
+            }
         };
 
         format!("{prefix}{reference}")
@@ -702,12 +854,7 @@ impl AsmEmitter {
 
     fn suffix(&self, width: Width) -> &'static str {
         if self.mode == X86_64Assembly::GNU {
-            match width {
-                Width::Byte => "b",
-                Width::Word => "w",
-                Width::Dword => "l",
-                Width::Qword => "q",
-            }
+            format_int_reg("b", "w", "l", "q", width)
         } else {
             ""
         }
@@ -766,6 +913,32 @@ impl AsmEmitter {
         let (lhs, rhs) = self.reorder_operands(value, dest);
 
         format!("movabs {lhs}, {rhs}")
+    }
+
+    fn emit_movaps(&self, movaps: Movaps) -> String {
+        let src = self.emit_reg(movaps.src, Width::Qword);
+        let dest = self.emit_reg(movaps.dest.to_reg(), Width::Qword);
+        let (lhs, rhs) = self.reorder_operands(src, dest);
+
+        format!("movaps {lhs}, {rhs}")
+    }
+
+    fn emit_movs_load(&self, movs: MovFloatLoad) -> String {
+        let src = self.emit_rmi(RegMemImm::Mem(movs.src), Width::Qword);
+        let dest = self.emit_reg(movs.dest.to_reg(), Width::Qword);
+        let suffix = Self::float_op_suffix(movs.format);
+        let (lhs, rhs) = self.reorder_operands(src, dest);
+
+        format!("movs{suffix} {lhs}, {rhs}")
+    }
+
+    fn emit_movs_store(&self, movs: MovFloatStore) -> String {
+        let src = self.emit_reg(movs.src, Width::Qword);
+        let dest = self.emit_rmi(RegMemImm::Mem(movs.dest), Width::Qword);
+        let suffix = Self::float_op_suffix(movs.format);
+        let (lhs, rhs) = self.reorder_operands(src, dest);
+
+        format!("movs{suffix} {lhs}, {rhs}")
     }
 
     fn emit_lea(&self, lea: Lea) -> String {
@@ -831,6 +1004,35 @@ impl AsmEmitter {
         let suffix = self.suffix(idiv.width);
 
         format!("idiv{suffix} {src}")
+    }
+
+    fn emit_pxor(&self, pxor: PXor) -> String {
+        let src = self.emit_reg(pxor.rhs, Width::Xmmword);
+        let dest = self.emit_reg(pxor.lhs.to_reg(), Width::Xmmword);
+        let (lhs, rhs) = self.reorder_operands(src, dest);
+
+        format!("pxor {lhs}, {rhs}")
+    }
+
+    fn emit_float_alu(&self, arith: FloatArith) -> String {
+        let width = match arith.format {
+            FloatFormat::Single => Width::Dword,
+            FloatFormat::Double => Width::Qword,
+        };
+
+        let src = self.emit_rmi(arith.rhs.into(), width);
+        let dest = self.emit_reg(arith.lhs.to_reg(), width);
+        let suffix = Self::float_op_suffix(arith.format);
+        let opc = match arith.opc {
+            FloatArithOpcode::Add => "adds",
+            FloatArithOpcode::Sub => "subs",
+            FloatArithOpcode::Mul => "muls",
+            FloatArithOpcode::Div => "divs",
+        };
+
+        let (lhs, rhs) = self.reorder_operands(src, dest);
+
+        format!("{opc}{suffix} {lhs}, {rhs}")
     }
 
     fn emit_cmp(&self, cmp: Cmp) -> String {
@@ -906,6 +1108,13 @@ impl AsmEmitter {
         }
     }
 
+    fn float_op_suffix(format: FloatFormat) -> &'static str {
+        match format {
+            FloatFormat::Single => "s",
+            FloatFormat::Double => "d",
+        }
+    }
+
     fn emit_set(&self, set: Set) -> String {
         let dest = self.emit_reg(set.dest.to_reg(), Width::Byte);
         let suffix = Self::condition_code_suffix(set.condition);
@@ -913,10 +1122,10 @@ impl AsmEmitter {
         format!("set{suffix} {dest}")
     }
 
-    fn emit_jump(&self, jump: Jump, block_names: &SecondaryMap<MIRBlock, String>) -> String {
+    fn emit_jump(&self, jump: Jump) -> String {
         let name = match jump.target {
             JumpTarget::Global(name) => self.pool.get(name).unwrap(),
-            JumpTarget::Local(bb) => &block_names[bb],
+            JumpTarget::Local(bb) => &self.block_names[bb],
         };
 
         let suffix = match jump.condition {

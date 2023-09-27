@@ -15,14 +15,17 @@ use smallvec::{smallvec, SmallVec};
 
 macro_rules! uses {
     ($inst:expr, $fr:expr) => {{
-        let mut collector = SmallVec::<[(Reg, u32); 16]>::default();
-        let unavailable = $fr.registers().unavailable;
+        let mut collector = SmallVec::<[Reg; 16]>::default();
+        let (integral_unavailable, float_unavailable) = $fr.registers().unavailable;
 
         $inst.uses($fr, &mut collector);
 
         // any uses of unavailable registers are ignored
-        collector
-            .retain(|(reg, _)| !(reg.is_preg() && unavailable.contains(&reg.as_preg().unwrap())));
+        collector.retain(|reg| {
+            !(reg.is_preg()
+                && integral_unavailable.contains(&reg.as_preg().unwrap())
+                && float_unavailable.contains(&reg.as_preg().unwrap()))
+        });
 
         collector
     }};
@@ -30,7 +33,7 @@ macro_rules! uses {
 
 macro_rules! defs {
     ($inst:expr, $fr:expr) => {{
-        let mut collector = SmallVec::<[(Reg, u32); 16]>::default();
+        let mut collector = SmallVec::<[Reg; 16]>::default();
 
         $inst.defs($fr, &mut collector);
 

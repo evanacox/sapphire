@@ -192,13 +192,14 @@ impl fmt::Display for LiveInterval {
 #[inline(always)]
 fn filter_p_regs<Inst: MachInst>(
     mir: &MIRFunction<Inst>,
-    unavailable: &[PReg],
-    vec: &mut SmallVec<[(Reg, u32); 16]>,
+    (int_unavailable, float_unavailable): (&[PReg], &[PReg]),
+    vec: &mut SmallVec<[Reg; 16]>,
 ) {
-    vec.retain(move |(reg, _)| match reg.as_preg() {
+    vec.retain(move |reg| match reg.as_preg() {
         Some(preg) => {
             debug_assert!(
-                unavailable.contains(&preg)
+                int_unavailable.contains(&preg)
+                    || float_unavailable.contains(&preg)
                     || !mir.fixed_intervals().intervals_for(preg).is_empty()
             );
 
@@ -242,11 +243,11 @@ impl ConservativeLiveIntervals {
             filter_p_regs(mir, unavailable, &mut uses);
             filter_p_regs(mir, unavailable, &mut defs);
 
-            let uses_iter = uses.iter().map(|(reg, size)| (true, *reg, *size));
-            let defs_iter = defs.iter().map(|(reg, size)| (false, *reg, *size));
+            let uses_iter = uses.iter().map(|reg| (true, *reg));
+            let defs_iter = defs.iter().map(|reg| (false, *reg));
 
             // this is almost identical for uses vs defs, so we use `map` to give a is_use flag
-            for (is_use, reg, size) in uses_iter.chain(defs_iter) {
+            for (is_use, reg) in uses_iter.chain(defs_iter) {
                 // if we don't have an interval, insert it.
                 if !intervals.contains(reg) {
                     if let Some(copy) = inst.as_copy() {

@@ -142,7 +142,7 @@ fn compile_x86_64(mut module: Module, pair: TargetPair, options: &Options) -> St
 
     let mut target = match pair {
         TargetPair::X86_64Linux => PresetTargets::linux_x86_64(options.codegen),
-        TargetPair::X86_64macOS => PresetTargets::mac_os_x86_64(options.codegen),
+        TargetPair::X86_64macOS => PresetTargets::mac_os_x86_64(),
         TargetPair::X86_64Windows => PresetTargets::windows_x86_64(options.codegen),
         TargetPair::Debug3Reg => PresetTargets::debug_3reg(options.codegen),
         _ => unreachable!(),

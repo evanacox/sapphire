@@ -11,8 +11,8 @@
 use crate::arena::{ArenaKey, SecondaryMap};
 use crate::codegen::regalloc::allocator::{defs, uses, RegisterMapping};
 use crate::codegen::{
-    Allocation, Architecture, MIRFunction, MachInst, PReg, ProgramPoint, Reg, RegisterAllocator,
-    SpillReload, StackFrame, VariableLocation,
+    Allocation, Architecture, MIRFunction, MachInst, PReg, ProgramPoint, Reg, RegClass,
+    RegisterAllocator, SpillReload, StackFrame, VariableLocation,
 };
 use smallvec::SmallVec;
 use std::mem;
@@ -26,28 +26,48 @@ pub struct StackRegAlloc {
     spills: Vec<(ProgramPoint, SpillReload)>,
     mapping: RegisterMapping,
     spilled_regs: SecondaryMap<Reg, VariableLocation>,
-    temporary_regs: Vec<PReg>,
-    taken_temporary_regs: SmallVec<[PReg; 4]>,
+    temporary_int_regs: Vec<PReg>,
+    temporary_float_regs: Vec<PReg>,
+    taken_temporary_int_regs: SmallVec<[PReg; 4]>,
+    taken_temporary_float_regs: SmallVec<[PReg; 4]>,
 }
 
 impl StackRegAlloc {
     fn order_temporaries<Arch: Architecture>(&mut self, frame: &mut dyn StackFrame<Arch>) {
         // we exclusively use clobbered registers, we spill everything anyway
         // so we may as well not necessitate preserving registers
-        for &reg in frame.registers().clobbered.iter().rev() {
-            self.temporary_regs.push(reg);
+        for &reg in frame.registers().clobbered.0.iter().rev() {
+            self.temporary_int_regs.push(reg);
+        }
+
+        for &reg in frame.registers().clobbered.1.iter().rev() {
+            self.temporary_float_regs.push(reg);
         }
     }
 
-    fn take_temporary(&mut self) -> PReg {
-        let p_reg = self
-            .temporary_regs
-            .pop()
-            .expect("how did we get run out of temporaries?");
+    fn take_temporary(&mut self, class: RegClass) -> PReg {
+        match class {
+            RegClass::Int => {
+                let p_reg = self
+                    .temporary_int_regs
+                    .pop()
+                    .expect("how did we get run out of temporaries?");
 
-        self.taken_temporary_regs.push(p_reg);
+                self.taken_temporary_int_regs.push(p_reg);
 
-        p_reg
+                p_reg
+            }
+            RegClass::Float => {
+                let p_reg = self
+                    .temporary_float_regs
+                    .pop()
+                    .expect("how did we get run out of temporaries?");
+
+                self.taken_temporary_float_regs.push(p_reg);
+
+                p_reg
+            }
+        }
     }
 
     fn return_temporaries(&mut self) {
@@ -55,8 +75,12 @@ impl StackRegAlloc {
         // of the taken registers. when we return our temporaries,
         // we restore the original complete set of registers in
         // their original order
-        while let Some(preg) = self.taken_temporary_regs.pop() {
-            self.temporary_regs.push(preg);
+        while let Some(preg) = self.taken_temporary_int_regs.pop() {
+            self.temporary_int_regs.push(preg);
+        }
+
+        while let Some(preg) = self.taken_temporary_float_regs.pop() {
+            self.temporary_float_regs.push(preg);
         }
     }
 
@@ -84,7 +108,7 @@ impl StackRegAlloc {
                 match (mov.from.as_preg(), mov.to.to_reg().as_preg()) {
                     // case #1, need to spill `to`
                     (Some(from), None) => {
-                        let t1 = self.take_temporary();
+                        let t1 = self.take_temporary(from.class());
 
                         self.spill(after, frame, mov.to.to_reg(), t1);
                         mapping.push((mov.from, from));
@@ -92,7 +116,7 @@ impl StackRegAlloc {
                     }
                     // case #2, need to reload `from`
                     (None, Some(to)) => {
-                        let t1 = self.take_temporary();
+                        let t1 = self.take_temporary(to.class());
 
                         self.reload(before, frame, mov.from, t1);
                         mapping.push((mov.from, t1));
@@ -105,8 +129,8 @@ impl StackRegAlloc {
                     }
                     // case #4 with a copy, `x2 <- x1`, need to reload x1 and spill x2
                     (None, None) => {
-                        let t1 = self.take_temporary();
-                        let t2 = self.take_temporary();
+                        let t1 = self.take_temporary(mov.from.class());
+                        let t2 = self.take_temporary(mov.from.class());
 
                         self.reload(before, frame, mov.from, t1);
                         self.spill(after, frame, mov.to.to_reg(), t2);
@@ -118,14 +142,14 @@ impl StackRegAlloc {
                 // case #4, we just reload all (virtual) uses and spill all (virtual) defs
                 let uses = uses!(inst, frame);
 
-                for (reg, _) in uses.iter().copied() {
+                for reg in uses.iter().copied() {
                     if reg.is_vreg() {
                         // we need to be careful not to take a temporary that is used
                         // by the instruction, or we'll break the behavior of the code
                         let tmp = loop {
-                            let reg = self.take_temporary();
+                            let reg = self.take_temporary(reg.class());
 
-                            if !uses.iter().any(|(r, _)| *r == Reg::from_preg(reg)) {
+                            if !uses.iter().any(|r| *r == Reg::from_preg(reg)) {
                                 break reg;
                             }
                         };
@@ -138,7 +162,7 @@ impl StackRegAlloc {
                     }
                 }
 
-                for (reg, _) in defs!(inst, frame) {
+                for reg in defs!(inst, frame) {
                     if reg.is_vreg() {
                         let matching_temporary: Option<(Reg, PReg)> = mapping
                             .as_slice()
@@ -149,7 +173,7 @@ impl StackRegAlloc {
                         let tmp = match matching_temporary {
                             Some((_, tmp)) => tmp,
                             None => {
-                                let tmp = self.take_temporary();
+                                let tmp = self.take_temporary(reg.class());
 
                                 // if we didn't find a mapping earlier, we need to add it ourselves
                                 mapping.push((reg, tmp));
@@ -223,8 +247,10 @@ impl Default for StackRegAlloc {
             spills: Vec::default(),
             mapping: RegisterMapping::new(),
             spilled_regs: SecondaryMap::default(),
-            temporary_regs: Vec::default(),
-            taken_temporary_regs: SmallVec::default(),
+            temporary_int_regs: Vec::default(),
+            temporary_float_regs: Vec::default(),
+            taken_temporary_int_regs: SmallVec::default(),
+            taken_temporary_float_regs: SmallVec::default(),
         }
     }
 }

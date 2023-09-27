@@ -852,7 +852,7 @@ where
         };
 
         // get our data into the form stored by the secondary map
-        let initialized = SmallBitVec::from_iter(bits.into_iter());
+        let initialized = SmallBitVec::from_iter(bits);
         let mut slots = Vec::<MaybeUninit<V>>::new();
         let len = elements.len();
 

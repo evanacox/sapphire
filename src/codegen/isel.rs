@@ -19,6 +19,7 @@ use crate::{analysis, ir};
 use smallvec::{smallvec, SmallVec};
 use std::collections::VecDeque;
 use std::marker::PhantomData;
+use std::mem;
 
 /// An instruction selector that lowers one [`Inst`] into (potentially many) [`MachInst`]s.
 ///
@@ -191,7 +192,7 @@ where
             order.push_front(mir_block);
         }
 
-        (Vec::from_iter(order.into_iter()), block_length)
+        (Vec::from_iter(order), block_length)
     }
 
     fn emit_func(
@@ -207,8 +208,11 @@ where
         // we haven't computed block lengths due to how isel works, need to do that now
         context.compute_block_lengths(&order, &block_length, &mut blocks);
 
+        let insts = context.take_insts();
+        let data = context.take_data();
+
         (
-            MIRFunction::new(name, context.take_insts(), blocks, order, fixed),
+            MIRFunction::new(name, insts, blocks, order, data, fixed),
             frame,
         )
     }
@@ -256,6 +260,8 @@ pub struct LoweringContext<'module, 'target, Arch: Architecture> {
     fixed_intervals: SecondaryMap<PReg, SmallVec<[FixedIntervalData; 2]>>,
     // the current function being lowered
     func: Option<&'module Function>,
+    // the list of function constants to emit with the function
+    data: ArenaMap<MIRFuncData, Arch::Data>,
     externals: Vec<(Str, Extern)>,
 }
 
@@ -280,6 +286,7 @@ impl<'module, 'target, Arch: Architecture> LoweringContext<'module, 'target, Arc
             next_int_vreg_id: 0,
             next_float_vreg_id: 0,
             func: None,
+            data: ArenaMap::default(),
             externals: Vec::default(),
         }
     }
@@ -336,6 +343,12 @@ impl<'module, 'target, Arch: Architecture> LoweringContext<'module, 'target, Arc
         result
     }
 
+    /// Gets the function-associated constant data that goes along with
+    /// the MIR of the function
+    pub fn take_data(&mut self) -> ArenaMap<MIRFuncData, Arch::Data> {
+        mem::take(&mut self.data)
+    }
+
     /// Push an instruction into the result buffer.
     ///
     /// This should be called in the order that the instructions should appear
@@ -345,6 +358,12 @@ impl<'module, 'target, Arch: Architecture> LoweringContext<'module, 'target, Arc
     #[inline]
     pub fn emit(&mut self, inst: Arch::Inst) {
         self.current_linear.push(inst);
+    }
+
+    /// Adds a constant to the function, and returns a reference to it
+    #[inline]
+    pub fn add_constant(&mut self, constant: Arch::Data) -> MIRFuncData {
+        self.data.insert(constant)
     }
 
     /// Called before we begin lowering a single [`ir::Inst`]. This must be accompanied by
@@ -544,7 +563,7 @@ impl<'module, 'target, Arch: Architecture> LoweringContext<'module, 'target, Arc
             RegClass::Float => {
                 self.next_float_vreg_id += 1;
 
-                VReg::int(self.next_float_vreg_id - 1)
+                VReg::float(self.next_float_vreg_id - 1)
             }
         };
 
@@ -608,7 +627,7 @@ impl<'module, 'target, Arch: Architecture> LoweringContext<'module, 'target, Arc
         self.merged.contains(inst)
     }
 
-    /// Gets the [`RegClass`] that a given [`Value`](ir::Value) can go in.
+    /// Gets the [`RegClass`] that a given [`Value`] can go in.
     #[inline]
     pub fn val_class(val: Value, def: &FunctionDefinition) -> RegClass {
         match def.dfg.ty(val).unpack() {

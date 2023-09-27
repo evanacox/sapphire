@@ -10,9 +10,10 @@
 
 use crate::codegen::x86_64::X86_64;
 use crate::codegen::{
-    CallUseDefId, MIRBlock, MachInst, PReg, Reg, RegCollector, RegToRegCopy, StackFrame,
-    UnconditionalBranch, VariableLocation, WriteableReg,
+    CallUseDefId, MIRBlock, MIRFuncData, MachInst, PReg, Reg, RegClass, RegCollector, RegToRegCopy,
+    StackFrame, UnconditionalBranch, VariableLocation, WriteableReg,
 };
+use crate::ir::FloatFormat;
 use crate::utility::Str;
 use static_assertions::assert_eq_size;
 
@@ -106,6 +107,8 @@ pub enum Width {
     Dword,
     /// A quad word, i.e. 8 bytes
     Qword,
+    /// An xmmword, i.e. 16 bytes
+    Xmmword,
 }
 
 impl Width {
@@ -117,6 +120,7 @@ impl Width {
             2 => Width::Word,
             4 => Width::Dword,
             8 => Width::Qword,
+            16 => Width::Xmmword,
             _ => panic!("illegal size for `x64::OperandSize`"),
         }
     }
@@ -129,6 +133,7 @@ impl Width {
             Width::Word => 2,
             Width::Dword => 4,
             Width::Qword => 8,
+            Width::Xmmword => 16,
         }
     }
 }
@@ -283,6 +288,10 @@ pub enum IndirectAddress {
     RegScaledReg(Reg, Reg, Scale),
     /// Adds a register to another register that's scaled, and adds a final offset. `[reg1 + reg2*scale + index`]
     RegScaledRegIndex(Reg, Reg, ScaleAnd30BitOffset),
+    /// This is the `[rip + label]` addressing mode for accessing a local piece of data
+    RipLocalData(MIRFuncData),
+    /// This is the `[rip + label]` addressing mode for accessing a local block
+    RipLocalLabel(MIRBlock),
     /// This is the `[rip + global]` addressing mode for accessing a global
     RipGlobal(Str),
 }
@@ -415,6 +424,38 @@ pub struct Movabs {
     pub value: u64,
     /// The destination of the sign-extend
     pub dest: WriteableReg,
+}
+
+/// Copies between floating-point registers, works on
+/// `f32`, `f64` and any 128-bit SIMD values.
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Hash)]
+pub struct Movaps {
+    /// The register being copied from
+    pub src: Reg,
+    /// The destination register to copy to
+    pub dest: WriteableReg,
+}
+
+/// Copies a value from memory into a floating-point register.
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Hash)]
+pub struct MovFloatLoad {
+    /// The floating-point format being used
+    pub format: FloatFormat,
+    /// The memory location being copied from
+    pub src: IndirectAddress,
+    /// The destination register to copy to
+    pub dest: WriteableReg,
+}
+
+/// Copies a floating-point value into memory.
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Hash)]
+pub struct MovFloatStore {
+    /// The floating-point format being used
+    pub format: FloatFormat,
+    /// The register being stored into memory
+    pub src: Reg,
+    /// The destination in memory to copy to
+    pub dest: IndirectAddress,
 }
 
 /// The opcode of A specific ALU instruction
@@ -570,6 +611,44 @@ impl Div {
     pub const REMAINDER: Reg = Self::DIVIDEND_HI;
 }
 
+/// A bitwise OR between SIMD/floating-point registers
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Hash)]
+pub struct PXor {
+    /// The floating-point format of the operation
+    pub format: FloatFormat,
+    /// Register where the first operand is located. This is also the destination.
+    pub lhs: WriteableReg,
+    /// Second operand, another floating-point register
+    pub rhs: Reg,
+}
+
+/// The opcode of a specific ALU(like) instruction that operates
+/// on floating-point values
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Hash)]
+pub enum FloatArithOpcode {
+    /// Floating-point addition
+    Add,
+    /// Floating-point subtraction
+    Sub,
+    /// Floating-point multiplication
+    Mul,
+    /// Floating-point division
+    Div,
+}
+
+/// An ALU instruction with a given opcode that operates on two registers.
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Hash)]
+pub struct FloatArith {
+    /// The operation being performed
+    pub opc: FloatArithOpcode,
+    /// The floating-point format of the operation
+    pub format: FloatFormat,
+    /// Register where the first operand is located. This is also the destination.
+    pub lhs: WriteableReg,
+    /// Second operand, either another floating-point register or a memory location
+    pub rhs: RegMem,
+}
+
 /// A `cmp` instruction. Subtracts two values, discards the result, and updates CPU flags.
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Hash)]
 pub struct Cmp {
@@ -718,6 +797,12 @@ pub enum Inst {
     MovStore(MovStore),
     /// Moves a 64-bit constant into a register
     Movabs(Movabs),
+    /// Moves floating-point values between registers
+    Movaps(Movaps),
+    /// Stores a floating-point value into memory
+    MovFloatStore(MovFloatStore),
+    /// Loads a floating-point value from memory
+    MovFloatLoad(MovFloatLoad),
     /// An `lea` instruction that computes an address
     Lea(Lea),
     /// An ALU instruction with a given opcode that operates on two registers.
@@ -738,6 +823,10 @@ pub enum Inst {
     Div(Div),
     /// Performs signed division
     IDiv(IDiv),
+    /// Floating-point bitwise XOR
+    PXor(PXor),
+    /// Floating-point arithmetic instruction
+    FloatArith(FloatArith),
     /// A comparison between two integers
     Cmp(Cmp),
     /// A different comparison between two integers
@@ -760,12 +849,16 @@ pub enum Inst {
     Ud2(Ud2),
 }
 
+// we want Inst to always line up cleanly inside cache lines, on x86-64 this is
+// 2 instructions per cache line, on M1 (and other 128byte cache line CPUs) its 4
+//
+// therefore, we ensure that it stays exactly 32 bytes
 assert_eq_size!(Inst, [u64; 4]);
 
 macro_rules! push_if_reg {
-    (RegMemImm, $e:expr, $width:expr, $collector:expr) => {
+    (RegMemImm, $e:expr, $collector:expr) => {
         match $e {
-            RegMemImm::Reg(r) => $collector.push((r, $width.into_bytes() as u32)),
+            RegMemImm::Reg(r) => $collector.push(r),
             RegMemImm::Mem(loc) => {
                 push_if_reg!(IndirectAddress, loc, $collector);
             }
@@ -775,41 +868,41 @@ macro_rules! push_if_reg {
 
     (IndirectAddress, $e:expr, $collector:expr) => {
         match $e {
-            IndirectAddress::Reg(r) | IndirectAddress::RegOffset(r, _) => $collector.push((r, 8)),
-            IndirectAddress::StackOffset(_, _, _) => {
-                $collector.push((Reg::from_preg(X86_64::RSP), 8))
-            }
+            IndirectAddress::Reg(r) | IndirectAddress::RegOffset(r, _) => $collector.push(r),
+            IndirectAddress::StackOffset(_, _, _) => $collector.push(Reg::from_preg(X86_64::RSP)),
             IndirectAddress::RegReg(r1, r2) => {
-                $collector.push((r1, 8));
-                $collector.push((r2, 8));
+                $collector.push(r1);
+                $collector.push(r2);
             }
             IndirectAddress::ScaledReg(reg, _) => {
-                $collector.push((reg, 8));
+                $collector.push(reg);
             }
             IndirectAddress::RegScaledReg(r1, r2, _) => {
-                $collector.push((r1, 8));
-                $collector.push((r2, 8));
+                $collector.push(r1);
+                $collector.push(r2);
             }
             IndirectAddress::RegScaledRegIndex(r1, r2, _) => {
-                $collector.push((r1, 8));
-                $collector.push((r2, 8));
+                $collector.push(r1);
+                $collector.push(r2);
             }
             IndirectAddress::RipGlobal(_) => {}
+            IndirectAddress::RipLocalLabel(_) => {}
+            IndirectAddress::RipLocalData(_) => {}
         }
     };
 
-    (RegMem, $e:expr, $width:expr, $collector:expr) => {
+    (RegMem, $e:expr, $collector:expr) => {
         match $e {
-            RegMem::Reg(r) => $collector.push((r, $width.into_bytes() as u32)),
+            RegMem::Reg(r) => $collector.push(r),
             RegMem::Mem(loc) => {
                 push_if_reg!(IndirectAddress, loc, $collector);
             }
         }
     };
 
-    (RegImm, $e:expr, $width:expr, $collector:expr) => {
+    (RegImm, $e:expr, $collector:expr) => {
         match $e {
-            RegImm::Reg(r) => $collector.push((r, $width.into_bytes() as u32)),
+            RegImm::Reg(r) => $collector.push(r),
             RegImm::Imm(_) => {}
         }
     };
@@ -888,6 +981,8 @@ macro_rules! rewrite_for {
                 )
             }
             IndirectAddress::RipGlobal(s) => IndirectAddress::RipGlobal(s),
+            IndirectAddress::RipLocalLabel(s) => IndirectAddress::RipLocalLabel(s),
+            IndirectAddress::RipLocalData(s) => IndirectAddress::RipLocalData(s),
         }
     }};
 }
@@ -908,86 +1003,104 @@ impl MachInst for Inst {
         match self {
             Inst::Nop(_) => {}
             Inst::Mov(mov) => {
-                push_if_reg!(RegMemImm, mov.src, mov.width, collector);
+                push_if_reg!(RegMemImm, mov.src, collector);
             }
             Inst::Movzx(movzx) => {
-                push_if_reg!(RegMemImm, movzx.src, movzx.widths.src_width(), collector);
+                push_if_reg!(RegMemImm, movzx.src, collector);
             }
             Inst::Movsx(movsx) => {
-                push_if_reg!(RegMemImm, movsx.src, movsx.widths.src_width(), collector);
+                push_if_reg!(RegMemImm, movsx.src, collector);
             }
             Inst::MovStore(mov) => {
-                push_if_reg!(RegImm, mov.src, mov.width, collector);
+                push_if_reg!(RegImm, mov.src, collector);
                 push_if_reg!(IndirectAddress, mov.dest, collector);
+            }
+            Inst::Movabs(_) => {}
+            Inst::Movaps(movaps) => {
+                collector.push(movaps.src);
+            }
+            Inst::MovFloatLoad(movs) => {
+                push_if_reg!(IndirectAddress, movs.src, collector);
+            }
+            Inst::MovFloatStore(movs) => {
+                push_if_reg!(IndirectAddress, movs.dest, collector);
+                collector.push(movs.src);
             }
             Inst::Lea(lea) => {
                 push_if_reg!(IndirectAddress, lea.src, collector);
             }
             Inst::ALU(alu) => {
-                push_if_reg!(RegMemImm, alu.rhs, alu.width, collector);
-                collector.push(into_pair(alu.lhs.to_reg(), alu.width));
+                push_if_reg!(RegMemImm, alu.rhs, collector);
+                collector.push(alu.lhs.to_reg());
             }
             Inst::Not(not) => {
-                collector.push(into_pair(not.reg.to_reg(), not.width));
+                collector.push(not.reg.to_reg());
             }
             Inst::Neg(neg) => {
-                collector.push(into_pair(neg.reg.to_reg(), neg.width));
+                collector.push(neg.reg.to_reg());
             }
             Inst::IMul(mul) => {
-                push_if_reg!(RegMemImm, mul.rhs, mul.width, collector);
-                collector.push(into_pair(mul.lhs.to_reg(), mul.width));
+                push_if_reg!(RegMemImm, mul.rhs, collector);
+                collector.push(mul.lhs.to_reg());
+            }
+            Inst::Cwd(cwd) => {
+                collector.push(Cwd::SRC);
+            }
+            Inst::Cdq(cdq) => {
+                collector.push(Cdq::SRC);
+            }
+            Inst::Cqo(cqo) => {
+                collector.push(Cqo::SRC);
+            }
+            Inst::Div(div) => {
+                push_if_reg!(RegMem, div.divisor, collector);
+                collector.push(Div::DIVIDEND_LO);
+                collector.push(Div::DIVIDEND_HI);
+            }
+            Inst::IDiv(idiv) => {
+                push_if_reg!(RegMem, idiv.divisor, collector);
+                collector.push(IDiv::DIVIDEND_LO);
+                collector.push(IDiv::DIVIDEND_HI);
+            }
+            Inst::PXor(pxor) => {
+                collector.push(pxor.rhs);
+                collector.push(pxor.lhs.to_reg());
+            }
+            Inst::FloatArith(arith) => {
+                push_if_reg!(RegMem, arith.rhs, collector);
+                collector.push(arith.lhs.to_reg());
             }
             Inst::Cmp(cmp) => {
-                push_if_reg!(RegMemImm, cmp.rhs, cmp.width, collector);
-                collector.push(into_pair(cmp.lhs, cmp.width));
+                push_if_reg!(RegMemImm, cmp.rhs, collector);
+                collector.push(cmp.lhs);
             }
             Inst::Test(test) => {
-                push_if_reg!(RegMemImm, test.rhs, test.width, collector);
-                collector.push(into_pair(test.lhs, test.width));
+                push_if_reg!(RegMemImm, test.rhs, collector);
+                collector.push(test.lhs);
             }
             Inst::Set(_) => {}
             Inst::Push(push) => {
-                collector.push(into_pair(push.value, push.width));
+                collector.push(push.value);
             }
             Inst::Pop(_) => {}
-            Inst::Movabs(_) => {}
-            Inst::Cwd(cwd) => {
-                collector.push(into_pair(Cwd::SRC, Width::Word));
-            }
-            Inst::Cdq(cdq) => {
-                collector.push(into_pair(Cdq::SRC, Width::Dword));
-            }
-            Inst::Cqo(cqo) => {
-                collector.push(into_pair(Cqo::SRC, Width::Qword));
-            }
-            Inst::Div(div) => {
-                push_if_reg!(RegMem, div.divisor, div.width, collector);
-                collector.push(into_pair(Div::DIVIDEND_LO, div.width));
-                collector.push(into_pair(Div::DIVIDEND_HI, div.width));
-            }
-            Inst::IDiv(idiv) => {
-                push_if_reg!(RegMem, idiv.divisor, idiv.width, collector);
-                collector.push(into_pair(IDiv::DIVIDEND_LO, idiv.width));
-                collector.push(into_pair(IDiv::DIVIDEND_HI, idiv.width));
-            }
             Inst::Call(call) => {
-                for &reg in frame.call_use_defs(call.id).0 {
+                for &reg in frame.call_use_defs(call.id).uses {
                     // we can't assume width, and they're extended to 8 anyway
-                    collector.push(into_pair(Reg::from_preg(reg), Width::Qword));
+                    collector.push(Reg::from_preg(reg));
                 }
             }
             Inst::IndirectCall(call) => {
-                push_if_reg!(RegMemImm, call.func, Width::Qword, collector);
+                push_if_reg!(RegMemImm, call.func, collector);
 
-                for &reg in frame.call_use_defs(call.id).0 {
+                for &reg in frame.call_use_defs(call.id).uses {
                     // we can't assume width, and they're extended to 8 anyway
-                    collector.push(into_pair(Reg::from_preg(reg), Width::Qword));
+                    collector.push(Reg::from_preg(reg));
                 }
             }
             Inst::Jump(_) => {}
             Inst::Ret(_) => {
                 for &reg in frame.ret_uses() {
-                    collector.push(into_pair(Reg::from_preg(reg), Width::Qword));
+                    collector.push(Reg::from_preg(reg));
                 }
             }
             Inst::Ud2(_) => {}
@@ -1002,67 +1115,88 @@ impl MachInst for Inst {
         match self {
             Inst::Nop(_) => {}
             Inst::Mov(mov) => {
-                collector.push(into_pair(mov.dest.to_reg(), mov.width));
+                collector.push(mov.dest.to_reg());
             }
             Inst::Movzx(movzx) => {
-                collector.push(into_pair(movzx.dest.to_reg(), movzx.widths.dest_width()));
+                collector.push(movzx.dest.to_reg());
             }
             Inst::Movsx(movsx) => {
-                collector.push(into_pair(movsx.dest.to_reg(), movsx.widths.dest_width()));
+                collector.push(movsx.dest.to_reg());
             }
             Inst::MovStore(_) => {}
+            Inst::Movabs(movabs) => {
+                collector.push(movabs.dest.to_reg());
+            }
+            Inst::Movaps(movaps) => {
+                collector.push(movaps.dest.to_reg());
+            }
+            Inst::MovFloatLoad(movs) => {
+                collector.push(movs.dest.to_reg());
+            }
+            Inst::MovFloatStore(_) => {}
             Inst::Lea(lea) => {
-                collector.push(into_pair(lea.dest.to_reg(), Width::Qword));
+                collector.push(lea.dest.to_reg());
             }
             Inst::ALU(alu) => {
-                collector.push(into_pair(alu.lhs.to_reg(), alu.width));
+                collector.push(alu.lhs.to_reg());
             }
             Inst::Not(not) => {
-                collector.push(into_pair(not.reg.to_reg(), not.width));
+                collector.push(not.reg.to_reg());
             }
             Inst::Neg(neg) => {
-                collector.push(into_pair(neg.reg.to_reg(), neg.width));
+                collector.push(neg.reg.to_reg());
             }
             Inst::IMul(mul) => {
-                collector.push(into_pair(mul.lhs.to_reg(), mul.width));
+                collector.push(mul.lhs.to_reg());
+            }
+            Inst::Cwd(cwd) => {
+                collector.push(Cwd::DEST);
+            }
+            Inst::Cdq(cdq) => {
+                collector.push(Cdq::DEST);
+            }
+            Inst::Cqo(cqo) => {
+                collector.push(Cqo::DEST);
+            }
+            Inst::Div(div) => {
+                collector.push(Div::QUOTIENT);
+                collector.push(Div::REMAINDER);
+            }
+            Inst::IDiv(idiv) => {
+                collector.push(IDiv::QUOTIENT);
+                collector.push(IDiv::REMAINDER);
+            }
+            Inst::PXor(pxor) => {
+                collector.push(pxor.lhs.to_reg());
+            }
+            Inst::FloatArith(arith) => {
+                collector.push(arith.lhs.to_reg());
             }
             Inst::Cmp(_) => {}
             Inst::Test(_) => {}
             Inst::Set(set) => {
-                collector.push(into_pair(set.dest.to_reg(), Width::Byte));
+                collector.push(set.dest.to_reg());
             }
             Inst::Push(_) => {}
             Inst::Pop(pop) => {
-                collector.push(into_pair(pop.dest.to_reg(), pop.width));
-            }
-            Inst::Movabs(movabs) => {
-                collector.push(into_pair(movabs.dest.to_reg(), Width::Qword));
-            }
-            Inst::Cwd(cwd) => {
-                collector.push(into_pair(Cwd::DEST, Width::Word));
-            }
-            Inst::Cdq(cdq) => {
-                collector.push(into_pair(Cdq::DEST, Width::Dword));
-            }
-            Inst::Cqo(cqo) => {
-                collector.push(into_pair(Cqo::DEST, Width::Qword));
-            }
-            Inst::Div(div) => {
-                collector.push(into_pair(Div::QUOTIENT, div.width));
-                collector.push(into_pair(Div::REMAINDER, div.width));
-            }
-            Inst::IDiv(idiv) => {
-                collector.push(into_pair(IDiv::QUOTIENT, idiv.width));
-                collector.push(into_pair(IDiv::REMAINDER, idiv.width));
+                collector.push(pop.dest.to_reg());
             }
             Inst::Call(call) => {
-                for &reg in frame.call_use_defs(call.id).1 {
-                    collector.push(into_pair(Reg::from_preg(reg), Width::Qword));
+                for &reg in frame.call_use_defs(call.id).integral_defs {
+                    collector.push(Reg::from_preg(reg));
+                }
+
+                for &reg in frame.call_use_defs(call.id).float_defs {
+                    collector.push(Reg::from_preg(reg));
                 }
             }
             Inst::IndirectCall(call) => {
-                for &reg in frame.call_use_defs(call.id).1 {
-                    collector.push(into_pair(Reg::from_preg(reg), Width::Qword));
+                for &reg in frame.call_use_defs(call.id).integral_defs {
+                    collector.push(Reg::from_preg(reg));
+                }
+
+                for &reg in frame.call_use_defs(call.id).float_defs {
+                    collector.push(Reg::from_preg(reg));
                 }
             }
             Inst::Jump(_) => {}
@@ -1088,6 +1222,11 @@ impl MachInst for Inst {
                 }),
                 _ => None,
             },
+            Self::Movaps(movaps) => Some(RegToRegCopy {
+                width: 16,
+                to: movaps.dest,
+                from: movaps.src,
+            }),
             _ => None,
         }
     }
@@ -1114,35 +1253,65 @@ impl MachInst for Inst {
     }
 
     fn load(width: usize, from: VariableLocation, to: PReg) -> Self {
-        Self::Mov(Mov {
-            width: Width::from_bytes(width),
-            dest: WriteableReg::from_reg(Reg::from_preg(to)),
-            src: match from {
-                VariableLocation::InReg(r) => RegMemImm::Reg(r),
-                VariableLocation::RelativeToSP(offset, size) => {
-                    RegMemImm::Mem(IndirectAddress::stack_offset(offset, size))
-                }
-                VariableLocation::RelativeToFP(offset) => RegMemImm::Mem(
-                    IndirectAddress::RegOffset(Reg::from_preg(X86_64::RBP), offset),
-                ),
-            },
-        })
+        let loc = match from {
+            VariableLocation::InReg(r) => {
+                panic!("cannot `load` from reg to reg, use `copy` instead")
+            }
+            VariableLocation::RelativeToSP(offset, stack_size) => {
+                IndirectAddress::stack_offset(offset, stack_size)
+            }
+            VariableLocation::RelativeToFP(offset) => {
+                IndirectAddress::RegOffset(Reg::from_preg(X86_64::RBP), offset)
+            }
+        };
+
+        match to.class() {
+            RegClass::Int => Self::Mov(Mov {
+                width: Width::from_bytes(width),
+                dest: WriteableReg::from_reg(Reg::from_preg(to)),
+                src: RegMemImm::Mem(loc),
+            }),
+            RegClass::Float => Self::MovFloatLoad(MovFloatLoad {
+                format: match width {
+                    4 => FloatFormat::Single,
+                    8 => FloatFormat::Double,
+                    _ => panic!("unknown float width"),
+                },
+                src: loc,
+                dest: WriteableReg::from_reg(Reg::from_preg(to)),
+            }),
+        }
     }
 
     fn store(width: usize, from: PReg, to: VariableLocation) -> Self {
-        Self::MovStore(MovStore {
-            width: Width::from_bytes(width),
-            src: RegImm::Reg(Reg::from_preg(from)),
-            dest: match to {
-                VariableLocation::InReg(r) => unreachable!(),
-                VariableLocation::RelativeToSP(offset, stack_size) => {
-                    IndirectAddress::stack_offset(offset, stack_size)
-                }
-                VariableLocation::RelativeToFP(offset) => {
-                    IndirectAddress::RegOffset(Reg::from_preg(X86_64::RBP), offset)
-                }
-            },
-        })
+        let loc = match to {
+            VariableLocation::InReg(r) => {
+                panic!("cannot `store` from reg to reg, use `copy` instead")
+            }
+            VariableLocation::RelativeToSP(offset, stack_size) => {
+                IndirectAddress::stack_offset(offset, stack_size)
+            }
+            VariableLocation::RelativeToFP(offset) => {
+                IndirectAddress::RegOffset(Reg::from_preg(X86_64::RBP), offset)
+            }
+        };
+
+        match from.class() {
+            RegClass::Int => Self::MovStore(MovStore {
+                width: Width::from_bytes(width),
+                src: RegImm::Reg(Reg::from_preg(from)),
+                dest: loc,
+            }),
+            RegClass::Float => Self::MovFloatStore(MovFloatStore {
+                format: match width {
+                    4 => FloatFormat::Single,
+                    8 => FloatFormat::Double,
+                    _ => panic!("unknown float width"),
+                },
+                src: Reg::from_preg(from),
+                dest: loc,
+            }),
+        }
     }
 
     fn is_ret(&self) -> bool {
@@ -1200,6 +1369,35 @@ impl MachInst for Inst {
                 Inst::Movabs(Movabs {
                     value: movabs.value,
                     dest: WriteableReg::from_reg(dest),
+                })
+            }
+            Inst::Movaps(movaps) => {
+                let src = rewrite_for!(movaps.src, rewrites, frame);
+                let dest = rewrite_for!(movaps.dest.to_reg(), rewrites, frame);
+
+                Inst::Movaps(Movaps {
+                    src,
+                    dest: WriteableReg::from_reg(dest),
+                })
+            }
+            Inst::MovFloatLoad(movs) => {
+                let src = rewrite_for!(mem, movs.src, rewrites, frame);
+                let dest = rewrite_for!(movs.dest.to_reg(), rewrites, frame);
+
+                Inst::MovFloatLoad(MovFloatLoad {
+                    format: movs.format,
+                    src,
+                    dest: WriteableReg::from_reg(dest),
+                })
+            }
+            Inst::MovFloatStore(movs) => {
+                let src = rewrite_for!(movs.src, rewrites, frame);
+                let dest = rewrite_for!(mem, movs.dest, rewrites, frame);
+
+                Inst::MovFloatStore(MovFloatStore {
+                    format: movs.format,
+                    src,
+                    dest,
                 })
             }
             Inst::Lea(lea) => {
@@ -1265,6 +1463,27 @@ impl MachInst for Inst {
                 Inst::IDiv(IDiv {
                     width: idiv.width,
                     divisor,
+                })
+            }
+            Inst::PXor(pxor) => {
+                let lhs = rewrite_for!(pxor.lhs.to_reg(), rewrites, frame);
+                let rhs = rewrite_for!(pxor.rhs, rewrites, frame);
+
+                Inst::PXor(PXor {
+                    format: pxor.format,
+                    lhs: WriteableReg::from_reg(lhs),
+                    rhs,
+                })
+            }
+            Inst::FloatArith(arith) => {
+                let lhs = rewrite_for!(arith.lhs.to_reg(), rewrites, frame);
+                let rhs = rewrite_for!(rm, arith.rhs, rewrites, frame);
+
+                Inst::FloatArith(FloatArith {
+                    opc: arith.opc,
+                    format: arith.format,
+                    lhs: WriteableReg::from_reg(lhs),
+                    rhs,
                 })
             }
             Inst::Cmp(cmp) => {

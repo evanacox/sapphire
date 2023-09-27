@@ -17,6 +17,7 @@ use crate::ir::{FloatFormat, Function, Module, Type, TypePool, UType};
 use crate::utility::SaHashMap;
 use std::fmt;
 use std::fmt::Debug;
+use std::hash::Hash;
 use std::marker::PhantomData;
 use std::str::FromStr;
 
@@ -161,20 +162,20 @@ macro_rules! generic_reg {
              ///
              /// This is intended for usage in storing registers in an array.
             #[inline]
-            pub fn identity(self) -> usize {
+            pub const fn identity(self) -> usize {
                 self.data as usize
             }
 
             /// Gets the physical "number" of the register that identifies it **within the
             /// class of that register**. This value may overlap with other register classes.
             #[inline]
-            pub fn hw_number(self) -> usize {
+            pub const fn hw_number(self) -> usize {
                 (self.data >> 1) as usize
             }
 
             /// Gets what type of register this register is for.
             #[inline]
-            pub fn class(self) -> RegClass {
+            pub const fn class(self) -> RegClass {
                 if self.data & 1 == 0 {
                     RegClass::Int
                 } else {
@@ -287,6 +288,23 @@ impl Reg {
     pub const fn is_preg(self) -> bool {
         !self.is_vreg()
     }
+
+    /// Gets the register class of the underlying register, regardless of whether
+    /// the underlying register is a virtual register or physical register.
+    #[inline]
+    pub const fn class(self) -> RegClass {
+        if self.is_preg() {
+            (PReg {
+                data: (self.data >> 1) as u8,
+            })
+            .class()
+        } else {
+            (VReg {
+                data: self.data >> 1,
+            })
+            .class()
+        }
+    }
 }
 
 impl ArenaKey for Reg {
@@ -336,11 +354,21 @@ impl ArenaKey for WriteableReg {
     }
 }
 
+/// Associated data that a function uses, it can be in several
+/// different target-defined forms.
+///
+/// Any emitter needs to know how to emit these, but other than that there's
+/// nothing target-independent.
+pub trait FuncData: Sized + Clone + Hash + PartialEq + Eq + PartialOrd + Ord {}
+
 /// Models the architecture-specific details that a backend needs to deal with,
 /// mainly fundamental type layouts.
 pub trait Architecture {
     /// The MIR instruction type used for the architecture
     type Inst: MachInst<Arch = Self>;
+
+    /// The type of function-associated data that this architecture has in its MIR
+    type Data: FuncData;
 
     /// Returns the specific CPU architecture this is configured for
     fn cpu() -> CPUArch;
@@ -520,9 +548,11 @@ impl PresetTargets {
     /// Returns a [`Target`] that is configured for the x86-64 System V ABI
     /// on x86-64 macOS.
     #[inline]
-    pub fn mac_os_x86_64(options: CodegenOptions) -> Target<X86_64> {
+    pub fn mac_os_x86_64() -> Target<X86_64> {
         Target {
-            options,
+            options: CodegenOptions {
+                omit_frame_pointer: false,
+            },
             platform: Box::new(MacOSX86_64),
             aggregate_type_layouts: SaHashMap::default(),
             _unused: PhantomData,
