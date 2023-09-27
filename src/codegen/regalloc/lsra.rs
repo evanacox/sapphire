@@ -573,12 +573,9 @@ impl RegisterPool {
             }
         };
 
-        match possible_next {
-            // we can't swap_remove here due to needing to maintain sorted order
-            // but the array is so small it doesn't really matter at all
-            Some(i) => Some(queue.remove(i)),
-            None => None,
-        }
+        // we can't swap_remove here due to needing to maintain sorted order
+        // but the array is so small it doesn't really matter at all
+        possible_next.map(|i| queue.remove(i))
     }
 
     // tries to take a specific preferred register if possible, if it isn't tries to

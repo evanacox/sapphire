@@ -22,7 +22,7 @@ fn isel_greedy_x86_64(name: &str, content: &str) -> TestResult {
 
             module
         }
-        Err(err) => return TestResult::CompileError(err.to_string()),
+        Err(err) => return TestResult::CompileError(err),
     };
 
     let options = CodegenOptions {

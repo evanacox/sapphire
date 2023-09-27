@@ -22,7 +22,7 @@ fn parser_output(name: &str, content: &str) -> TestResult {
 
             TestResult::Output(analysis::stringify_module(&module))
         }
-        Err(err) => TestResult::CompileError(err.to_string()),
+        Err(err) => TestResult::CompileError(err),
     }
 }
 

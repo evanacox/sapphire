@@ -365,7 +365,7 @@ impl<'m> SIRVisitor<'m> for Verifier<'m> {
             verify_assert!(
                 self,
                 def.dfg.inst_debug(inst),
-                matches!(targets, Some(_)),
+                targets.is_some(),
                 "last instruction in reachable block should be a terminator"
             );
 

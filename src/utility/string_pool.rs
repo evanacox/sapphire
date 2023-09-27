@@ -78,6 +78,10 @@ pub struct StringPool {
     refs: SaHashMap<Rc<str>, Str>,
 }
 
+unsafe impl Send for StringPool {}
+
+unsafe impl Sync for StringPool {}
+
 impl StringPool {
     pub(crate) fn debuginfo_fake() -> Str {
         Str(0)

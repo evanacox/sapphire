@@ -192,7 +192,7 @@ where
             order.push_front(mir_block);
         }
 
-        (Vec::from_iter(order.into_iter()), block_length)
+        (Vec::from_iter(order), block_length)
     }
 
     fn emit_func(

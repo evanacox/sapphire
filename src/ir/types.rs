@@ -49,6 +49,10 @@ pub struct TypePool {
     arena: UniqueArenaMap<CompoundTypeRef, CompoundTypeData>,
 }
 
+unsafe impl Send for TypePool {}
+
+unsafe impl Sync for TypePool {}
+
 impl TypePool {
     /// Constructs a new, empty [`TypePool`].
     pub fn new() -> Self {
