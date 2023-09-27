@@ -107,7 +107,7 @@ macro_rules! arena_key {
 }
 
 /// Creates a type-safe key for a [`ArenaMap`](crate::arena::ArenaMap) with [`u32`] as the
-/// underlying data type. Acts just like [`arena_key`] but with [`u32`] being
+/// underlying data type. Acts just like [`arena_key`](crate::arena_key) but with [`u32`] being
 /// the default type instead of the unspecified default.
 ///
 /// Note that this also implements `Packable` with the highest value of `u32`
