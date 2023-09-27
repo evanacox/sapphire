@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `src/codegen/x86_64/sysv.rs`."><title>sysv.rs - source</title><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../static.files/SourceSerif4-Regular-46f98efaafac5295.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../static.files/FiraSans-Regular-018c141bf0843ffd.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../static.files/FiraSans-Medium-8f9a781e4970d388.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../static.files/SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../static.files/SourceSerif4-Bold-a2c9cd1067f8b328.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../static.files/SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2"><link rel="stylesheet" href="../../../../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../../../../static.files/rustdoc-cb6f1f67f1bcd037.css" id="mainThemeStyle"><meta name="rustdoc-vars" data-root-path="../../../../" data-static-root-path="../../../../static.files/" data-current-crate="sapphire" data-themes="" data-resource-suffix="" data-rustdoc-version="1.73.0-nightly (1b198b3a1 2023-08-13)" data-channel="nightly" data-search-js="search-6dfdfced5eff6596.js" data-settings-js="settings-de11bff964e9d4e5.js" data-settings-css="settings-8c76f75bfb6bd192.css" data-theme-light-css="light-1596385f77d47ef2.css" data-theme-dark-css="dark-0a43001d3fc2282c.css" data-theme-ayu-css="ayu-fd19013d6ce078bf.css" ><script src="../../../../static.files/storage-db41da1a38ea3cb8.js"></script><script defer src="../../../../static.files/src-script-3280b574d94e47b4.js"></script><script defer src="../../../../src-files.js"></script><script defer src="../../../../static.files/main-0795b7d26be81095.js"></script><noscript><link rel="stylesheet" media="(prefers-color-scheme:light)" href="../../../../static.files/light-1596385f77d47ef2.css"><link rel="stylesheet" media="(prefers-color-scheme:dark)" href="../../../../static.files/dark-0a43001d3fc2282c.css"><link rel="stylesheet" href="../../../../static.files/noscript-cffde32267a19fd6.css"></noscript><link rel="alternate icon" type="image/png" href="../../../../static.files/favicon-16x16-8b506e7a72182f1c.png"><link rel="alternate icon" type="image/png" href="../../../../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../../../../static.files/favicon-2c020d218678b618.svg"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.6.0/katex.min.css">
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `src/codegen/x86_64/sysv.rs`."><title>sysv.rs - source</title><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../static.files/SourceSerif4-Regular-46f98efaafac5295.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../static.files/FiraSans-Regular-018c141bf0843ffd.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../static.files/FiraSans-Medium-8f9a781e4970d388.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../static.files/SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../static.files/SourceSerif4-Bold-a2c9cd1067f8b328.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../static.files/SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2"><link rel="stylesheet" href="../../../../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../../../../static.files/rustdoc-fa3bb1812debf86c.css"><meta name="rustdoc-vars" data-root-path="../../../../" data-static-root-path="../../../../static.files/" data-current-crate="sapphire" data-themes="" data-resource-suffix="" data-rustdoc-version="1.74.0-nightly (5ae769f06 2023-09-26)" data-channel="nightly" data-search-js="search-8be46b629f5f14a8.js" data-settings-js="settings-74424d7eec62a23e.js" ><script src="../../../../static.files/storage-fec3eaa3851e447d.js"></script><script defer src="../../../../static.files/src-script-3280b574d94e47b4.js"></script><script defer src="../../../../src-files.js"></script><script defer src="../../../../static.files/main-c5bd66d33317d69f.js"></script><noscript><link rel="stylesheet" href="../../../../static.files/noscript-5d8b3c7633ad77ba.css"></noscript><link rel="alternate icon" type="image/png" href="../../../../static.files/favicon-16x16-8b506e7a72182f1c.png"><link rel="alternate icon" type="image/png" href="../../../../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../../../../static.files/favicon-2c020d218678b618.svg"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.6.0/katex.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.6.0/katex.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.6.0/contrib/auto-render.min.js"></script>
 </head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"></nav><main><nav class="sub"><a class="sub-logo-container" href="../../../../sapphire/index.html"><img class="rust-logo" src="../../../../static.files/rust-logo-151179464ae7ed46.svg" alt="logo"></a><form class="search-form"><span></span><input class="search-input" name="search" aria-label="Run search in the documentation" autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"><div id="help-button" title="help" tabindex="-1"><a href="../../../../help.html">?</a></div><div id="settings-menu" tabindex="-1"><a href="../../../../settings.html" title="settings"><img width="22" height="22" alt="Change settings" src="../../../../static.files/wheel-7b819b6101059cd0.svg"></a></div></form></nav><section id="main-content" class="content"><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers"><a href="#1" id="1">1</a>
@@ -736,6 +736,84 @@
 <a href="#733" id="733">733</a>
 <a href="#734" id="734">734</a>
 <a href="#735" id="735">735</a>
+<a href="#736" id="736">736</a>
+<a href="#737" id="737">737</a>
+<a href="#738" id="738">738</a>
+<a href="#739" id="739">739</a>
+<a href="#740" id="740">740</a>
+<a href="#741" id="741">741</a>
+<a href="#742" id="742">742</a>
+<a href="#743" id="743">743</a>
+<a href="#744" id="744">744</a>
+<a href="#745" id="745">745</a>
+<a href="#746" id="746">746</a>
+<a href="#747" id="747">747</a>
+<a href="#748" id="748">748</a>
+<a href="#749" id="749">749</a>
+<a href="#750" id="750">750</a>
+<a href="#751" id="751">751</a>
+<a href="#752" id="752">752</a>
+<a href="#753" id="753">753</a>
+<a href="#754" id="754">754</a>
+<a href="#755" id="755">755</a>
+<a href="#756" id="756">756</a>
+<a href="#757" id="757">757</a>
+<a href="#758" id="758">758</a>
+<a href="#759" id="759">759</a>
+<a href="#760" id="760">760</a>
+<a href="#761" id="761">761</a>
+<a href="#762" id="762">762</a>
+<a href="#763" id="763">763</a>
+<a href="#764" id="764">764</a>
+<a href="#765" id="765">765</a>
+<a href="#766" id="766">766</a>
+<a href="#767" id="767">767</a>
+<a href="#768" id="768">768</a>
+<a href="#769" id="769">769</a>
+<a href="#770" id="770">770</a>
+<a href="#771" id="771">771</a>
+<a href="#772" id="772">772</a>
+<a href="#773" id="773">773</a>
+<a href="#774" id="774">774</a>
+<a href="#775" id="775">775</a>
+<a href="#776" id="776">776</a>
+<a href="#777" id="777">777</a>
+<a href="#778" id="778">778</a>
+<a href="#779" id="779">779</a>
+<a href="#780" id="780">780</a>
+<a href="#781" id="781">781</a>
+<a href="#782" id="782">782</a>
+<a href="#783" id="783">783</a>
+<a href="#784" id="784">784</a>
+<a href="#785" id="785">785</a>
+<a href="#786" id="786">786</a>
+<a href="#787" id="787">787</a>
+<a href="#788" id="788">788</a>
+<a href="#789" id="789">789</a>
+<a href="#790" id="790">790</a>
+<a href="#791" id="791">791</a>
+<a href="#792" id="792">792</a>
+<a href="#793" id="793">793</a>
+<a href="#794" id="794">794</a>
+<a href="#795" id="795">795</a>
+<a href="#796" id="796">796</a>
+<a href="#797" id="797">797</a>
+<a href="#798" id="798">798</a>
+<a href="#799" id="799">799</a>
+<a href="#800" id="800">800</a>
+<a href="#801" id="801">801</a>
+<a href="#802" id="802">802</a>
+<a href="#803" id="803">803</a>
+<a href="#804" id="804">804</a>
+<a href="#805" id="805">805</a>
+<a href="#806" id="806">806</a>
+<a href="#807" id="807">807</a>
+<a href="#808" id="808">808</a>
+<a href="#809" id="809">809</a>
+<a href="#810" id="810">810</a>
+<a href="#811" id="811">811</a>
+<a href="#812" id="812">812</a>
+<a href="#813" id="813">813</a>
 </pre></div><pre class="rust"><code><span class="comment">//======---------------------------------------------------------------======//
 //                                                                           //
 // Copyright 2022-2023 Evan Cox &lt;evanacox00@gmail.com&gt;. All rights reserved. //
@@ -753,7 +831,7 @@
     Width, ALU, X86_64,
 };
 <span class="kw">use </span><span class="kw">crate</span>::codegen::{
-    AvailableRegisters, CallUseDefId, CallingConv, CodegenOptions, Ctx, FramelessCtx,
+    AvailableRegisters, CallUseDef, CallUseDefId, CallingConv, CodegenOptions, Ctx, FramelessCtx,
     LoweringContext, PReg, Reg, RegClass, StackFrame, Target, VariableLocation, WriteableReg,
 };
 <span class="kw">use </span><span class="kw">crate</span>::ir;
@@ -765,7 +843,7 @@
 <span class="kw">use </span>smallvec::SmallVec;
 <span class="kw">use </span>std::iter;
 
-<span class="kw">const </span>CALLEE_PRESERVED: [PReg; <span class="number">6</span>] = [
+<span class="kw">const </span>INTEGRAL_CALLEE_PRESERVED: [PReg; <span class="number">6</span>] = [
     X86_64::RBX,
     X86_64::R12,
     X86_64::R13,
@@ -774,16 +852,37 @@
     X86_64::RBP,
 ];
 
-<span class="kw">const </span>CALLER_PRESERVED: [PReg; <span class="number">9</span>] = [
+<span class="kw">const </span>FLOAT_CALLEE_PRESERVED: [PReg; <span class="number">0</span>] = [];
+
+<span class="kw">const </span>INTEGRAL_CALLER_PRESERVED: [PReg; <span class="number">9</span>] = [
     X86_64::RAX,
-    X86_64::RCX,
     X86_64::RDX,
+    X86_64::RCX,
     X86_64::RDI,
     X86_64::RSI,
     X86_64::R8,
     X86_64::R9,
     X86_64::R10,
     X86_64::R11,
+];
+
+<span class="kw">const </span>FLOAT_CALLER_PRESERVED: [PReg; <span class="number">16</span>] = [
+    X86_64::xmm(<span class="number">0</span>),
+    X86_64::xmm(<span class="number">1</span>),
+    X86_64::xmm(<span class="number">2</span>),
+    X86_64::xmm(<span class="number">3</span>),
+    X86_64::xmm(<span class="number">4</span>),
+    X86_64::xmm(<span class="number">5</span>),
+    X86_64::xmm(<span class="number">6</span>),
+    X86_64::xmm(<span class="number">7</span>),
+    X86_64::xmm(<span class="number">8</span>),
+    X86_64::xmm(<span class="number">9</span>),
+    X86_64::xmm(<span class="number">10</span>),
+    X86_64::xmm(<span class="number">11</span>),
+    X86_64::xmm(<span class="number">12</span>),
+    X86_64::xmm(<span class="number">13</span>),
+    X86_64::xmm(<span class="number">14</span>),
+    X86_64::xmm(<span class="number">15</span>),
 ];
 
 <span class="attr">#[allow(clippy::upper_case_acronyms)]
@@ -895,6 +994,8 @@
             }
         }
 
+        <span class="macro">assert_ne!</span>(X86_64::xmm(<span class="number">0</span>), X86_64::RAX);
+
         <span class="self">Self </span>{
             params: locations,
             ret,
@@ -902,7 +1003,7 @@
     }
 }
 
-<span class="kw">type </span>UseDefPair = (Box&lt;[PReg]&gt;, Box&lt;[PReg]&gt;);
+<span class="kw">type </span>UseDefTriple = (Box&lt;[PReg]&gt;, Box&lt;[PReg]&gt;, Box&lt;[PReg]&gt;);
 
 <span class="doccomment">/// An implementation of [`StackFrame`] for the System-V ABI.
 ///
@@ -916,7 +1017,7 @@
     slot_distance_from_rbp: SecondaryMap&lt;StackSlot, usize&gt;,
     preserved_regs_used: SmallVec&lt;[PReg; <span class="number">8</span>]&gt;,
     signature_abi: SignatureABI,
-    call_use_defs: ArenaMap&lt;CallUseDefId, UseDefPair&gt;,
+    call_use_defs: ArenaMap&lt;CallUseDefId, UseDefTriple&gt;,
 }
 
 <span class="macro">macro_rules! </span>manipulate_rsp {
@@ -1170,7 +1271,23 @@
                 <span class="kw">let </span>ty = def.dfg.ty(val);
 
                 <span class="kw">match </span>ty.unpack() {
-                    UType::Float(<span class="kw">_</span>) | UType::Int(<span class="kw">_</span>) | UType::Bool(<span class="kw">_</span>) | UType::Ptr(<span class="kw">_</span>) =&gt; {
+                    UType::Int(<span class="kw">_</span>) | UType::Bool(<span class="kw">_</span>) | UType::Ptr(<span class="kw">_</span>) =&gt; {
+                        <span class="kw">let </span>reg = <span class="self">self</span>.signature_abi.ret[<span class="number">0</span>];
+                        <span class="kw">let </span>result = ctx.result_reg(val, reg.class());
+
+                        ctx.begin_fixed_interval(reg);
+
+                        zeroing_mov(
+                            WriteableReg::from_reg(Reg::from_preg(reg)),
+                            RegMemImm::Reg(result),
+                            ty,
+                            ctx,
+                        );
+
+                        ctx.emit(Inst::Ret(Ret {}));
+                        ctx.end_fixed_interval(reg, <span class="number">0</span>);
+                    }
+                    UType::Float(<span class="kw">_</span>) =&gt; {
                         <span class="kw">let </span>reg = <span class="self">self</span>.signature_abi.ret[<span class="number">0</span>];
                         <span class="kw">let </span>result = ctx.result_reg(val, reg.class());
 
@@ -1216,17 +1333,23 @@
         }
     }
 
-    <span class="kw">fn </span>register_use_def_call(<span class="kw-2">&amp;mut </span><span class="self">self</span>, uses: <span class="kw-2">&amp;</span>[PReg], defs: <span class="kw-2">&amp;</span>[PReg]) -&gt; CallUseDefId {
-        <span class="kw">let </span>uses_box = Box::from(uses);
-        <span class="kw">let </span>defs_box = Box::from(defs);
+    <span class="kw">fn </span>register_use_def_call(<span class="kw-2">&amp;mut </span><span class="self">self</span>, use_def: CallUseDef&lt;<span class="lifetime">&#39;_</span>&gt;) -&gt; CallUseDefId {
+        <span class="kw">let </span>uses_box = Box::from(use_def.uses);
+        <span class="kw">let </span>int_defs_box = Box::from(use_def.integral_defs);
+        <span class="kw">let </span>float_defs_box = Box::from(use_def.float_defs);
 
-        <span class="self">self</span>.call_use_defs.insert((uses_box, defs_box))
+        <span class="self">self</span>.call_use_defs
+            .insert((uses_box, int_defs_box, float_defs_box))
     }
 
-    <span class="kw">fn </span>call_use_defs(<span class="kw-2">&amp;</span><span class="self">self</span>, id: CallUseDefId) -&gt; (<span class="kw-2">&amp;</span>[PReg], <span class="kw-2">&amp;</span>[PReg]) {
-        <span class="kw">let </span>(uses, defs) = <span class="kw-2">&amp;</span><span class="self">self</span>.call_use_defs[id];
+    <span class="kw">fn </span>call_use_defs(<span class="kw-2">&amp;</span><span class="self">self</span>, id: CallUseDefId) -&gt; CallUseDef&lt;<span class="lifetime">&#39;_</span>&gt; {
+        <span class="kw">let </span>(uses, int_defs, float_defs) = <span class="kw-2">&amp;</span><span class="self">self</span>.call_use_defs[id];
 
-        (uses, defs)
+        CallUseDef {
+            uses,
+            integral_defs: int_defs,
+            float_defs,
+        }
     }
 
     <span class="kw">fn </span>ret_uses(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>[PReg] {
@@ -1291,9 +1414,9 @@
         // if it isn&#39;t available to allocate then we manage rbp and don&#39;t have to tell the
         // register allocator to preserve it
         </span><span class="kw">let </span>callee_preserved = <span class="kw">if </span><span class="self">self</span>.will_omit_fp() {
-            <span class="kw-2">&amp;</span>CALLEE_PRESERVED[..<span class="number">6</span>]
+            <span class="kw-2">&amp;</span>INTEGRAL_CALLEE_PRESERVED[..<span class="number">6</span>]
         } <span class="kw">else </span>{
-            <span class="kw-2">&amp;</span>CALLEE_PRESERVED[..<span class="number">5</span>]
+            <span class="kw-2">&amp;</span>INTEGRAL_CALLEE_PRESERVED[..<span class="number">5</span>]
         };
 
         <span class="kw">const </span>UNAVAILABLE: [PReg; <span class="number">3</span>] = [X86_64::RIP, X86_64::RSP, X86_64::RBP];
@@ -1304,13 +1427,14 @@
             <span class="kw-2">&amp;</span>UNAVAILABLE[<span class="number">0</span>..<span class="number">3</span>]
         };
 
-        <span class="kw">const </span>HIGH_PRIORITY: [PReg; <span class="number">3</span>] = [X86_64::RAX, X86_64::RCX, X86_64::RDX];
+        <span class="kw">const </span>INTEGRAL_HIGH_PRIORITY: [PReg; <span class="number">3</span>] = [X86_64::RAX, X86_64::RCX, X86_64::RDX];
+        <span class="kw">const </span>FLOAT_HIGH_PRIORITY: [PReg; <span class="number">3</span>] = [X86_64::xmm(<span class="number">0</span>), X86_64::xmm(<span class="number">1</span>), X86_64::xmm(<span class="number">2</span>)];
 
         AvailableRegisters {
-            preserved: callee_preserved,
-            clobbered: <span class="kw-2">&amp;</span>CALLER_PRESERVED,
-            unavailable: un_allocatable,
-            high_priority_temporaries: <span class="kw-2">&amp;</span>HIGH_PRIORITY,
+            preserved: (callee_preserved, <span class="kw-2">&amp;</span>FLOAT_CALLEE_PRESERVED),
+            clobbered: (<span class="kw-2">&amp;</span>INTEGRAL_CALLER_PRESERVED, <span class="kw-2">&amp;</span>FLOAT_CALLER_PRESERVED),
+            unavailable: (un_allocatable, <span class="kw-2">&amp;</span>[]),
+            high_priority_temporaries: (<span class="kw-2">&amp;</span>INTEGRAL_HIGH_PRIORITY, <span class="kw-2">&amp;</span>FLOAT_HIGH_PRIORITY),
         }
     }
 
@@ -1388,14 +1512,19 @@
 
         <span class="comment">// any remaining preserved registers, we mark them with fixed intervals
         // that only overlap the call instruction and any `mov`s after it
-        </span><span class="kw">for </span><span class="kw-2">&amp;</span>reg <span class="kw">in </span>CALLER_PRESERVED
+        </span><span class="kw">for </span><span class="kw-2">&amp;</span>reg <span class="kw">in </span>INTEGRAL_CALLER_PRESERVED
             .iter()
+            .chain(FLOAT_CALLER_PRESERVED.iter())
             .filter(|<span class="kw-2">&amp;</span>preg| !used_regs.contains(preg))
         {
             ctx.begin_fixed_interval(reg);
         }
 
-        <span class="kw">let </span>id = fr.register_use_def_call(<span class="kw-2">&amp;</span>used_regs, <span class="kw-2">&amp;</span>CALLER_PRESERVED);
+        <span class="kw">let </span>id = fr.register_use_def_call(CallUseDef {
+            uses: <span class="kw-2">&amp;</span>used_regs,
+            integral_defs: <span class="kw-2">&amp;</span>INTEGRAL_CALLER_PRESERVED,
+            float_defs: <span class="kw-2">&amp;</span>FLOAT_CALLER_PRESERVED,
+        });
 
         emit_call(id, (def, fr, ctx));
 
@@ -1403,19 +1532,46 @@
         //
         // if we change the stack or have a return value, we&#39;ll have an extra inst (or two), so we need to record that
         </span><span class="kw">let </span>following_count = result.is_some() <span class="kw">as </span>usize + (stack_change != <span class="number">0</span>) <span class="kw">as </span>usize;
-        <span class="macro">debug_assert_eq!</span>(CALLER_PRESERVED[<span class="number">0</span>], X86_64::RAX);
-        ctx.end_fixed_intervals(<span class="kw-2">&amp;</span>CALLER_PRESERVED[<span class="number">1</span>..], following_count);
 
-        <span class="kw">if let </span><span class="prelude-val">Some</span>(result) = result {
-            zeroing_mov(
-                result,
-                RegMemImm::Reg(Reg::from_preg(X86_64::RAX)),
-                sig.return_ty().unwrap(),
-                ctx,
-            );
+        <span class="kw">match </span>sig.return_ty().map(|ty| ty.unpack()) {
+            <span class="comment">// i32, ptr, bool
+            </span><span class="prelude-val">Some</span>(UType::Int(<span class="kw">_</span>)) | <span class="prelude-val">Some</span>(UType::Ptr(<span class="kw">_</span>)) | <span class="prelude-val">Some</span>(UType::Bool(<span class="kw">_</span>)) =&gt; {
+                <span class="comment">// INTEGRAL_CALLER_PRESERVED[0] is rax
+                </span>ctx.end_fixed_intervals(<span class="kw-2">&amp;</span>INTEGRAL_CALLER_PRESERVED[<span class="number">1</span>..], following_count);
+                ctx.end_fixed_intervals(<span class="kw-2">&amp;</span>FLOAT_CALLER_PRESERVED, following_count);
+
+                zeroing_mov(
+                    result.unwrap(),
+                    RegMemImm::Reg(Reg::from_preg(X86_64::RAX)),
+                    sig.return_ty().unwrap(),
+                    ctx,
+                );
+
+                ctx.end_fixed_interval(X86_64::RAX, (stack_change != <span class="number">0</span>) <span class="kw">as </span>usize);
+            }
+            <span class="comment">// f32, f64
+            </span><span class="prelude-val">Some</span>(UType::Float(<span class="kw">_</span>)) =&gt; {
+                <span class="comment">// FLOAT_CALLER_PRESERVED[0] is xmm0
+                </span>ctx.end_fixed_intervals(<span class="kw-2">&amp;</span>INTEGRAL_CALLER_PRESERVED, following_count);
+                ctx.end_fixed_intervals(<span class="kw-2">&amp;</span>FLOAT_CALLER_PRESERVED[<span class="number">1</span>..], following_count);
+
+                zeroing_mov(
+                    result.unwrap(),
+                    RegMemImm::Reg(Reg::from_preg(X86_64::xmm(<span class="number">0</span>))),
+                    sig.return_ty().unwrap(),
+                    ctx,
+                );
+
+                ctx.end_fixed_interval(X86_64::xmm(<span class="number">0</span>), (stack_change != <span class="number">0</span>) <span class="kw">as </span>usize);
+            }
+            <span class="comment">// { T... }, [T; N]
+            </span><span class="prelude-val">Some</span>(<span class="kw">_</span>) =&gt; <span class="macro">todo!</span>(<span class="string">&quot;aggregates that fit in registers&quot;</span>),
+            <span class="comment">// void
+            </span><span class="prelude-val">None </span>=&gt; {
+                ctx.end_fixed_intervals(<span class="kw-2">&amp;</span>INTEGRAL_CALLER_PRESERVED, following_count);
+                ctx.end_fixed_intervals(<span class="kw-2">&amp;</span>FLOAT_CALLER_PRESERVED, following_count);
+            }
         }
-
-        ctx.end_fixed_interval(X86_64::RAX, (stack_change != <span class="number">0</span>) <span class="kw">as </span>usize);
 
         <span class="comment">// restore stack to what it was before the call happened
         </span><span class="kw">if </span>stack_change != <span class="number">0 </span>{

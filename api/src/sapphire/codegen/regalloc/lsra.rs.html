@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `src/codegen/regalloc/lsra.rs`."><title>lsra.rs - source</title><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../static.files/SourceSerif4-Regular-46f98efaafac5295.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../static.files/FiraSans-Regular-018c141bf0843ffd.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../static.files/FiraSans-Medium-8f9a781e4970d388.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../static.files/SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../static.files/SourceSerif4-Bold-a2c9cd1067f8b328.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../static.files/SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2"><link rel="stylesheet" href="../../../../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../../../../static.files/rustdoc-cb6f1f67f1bcd037.css" id="mainThemeStyle"><meta name="rustdoc-vars" data-root-path="../../../../" data-static-root-path="../../../../static.files/" data-current-crate="sapphire" data-themes="" data-resource-suffix="" data-rustdoc-version="1.73.0-nightly (1b198b3a1 2023-08-13)" data-channel="nightly" data-search-js="search-6dfdfced5eff6596.js" data-settings-js="settings-de11bff964e9d4e5.js" data-settings-css="settings-8c76f75bfb6bd192.css" data-theme-light-css="light-1596385f77d47ef2.css" data-theme-dark-css="dark-0a43001d3fc2282c.css" data-theme-ayu-css="ayu-fd19013d6ce078bf.css" ><script src="../../../../static.files/storage-db41da1a38ea3cb8.js"></script><script defer src="../../../../static.files/src-script-3280b574d94e47b4.js"></script><script defer src="../../../../src-files.js"></script><script defer src="../../../../static.files/main-0795b7d26be81095.js"></script><noscript><link rel="stylesheet" media="(prefers-color-scheme:light)" href="../../../../static.files/light-1596385f77d47ef2.css"><link rel="stylesheet" media="(prefers-color-scheme:dark)" href="../../../../static.files/dark-0a43001d3fc2282c.css"><link rel="stylesheet" href="../../../../static.files/noscript-cffde32267a19fd6.css"></noscript><link rel="alternate icon" type="image/png" href="../../../../static.files/favicon-16x16-8b506e7a72182f1c.png"><link rel="alternate icon" type="image/png" href="../../../../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../../../../static.files/favicon-2c020d218678b618.svg"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.6.0/katex.min.css">
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `src/codegen/regalloc/lsra.rs`."><title>lsra.rs - source</title><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../static.files/SourceSerif4-Regular-46f98efaafac5295.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../static.files/FiraSans-Regular-018c141bf0843ffd.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../static.files/FiraSans-Medium-8f9a781e4970d388.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../static.files/SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../static.files/SourceSerif4-Bold-a2c9cd1067f8b328.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../static.files/SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2"><link rel="stylesheet" href="../../../../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../../../../static.files/rustdoc-fa3bb1812debf86c.css"><meta name="rustdoc-vars" data-root-path="../../../../" data-static-root-path="../../../../static.files/" data-current-crate="sapphire" data-themes="" data-resource-suffix="" data-rustdoc-version="1.74.0-nightly (5ae769f06 2023-09-26)" data-channel="nightly" data-search-js="search-8be46b629f5f14a8.js" data-settings-js="settings-74424d7eec62a23e.js" ><script src="../../../../static.files/storage-fec3eaa3851e447d.js"></script><script defer src="../../../../static.files/src-script-3280b574d94e47b4.js"></script><script defer src="../../../../src-files.js"></script><script defer src="../../../../static.files/main-c5bd66d33317d69f.js"></script><noscript><link rel="stylesheet" href="../../../../static.files/noscript-5d8b3c7633ad77ba.css"></noscript><link rel="alternate icon" type="image/png" href="../../../../static.files/favicon-16x16-8b506e7a72182f1c.png"><link rel="alternate icon" type="image/png" href="../../../../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../../../../static.files/favicon-2c020d218678b618.svg"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.6.0/katex.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.6.0/katex.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.6.0/contrib/auto-render.min.js"></script>
 </head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"></nav><main><nav class="sub"><a class="sub-logo-container" href="../../../../sapphire/index.html"><img class="rust-logo" src="../../../../static.files/rust-logo-151179464ae7ed46.svg" alt="logo"></a><form class="search-form"><span></span><input class="search-input" name="search" aria-label="Run search in the documentation" autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"><div id="help-button" title="help" tabindex="-1"><a href="../../../../help.html">?</a></div><div id="settings-menu" tabindex="-1"><a href="../../../../settings.html" title="settings"><img width="22" height="22" alt="Change settings" src="../../../../static.files/wheel-7b819b6101059cd0.svg"></a></div></form></nav><section id="main-content" class="content"><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers"><a href="#1" id="1">1</a>
@@ -610,6 +610,22 @@
 <a href="#607" id="607">607</a>
 <a href="#608" id="608">608</a>
 <a href="#609" id="609">609</a>
+<a href="#610" id="610">610</a>
+<a href="#611" id="611">611</a>
+<a href="#612" id="612">612</a>
+<a href="#613" id="613">613</a>
+<a href="#614" id="614">614</a>
+<a href="#615" id="615">615</a>
+<a href="#616" id="616">616</a>
+<a href="#617" id="617">617</a>
+<a href="#618" id="618">618</a>
+<a href="#619" id="619">619</a>
+<a href="#620" id="620">620</a>
+<a href="#621" id="621">621</a>
+<a href="#622" id="622">622</a>
+<a href="#623" id="623">623</a>
+<a href="#624" id="624">624</a>
+<a href="#625" id="625">625</a>
 </pre></div><pre class="rust"><code><span class="comment">//======---------------------------------------------------------------======//
 //                                                                           //
 // Copyright 2022-2023 Evan Cox &lt;evanacox00@gmail.com&gt;. All rights reserved. //
@@ -624,7 +640,7 @@
 <span class="kw">use </span><span class="kw">crate</span>::codegen::regalloc::allocator::{defs, uses};
 <span class="kw">use </span><span class="kw">crate</span>::codegen::{
     Allocation, Architecture, AvailableRegisters, ConservativeLiveIntervals, FixedIntervals,
-    LiveInterval, MIRFunction, MachInst, PReg, ProgramPoint, ProgramPointsIterator, Reg,
+    LiveInterval, MIRFunction, MachInst, PReg, ProgramPoint, ProgramPointsIterator, Reg, RegClass,
     RegisterAllocator, RegisterMapping, SpillReload, StackFrame, VariableLocation,
 };
 <span class="kw">use </span><span class="kw">crate</span>::ir::FunctionMetadata;
@@ -738,8 +754,10 @@
             spill_points.insert(pair, live.take_reload_points(pair.reg()));
         }
 
-        <span class="kw">for </span><span class="kw-2">&amp;</span>reg <span class="kw">in </span>available.preserved {
-            preserved.insert(reg);
+        <span class="kw">for </span>set <span class="kw">in </span>[available.preserved.<span class="number">0</span>, available.preserved.<span class="number">1</span>] {
+            <span class="kw">for </span><span class="kw-2">&amp;</span>reg <span class="kw">in </span>set {
+                preserved.insert(reg);
+            }
         }
 
         <span class="self">Self </span>{
@@ -763,13 +781,8 @@
         <span class="kw">while let </span><span class="prelude-val">Some</span>(Reverse(interval)) = <span class="self">self</span>.intervals.pop() {
             <span class="self">self</span>.expire_old_intervals(interval, frame);
 
-            <span class="comment">// if this is true we need more registers than the target has, so we have to spill
-            </span><span class="kw">if </span><span class="self">self</span>.active.len() == <span class="self">self</span>.pool.max_simultaneous_live() {
-                <span class="self">self</span>.spill_at_interval(interval, frame);
-            } <span class="kw">else </span>{
-                <span class="comment">// we still might spill if every available register is fixed somehow
-                </span><span class="self">self</span>.maybe_allocate(interval, frame);
-            }
+            <span class="comment">// we still might spill if every available register is fixed somehow
+            </span><span class="self">self</span>.maybe_allocate(interval, frame);
         }
     }
 
@@ -800,7 +813,7 @@
                 }
             }
             <span class="comment">// if we didn&#39;t get a valid register, spill the interval anyway
-            // and then return. should happen very very rarely
+            // and then return
             </span><span class="prelude-val">None </span>=&gt; {
                 <span class="self">self</span>.spill_at_interval(interval, frame);
             }
@@ -820,7 +833,7 @@
             <span class="prelude-val">Some</span>(reg) =&gt; <span class="kw-2">*</span>reg,
             <span class="prelude-val">None </span>=&gt; <span class="kw">match </span><span class="self">self</span>.ends_by_copy_to.get(<span class="kw-2">&amp;</span>pair) {
                 <span class="prelude-val">Some</span>(reg) =&gt; <span class="kw-2">*</span>reg,
-                <span class="prelude-val">None </span>=&gt; <span class="kw">return </span><span class="self">self</span>.pool.try_take_any(pair.live(), <span class="self">self</span>.fixed),
+                <span class="prelude-val">None </span>=&gt; <span class="kw">return </span><span class="self">self</span>.pool.try_take_any(pair, <span class="self">self</span>.fixed),
             },
         };
 
@@ -840,17 +853,17 @@
                         reg
                     } <span class="kw">else </span>{
                         <span class="comment">// if `associated` was spilled, we bail
-                        </span><span class="kw">return </span><span class="self">self</span>.pool.try_take_any(pair.live(), <span class="self">self</span>.fixed);
+                        </span><span class="kw">return </span><span class="self">self</span>.pool.try_take_any(pair, <span class="self">self</span>.fixed);
                     }
                 } <span class="kw">else </span>{
                     <span class="comment">// if it overlaps we bail
-                    </span><span class="kw">return </span><span class="self">self</span>.pool.try_take_any(pair.live(), <span class="self">self</span>.fixed);
+                    </span><span class="kw">return </span><span class="self">self</span>.pool.try_take_any(pair, <span class="self">self</span>.fixed);
                 }
             }
         };
 
         <span class="self">self</span>.pool
-            .try_take_specific_register(preferred, pair.live(), <span class="self">self</span>.fixed)
+            .try_take_specific_register(preferred, pair, <span class="self">self</span>.fixed)
     }
 
     <span class="kw">fn </span>expire_old_intervals&lt;Arch: Architecture&gt;(
@@ -907,9 +920,14 @@
 
             <span class="self">self</span>.spill_other_interval(interval, spill, frame)
         } <span class="kw">else </span>{
-            <span class="kw">let </span><span class="kw-2">&amp;</span>maybe_spill = <span class="self">self
+            <span class="kw">let </span>(i, <span class="kw-2">&amp;</span>maybe_spill) = <span class="self">self
                 </span>.active
-                .last()
+                .iter()
+                .enumerate()
+                .rev()
+                .find(|(i, pair)| {
+                    !pair.live().is_spill_interval() &amp;&amp; pair.reg().class() == interval.reg().class()
+                })
                 .expect(<span class="string">&quot;spilling while nothing is active?&quot;</span>);
 
             <span class="comment">// if the last active interval ends after our current interval, try to spill that instead.
@@ -1044,7 +1062,7 @@
             <span class="kw">let </span>uses = <span class="macro">uses!</span>(inst, frame);
             <span class="kw">let </span>defs = <span class="macro">defs!</span>(inst, frame);
 
-            <span class="kw">for </span>(reg, <span class="kw">_</span>) <span class="kw">in </span>uses {
+            <span class="kw">for </span>reg <span class="kw">in </span>uses {
                 <span class="kw">let </span>(loc, preg) = <span class="macro">rewrites_for_reg!</span>(reg, lsra, pp);
 
                 pairs.push((reg, preg));
@@ -1060,7 +1078,7 @@
                 }
             }
 
-            <span class="kw">for </span>(reg, <span class="kw">_</span>) <span class="kw">in </span>defs {
+            <span class="kw">for </span>reg <span class="kw">in </span>defs {
                 <span class="kw">let </span>(loc, preg) = <span class="macro">rewrites_for_reg!</span>(reg, lsra, pp);
 
                 pairs.push((reg, preg));
@@ -1085,14 +1103,15 @@
 
 <span class="kw">struct </span>RegisterPool {
     priority: SecondaryMap&lt;PReg, i32&gt;,
-    register_queue: Vec&lt;PReg&gt;,
-    total: usize,
+    int_register_queue: Vec&lt;PReg&gt;,
+    float_register_queue: Vec&lt;PReg&gt;,
 }
 
 <span class="kw">impl </span>RegisterPool {
     <span class="kw">fn </span>from(metadata: FunctionMetadata, registers: AvailableRegisters) -&gt; <span class="self">Self </span>{
         <span class="kw">let </span><span class="kw-2">mut </span>priority = SecondaryMap::default();
-        <span class="kw">let </span><span class="kw-2">mut </span>register_queue = Vec::default();
+        <span class="kw">let </span><span class="kw-2">mut </span>int_register_queue = Vec::default();
+        <span class="kw">let </span><span class="kw-2">mut </span>float_register_queue = Vec::default();
 
         <span class="comment">// 0 =&gt; clobbered, 1 =&gt; preserved, 2 =&gt; high priority
         </span><span class="kw">let </span>order = [
@@ -1111,39 +1130,44 @@
         // order is [clobbered, preserved, high_priority]
         </span><span class="kw">let </span>priorities = [<span class="number">500</span>, <span class="number">100</span>, <span class="number">1000</span>];
 
-        <span class="kw">for </span>(i, <span class="kw-2">&amp;</span>register_subset) <span class="kw">in </span>order.iter().enumerate() {
-            <span class="kw">for </span>(j, <span class="kw-2">&amp;</span>preg) <span class="kw">in </span>register_subset.iter().enumerate().rev() {
-                <span class="comment">// each register gets a relative priority within its own array, so
-                // putting the register first makes the allocator prefer it.
-                </span>priority.insert(preg, (priorities[i] - j) <span class="kw">as </span>i32);
-                register_queue.push(preg);
+        <span class="kw">for </span>(i, <span class="kw-2">&amp;</span>(int_subset, float_subset)) <span class="kw">in </span>order.iter().enumerate() {
+            <span class="kw">for </span>set <span class="kw">in </span>[int_subset, float_subset] {
+                <span class="kw">for </span>(j, <span class="kw-2">&amp;</span>preg) <span class="kw">in </span>set.iter().enumerate().rev() {
+                    <span class="comment">// each register gets a relative priority within its own array, so
+                    // putting the register first makes the allocator prefer it.
+                    </span>priority.insert(preg, (priorities[i] - j) <span class="kw">as </span>i32);
+
+                    <span class="kw">match </span>preg.class() {
+                        RegClass::Int =&gt; int_register_queue.push(preg),
+                        RegClass::Float =&gt; float_register_queue.push(preg),
+                    }
+                }
             }
         }
 
         <span class="comment">// higher priority -&gt; sorted later in the queue
-        </span>register_queue.sort_unstable_by_key(|<span class="kw-2">&amp;</span>val| priority[val]);
-        register_queue.dedup();
+        </span><span class="kw">for </span>vec <span class="kw">in </span>[<span class="kw-2">&amp;mut </span>int_register_queue, <span class="kw-2">&amp;mut </span>float_register_queue] {
+            vec.sort_unstable_by_key(|<span class="kw-2">&amp;</span>val| priority[val]);
+            vec.dedup();
+        }
 
         <span class="self">Self </span>{
-            total: register_queue.len(),
             priority,
-            register_queue,
+            int_register_queue,
+            float_register_queue,
         }
     }
 
-    <span class="attr">#[inline]
-    </span><span class="kw">fn </span>max_simultaneous_live(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; usize {
-        <span class="self">self</span>.total
-    }
-
     <span class="kw">fn </span>make_register_available(<span class="kw-2">&amp;mut </span><span class="self">self</span>, preg: PReg) {
+        <span class="kw">let </span>queue = <span class="kw">match </span>preg.class() {
+            RegClass::Int =&gt; <span class="kw-2">&amp;mut </span><span class="self">self</span>.int_register_queue,
+            RegClass::Float =&gt; <span class="kw-2">&amp;mut </span><span class="self">self</span>.float_register_queue,
+        };
+
         <span class="comment">// insert while maintaining sorted order
-        </span><span class="kw">match </span><span class="self">self
-            </span>.register_queue
-            .binary_search_by_key(<span class="kw-2">&amp;</span><span class="self">self</span>.priority[preg], |<span class="kw-2">&amp;</span>preg| <span class="self">self</span>.priority[preg])
-        {
+        </span><span class="kw">match </span>queue.binary_search_by_key(<span class="kw-2">&amp;</span><span class="self">self</span>.priority[preg], |<span class="kw-2">&amp;</span>preg| <span class="self">self</span>.priority[preg]) {
             <span class="prelude-val">Ok</span>(pos) =&gt; <span class="macro">panic!</span>(<span class="string">&quot;somehow duplicated a register&quot;</span>),
-            <span class="prelude-val">Err</span>(pos) =&gt; <span class="self">self</span>.register_queue.insert(pos, preg),
+            <span class="prelude-val">Err</span>(pos) =&gt; queue.insert(pos, preg),
         }
     }
 
@@ -1151,35 +1175,35 @@
     //
     // a register is &quot;valid&quot; at a given interval if no fixed intervals overlap with
     // the interval being allocated for.
-    </span><span class="kw">fn </span>try_take_any(<span class="kw-2">&amp;mut </span><span class="self">self</span>, interval: LiveInterval, fixed: <span class="kw-2">&amp;</span>FixedIntervals) -&gt; <span class="prelude-ty">Option</span>&lt;PReg&gt; {
-        <span class="comment">// we review possible candidates in order of decreasing priority
-        </span><span class="kw">let </span><span class="kw-2">mut </span>iter = <span class="self">self</span>.register_queue.iter().enumerate().rev();
+    </span><span class="kw">fn </span>try_take_any(<span class="kw-2">&amp;mut </span><span class="self">self</span>, pair: RegLivePair, fixed: <span class="kw-2">&amp;</span>FixedIntervals) -&gt; <span class="prelude-ty">Option</span>&lt;PReg&gt; {
+        <span class="kw">let </span>queue = <span class="self">self</span>.queue_for(pair.reg());
+        <span class="kw">let </span>possible_next = {
+            <span class="comment">// we review possible candidates in order of decreasing priority
+            </span><span class="kw">let </span><span class="kw-2">mut </span>iter = queue.iter().enumerate().rev();
 
-        <span class="comment">// basic idea: find the highest priority register that isn&#39;t defined in
-        // a fixed interval that overlaps with `interval`.
-        //
-        // this is a fallible operation, we may hit a position where the only available registers
-        // are taken via fixed registers, so we need to deal with that case at the call site
-        </span><span class="kw">let </span>possible_next = <span class="kw">loop </span>{
-            <span class="comment">// if we run out of registers, we&#39;re in that fail state detailed above
-            </span><span class="kw">let </span>(i, preg) = <span class="kw">match </span>iter.next() {
-                <span class="prelude-val">Some</span>((i, <span class="kw-2">&amp;</span>preg)) =&gt; (i, preg),
-                <span class="prelude-val">None </span>=&gt; <span class="kw">break </span><span class="prelude-val">None</span>,
-            };
+            <span class="comment">// basic idea: find the highest priority register that isn&#39;t defined in
+            // a fixed interval that overlaps with `interval`.
+            //
+            // this is a fallible operation, we may hit a position where the only available registers
+            // are taken via fixed registers, so we need to deal with that case at the call site
+            </span><span class="kw">loop </span>{
+                <span class="comment">// if we run out of registers, we&#39;re in that fail state detailed above
+                </span><span class="kw">let </span>(i, preg) = <span class="kw">match </span>iter.next() {
+                    <span class="prelude-val">Some</span>((i, <span class="kw-2">&amp;</span>preg)) =&gt; (i, preg),
+                    <span class="prelude-val">None </span>=&gt; <span class="kw">break </span><span class="prelude-val">None</span>,
+                };
 
-            <span class="comment">// if none of the fixed intervals for `preg` overlap the current interval, we
-            // take this register. if any do, we go to the next one and repeat the process
-            </span><span class="kw">if </span><span class="self">self</span>.is_valid_at(preg, interval, fixed) {
-                <span class="kw">break </span><span class="prelude-val">Some</span>(i);
+                <span class="comment">// if none of the fixed intervals for `preg` overlap the current interval, we
+                // take this register. if any do, we go to the next one and repeat the process
+                </span><span class="kw">if </span><span class="self">Self</span>::is_valid_at(preg, pair.live(), fixed) {
+                    <span class="kw">break </span><span class="prelude-val">Some</span>(i);
+                }
             }
         };
 
-        <span class="kw">match </span>possible_next {
-            <span class="comment">// we can&#39;t swap_remove here due to needing to maintain sorted order
-            // but the array is so small it doesn&#39;t really matter at all
-            </span><span class="prelude-val">Some</span>(i) =&gt; <span class="prelude-val">Some</span>(<span class="self">self</span>.register_queue.remove(i)),
-            <span class="prelude-val">None </span>=&gt; <span class="prelude-val">None</span>,
-        }
+        <span class="comment">// we can&#39;t swap_remove here due to needing to maintain sorted order
+        // but the array is so small it doesn&#39;t really matter at all
+        </span>possible_next.map(|i| queue.remove(i))
     }
 
     <span class="comment">// tries to take a specific preferred register if possible, if it isn&#39;t tries to
@@ -1187,36 +1211,44 @@
     </span><span class="kw">fn </span>try_take_specific_register(
         <span class="kw-2">&amp;mut </span><span class="self">self</span>,
         preferred: PReg,
-        interval: LiveInterval,
+        pair: RegLivePair,
         fixed: <span class="kw-2">&amp;</span>FixedIntervals,
     ) -&gt; <span class="prelude-ty">Option</span>&lt;PReg&gt; {
+        <span class="kw">let </span>queue = <span class="self">self</span>.queue_for(pair.reg());
+        <span class="kw">let </span>found = queue.iter().position(<span class="kw">move </span>|<span class="kw-2">&amp;</span>reg| reg == preferred);
+
         <span class="comment">// is preferred even in the queue at all? we can&#39;t take that specific
         // one if it&#39;s already taken by another interval
-        </span><span class="kw">match </span><span class="self">self
-            </span>.register_queue
-            .iter()
-            .position(<span class="kw">move </span>|<span class="kw-2">&amp;</span>reg| reg == preferred)
-        {
+        </span><span class="kw">match </span>found {
             <span class="comment">// if preferred is both in the queue and valid at the interval,
             // we will take preferred and use it as our target register.
-            </span><span class="prelude-val">Some</span>(index) <span class="kw">if </span><span class="self">self</span>.is_valid_at(preferred, interval, fixed) =&gt; {
-                <span class="self">self</span>.register_queue.remove(index);
+            </span><span class="prelude-val">Some</span>(index) <span class="kw">if </span><span class="self">Self</span>::is_valid_at(preferred, pair.live(), fixed) =&gt; {
+                queue.remove(index);
 
                 <span class="prelude-val">Some</span>(preferred)
             }
             <span class="comment">// otherwise we just default to the normal &quot;try and get anything&quot; case
-            </span><span class="kw">_ </span>=&gt; <span class="self">self</span>.try_take_any(interval, fixed),
+            </span><span class="kw">_ </span>=&gt; <span class="self">self</span>.try_take_any(pair, fixed),
         }
     }
 
     <span class="comment">// a register is &quot;valid&quot; at a given interval if no fixed intervals overlap with
     // the interval being allocated for.
     </span><span class="attr">#[inline]
-    </span><span class="kw">fn </span>is_valid_at(<span class="kw-2">&amp;</span><span class="self">self</span>, preg: PReg, interval: LiveInterval, fixed: <span class="kw-2">&amp;</span>FixedIntervals) -&gt; bool {
+    </span><span class="kw">fn </span>is_valid_at(preg: PReg, interval: LiveInterval, fixed: <span class="kw-2">&amp;</span>FixedIntervals) -&gt; bool {
         !fixed
             .intervals_for(preg)
             .iter()
             .any(<span class="kw">move </span>|<span class="kw-2">&amp;</span>fixed| interval.overlaps(fixed))
+    }
+
+    <span class="comment">// gets the queue for the integer class associated with `reg`
+    </span><span class="attr">#[inline]
+    </span><span class="kw">fn </span>queue_for(<span class="kw-2">&amp;mut </span><span class="self">self</span>, reg: Reg) -&gt; <span class="kw-2">&amp;mut </span>Vec&lt;PReg&gt; {
+        <span class="kw">match </span>reg.class() {
+            RegClass::Int =&gt; <span class="kw-2">&amp;mut </span><span class="self">self</span>.int_register_queue,
+            RegClass::Float =&gt; <span class="kw-2">&amp;mut </span><span class="self">self</span>.float_register_queue,
+        }
     }
 }
 </code></pre></div></section></main><script>

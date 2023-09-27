@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `src/codegen/x86_64/emit.rs`."><title>emit.rs - source</title><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../static.files/SourceSerif4-Regular-46f98efaafac5295.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../static.files/FiraSans-Regular-018c141bf0843ffd.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../static.files/FiraSans-Medium-8f9a781e4970d388.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../static.files/SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../static.files/SourceSerif4-Bold-a2c9cd1067f8b328.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../static.files/SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2"><link rel="stylesheet" href="../../../../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../../../../static.files/rustdoc-cb6f1f67f1bcd037.css" id="mainThemeStyle"><meta name="rustdoc-vars" data-root-path="../../../../" data-static-root-path="../../../../static.files/" data-current-crate="sapphire" data-themes="" data-resource-suffix="" data-rustdoc-version="1.73.0-nightly (1b198b3a1 2023-08-13)" data-channel="nightly" data-search-js="search-6dfdfced5eff6596.js" data-settings-js="settings-de11bff964e9d4e5.js" data-settings-css="settings-8c76f75bfb6bd192.css" data-theme-light-css="light-1596385f77d47ef2.css" data-theme-dark-css="dark-0a43001d3fc2282c.css" data-theme-ayu-css="ayu-fd19013d6ce078bf.css" ><script src="../../../../static.files/storage-db41da1a38ea3cb8.js"></script><script defer src="../../../../static.files/src-script-3280b574d94e47b4.js"></script><script defer src="../../../../src-files.js"></script><script defer src="../../../../static.files/main-0795b7d26be81095.js"></script><noscript><link rel="stylesheet" media="(prefers-color-scheme:light)" href="../../../../static.files/light-1596385f77d47ef2.css"><link rel="stylesheet" media="(prefers-color-scheme:dark)" href="../../../../static.files/dark-0a43001d3fc2282c.css"><link rel="stylesheet" href="../../../../static.files/noscript-cffde32267a19fd6.css"></noscript><link rel="alternate icon" type="image/png" href="../../../../static.files/favicon-16x16-8b506e7a72182f1c.png"><link rel="alternate icon" type="image/png" href="../../../../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../../../../static.files/favicon-2c020d218678b618.svg"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.6.0/katex.min.css">
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `src/codegen/x86_64/emit.rs`."><title>emit.rs - source</title><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../static.files/SourceSerif4-Regular-46f98efaafac5295.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../static.files/FiraSans-Regular-018c141bf0843ffd.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../static.files/FiraSans-Medium-8f9a781e4970d388.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../static.files/SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../static.files/SourceSerif4-Bold-a2c9cd1067f8b328.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../static.files/SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2"><link rel="stylesheet" href="../../../../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../../../../static.files/rustdoc-fa3bb1812debf86c.css"><meta name="rustdoc-vars" data-root-path="../../../../" data-static-root-path="../../../../static.files/" data-current-crate="sapphire" data-themes="" data-resource-suffix="" data-rustdoc-version="1.74.0-nightly (5ae769f06 2023-09-26)" data-channel="nightly" data-search-js="search-8be46b629f5f14a8.js" data-settings-js="settings-74424d7eec62a23e.js" ><script src="../../../../static.files/storage-fec3eaa3851e447d.js"></script><script defer src="../../../../static.files/src-script-3280b574d94e47b4.js"></script><script defer src="../../../../src-files.js"></script><script defer src="../../../../static.files/main-c5bd66d33317d69f.js"></script><noscript><link rel="stylesheet" href="../../../../static.files/noscript-5d8b3c7633ad77ba.css"></noscript><link rel="alternate icon" type="image/png" href="../../../../static.files/favicon-16x16-8b506e7a72182f1c.png"><link rel="alternate icon" type="image/png" href="../../../../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../../../../static.files/favicon-2c020d218678b618.svg"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.6.0/katex.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.6.0/katex.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.6.0/contrib/auto-render.min.js"></script>
 </head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"></nav><main><nav class="sub"><a class="sub-logo-container" href="../../../../sapphire/index.html"><img class="rust-logo" src="../../../../static.files/rust-logo-151179464ae7ed46.svg" alt="logo"></a><form class="search-form"><span></span><input class="search-input" name="search" aria-label="Run search in the documentation" autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"><div id="help-button" title="help" tabindex="-1"><a href="../../../../help.html">?</a></div><div id="settings-menu" tabindex="-1"><a href="../../../../settings.html" title="settings"><img width="22" height="22" alt="Change settings" src="../../../../static.files/wheel-7b819b6101059cd0.svg"></a></div></form></nav><section id="main-content" class="content"><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers"><a href="#1" id="1">1</a>
@@ -930,6 +930,215 @@
 <a href="#927" id="927">927</a>
 <a href="#928" id="928">928</a>
 <a href="#929" id="929">929</a>
+<a href="#930" id="930">930</a>
+<a href="#931" id="931">931</a>
+<a href="#932" id="932">932</a>
+<a href="#933" id="933">933</a>
+<a href="#934" id="934">934</a>
+<a href="#935" id="935">935</a>
+<a href="#936" id="936">936</a>
+<a href="#937" id="937">937</a>
+<a href="#938" id="938">938</a>
+<a href="#939" id="939">939</a>
+<a href="#940" id="940">940</a>
+<a href="#941" id="941">941</a>
+<a href="#942" id="942">942</a>
+<a href="#943" id="943">943</a>
+<a href="#944" id="944">944</a>
+<a href="#945" id="945">945</a>
+<a href="#946" id="946">946</a>
+<a href="#947" id="947">947</a>
+<a href="#948" id="948">948</a>
+<a href="#949" id="949">949</a>
+<a href="#950" id="950">950</a>
+<a href="#951" id="951">951</a>
+<a href="#952" id="952">952</a>
+<a href="#953" id="953">953</a>
+<a href="#954" id="954">954</a>
+<a href="#955" id="955">955</a>
+<a href="#956" id="956">956</a>
+<a href="#957" id="957">957</a>
+<a href="#958" id="958">958</a>
+<a href="#959" id="959">959</a>
+<a href="#960" id="960">960</a>
+<a href="#961" id="961">961</a>
+<a href="#962" id="962">962</a>
+<a href="#963" id="963">963</a>
+<a href="#964" id="964">964</a>
+<a href="#965" id="965">965</a>
+<a href="#966" id="966">966</a>
+<a href="#967" id="967">967</a>
+<a href="#968" id="968">968</a>
+<a href="#969" id="969">969</a>
+<a href="#970" id="970">970</a>
+<a href="#971" id="971">971</a>
+<a href="#972" id="972">972</a>
+<a href="#973" id="973">973</a>
+<a href="#974" id="974">974</a>
+<a href="#975" id="975">975</a>
+<a href="#976" id="976">976</a>
+<a href="#977" id="977">977</a>
+<a href="#978" id="978">978</a>
+<a href="#979" id="979">979</a>
+<a href="#980" id="980">980</a>
+<a href="#981" id="981">981</a>
+<a href="#982" id="982">982</a>
+<a href="#983" id="983">983</a>
+<a href="#984" id="984">984</a>
+<a href="#985" id="985">985</a>
+<a href="#986" id="986">986</a>
+<a href="#987" id="987">987</a>
+<a href="#988" id="988">988</a>
+<a href="#989" id="989">989</a>
+<a href="#990" id="990">990</a>
+<a href="#991" id="991">991</a>
+<a href="#992" id="992">992</a>
+<a href="#993" id="993">993</a>
+<a href="#994" id="994">994</a>
+<a href="#995" id="995">995</a>
+<a href="#996" id="996">996</a>
+<a href="#997" id="997">997</a>
+<a href="#998" id="998">998</a>
+<a href="#999" id="999">999</a>
+<a href="#1000" id="1000">1000</a>
+<a href="#1001" id="1001">1001</a>
+<a href="#1002" id="1002">1002</a>
+<a href="#1003" id="1003">1003</a>
+<a href="#1004" id="1004">1004</a>
+<a href="#1005" id="1005">1005</a>
+<a href="#1006" id="1006">1006</a>
+<a href="#1007" id="1007">1007</a>
+<a href="#1008" id="1008">1008</a>
+<a href="#1009" id="1009">1009</a>
+<a href="#1010" id="1010">1010</a>
+<a href="#1011" id="1011">1011</a>
+<a href="#1012" id="1012">1012</a>
+<a href="#1013" id="1013">1013</a>
+<a href="#1014" id="1014">1014</a>
+<a href="#1015" id="1015">1015</a>
+<a href="#1016" id="1016">1016</a>
+<a href="#1017" id="1017">1017</a>
+<a href="#1018" id="1018">1018</a>
+<a href="#1019" id="1019">1019</a>
+<a href="#1020" id="1020">1020</a>
+<a href="#1021" id="1021">1021</a>
+<a href="#1022" id="1022">1022</a>
+<a href="#1023" id="1023">1023</a>
+<a href="#1024" id="1024">1024</a>
+<a href="#1025" id="1025">1025</a>
+<a href="#1026" id="1026">1026</a>
+<a href="#1027" id="1027">1027</a>
+<a href="#1028" id="1028">1028</a>
+<a href="#1029" id="1029">1029</a>
+<a href="#1030" id="1030">1030</a>
+<a href="#1031" id="1031">1031</a>
+<a href="#1032" id="1032">1032</a>
+<a href="#1033" id="1033">1033</a>
+<a href="#1034" id="1034">1034</a>
+<a href="#1035" id="1035">1035</a>
+<a href="#1036" id="1036">1036</a>
+<a href="#1037" id="1037">1037</a>
+<a href="#1038" id="1038">1038</a>
+<a href="#1039" id="1039">1039</a>
+<a href="#1040" id="1040">1040</a>
+<a href="#1041" id="1041">1041</a>
+<a href="#1042" id="1042">1042</a>
+<a href="#1043" id="1043">1043</a>
+<a href="#1044" id="1044">1044</a>
+<a href="#1045" id="1045">1045</a>
+<a href="#1046" id="1046">1046</a>
+<a href="#1047" id="1047">1047</a>
+<a href="#1048" id="1048">1048</a>
+<a href="#1049" id="1049">1049</a>
+<a href="#1050" id="1050">1050</a>
+<a href="#1051" id="1051">1051</a>
+<a href="#1052" id="1052">1052</a>
+<a href="#1053" id="1053">1053</a>
+<a href="#1054" id="1054">1054</a>
+<a href="#1055" id="1055">1055</a>
+<a href="#1056" id="1056">1056</a>
+<a href="#1057" id="1057">1057</a>
+<a href="#1058" id="1058">1058</a>
+<a href="#1059" id="1059">1059</a>
+<a href="#1060" id="1060">1060</a>
+<a href="#1061" id="1061">1061</a>
+<a href="#1062" id="1062">1062</a>
+<a href="#1063" id="1063">1063</a>
+<a href="#1064" id="1064">1064</a>
+<a href="#1065" id="1065">1065</a>
+<a href="#1066" id="1066">1066</a>
+<a href="#1067" id="1067">1067</a>
+<a href="#1068" id="1068">1068</a>
+<a href="#1069" id="1069">1069</a>
+<a href="#1070" id="1070">1070</a>
+<a href="#1071" id="1071">1071</a>
+<a href="#1072" id="1072">1072</a>
+<a href="#1073" id="1073">1073</a>
+<a href="#1074" id="1074">1074</a>
+<a href="#1075" id="1075">1075</a>
+<a href="#1076" id="1076">1076</a>
+<a href="#1077" id="1077">1077</a>
+<a href="#1078" id="1078">1078</a>
+<a href="#1079" id="1079">1079</a>
+<a href="#1080" id="1080">1080</a>
+<a href="#1081" id="1081">1081</a>
+<a href="#1082" id="1082">1082</a>
+<a href="#1083" id="1083">1083</a>
+<a href="#1084" id="1084">1084</a>
+<a href="#1085" id="1085">1085</a>
+<a href="#1086" id="1086">1086</a>
+<a href="#1087" id="1087">1087</a>
+<a href="#1088" id="1088">1088</a>
+<a href="#1089" id="1089">1089</a>
+<a href="#1090" id="1090">1090</a>
+<a href="#1091" id="1091">1091</a>
+<a href="#1092" id="1092">1092</a>
+<a href="#1093" id="1093">1093</a>
+<a href="#1094" id="1094">1094</a>
+<a href="#1095" id="1095">1095</a>
+<a href="#1096" id="1096">1096</a>
+<a href="#1097" id="1097">1097</a>
+<a href="#1098" id="1098">1098</a>
+<a href="#1099" id="1099">1099</a>
+<a href="#1100" id="1100">1100</a>
+<a href="#1101" id="1101">1101</a>
+<a href="#1102" id="1102">1102</a>
+<a href="#1103" id="1103">1103</a>
+<a href="#1104" id="1104">1104</a>
+<a href="#1105" id="1105">1105</a>
+<a href="#1106" id="1106">1106</a>
+<a href="#1107" id="1107">1107</a>
+<a href="#1108" id="1108">1108</a>
+<a href="#1109" id="1109">1109</a>
+<a href="#1110" id="1110">1110</a>
+<a href="#1111" id="1111">1111</a>
+<a href="#1112" id="1112">1112</a>
+<a href="#1113" id="1113">1113</a>
+<a href="#1114" id="1114">1114</a>
+<a href="#1115" id="1115">1115</a>
+<a href="#1116" id="1116">1116</a>
+<a href="#1117" id="1117">1117</a>
+<a href="#1118" id="1118">1118</a>
+<a href="#1119" id="1119">1119</a>
+<a href="#1120" id="1120">1120</a>
+<a href="#1121" id="1121">1121</a>
+<a href="#1122" id="1122">1122</a>
+<a href="#1123" id="1123">1123</a>
+<a href="#1124" id="1124">1124</a>
+<a href="#1125" id="1125">1125</a>
+<a href="#1126" id="1126">1126</a>
+<a href="#1127" id="1127">1127</a>
+<a href="#1128" id="1128">1128</a>
+<a href="#1129" id="1129">1129</a>
+<a href="#1130" id="1130">1130</a>
+<a href="#1131" id="1131">1131</a>
+<a href="#1132" id="1132">1132</a>
+<a href="#1133" id="1133">1133</a>
+<a href="#1134" id="1134">1134</a>
+<a href="#1135" id="1135">1135</a>
+<a href="#1136" id="1136">1136</a>
+<a href="#1137" id="1137">1137</a>
+<a href="#1138" id="1138">1138</a>
 </pre></div><pre class="rust"><code><span class="comment">//======---------------------------------------------------------------======//
 //                                                                           //
 // Copyright 2022-2023 Evan Cox &lt;evanacox00@gmail.com&gt;. All rights reserved. //
@@ -943,13 +1152,13 @@
 </span><span class="kw">use </span><span class="kw">crate</span>::arena::SecondaryMap;
 <span class="kw">use </span><span class="kw">crate</span>::codegen::x86_64::<span class="kw-2">*</span>;
 <span class="kw">use </span><span class="kw">crate</span>::codegen::{
-    Emitter, Extern, MIRBlock, MIRFunction, MIRModule, PReg, Reg, RegClass, TargetPair,
+    Emitter, Extern, MIRBlock, MIRFuncData, MIRFunction, MIRModule, PReg, Reg, RegClass, TargetPair,
 };
 <span class="kw">use </span><span class="kw">crate</span>::ir::{FloatFormat, UType};
 <span class="kw">use </span><span class="kw">crate</span>::utility::{SaHashMap, StringPool};
 <span class="kw">use </span>smallvec::SmallVec;
+<span class="kw">use </span>std::iter;
 <span class="kw">use </span>std::str::FromStr;
-<span class="kw">use </span>std::{iter, mem};
 
 <span class="doccomment">/// Different assembly formats for x86-64
 </span><span class="attr">#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Debug, Hash)]
@@ -964,11 +1173,20 @@
     </span>MASM,
 }
 
-<span class="kw">fn </span>into_mac_os_symbol_name(name: <span class="kw-2">&amp;</span>str, is_mac: bool) -&gt; String {
-    <span class="kw">if </span>is_mac {
-        <span class="macro">format!</span>(<span class="string">&quot;_{name}&quot;</span>)
-    } <span class="kw">else </span>{
-        name.to_string()
+<span class="attr">#[inline]
+</span><span class="kw">fn </span>format_int_reg(
+    byte: <span class="kw-2">&amp;</span><span class="lifetime">&#39;static </span>str,
+    word: <span class="kw-2">&amp;</span><span class="lifetime">&#39;static </span>str,
+    dword: <span class="kw-2">&amp;</span><span class="lifetime">&#39;static </span>str,
+    qword: <span class="kw-2">&amp;</span><span class="lifetime">&#39;static </span>str,
+    width: Width,
+) -&gt; <span class="kw-2">&amp;</span><span class="lifetime">&#39;static </span>str {
+    <span class="kw">match </span>width {
+        Width::Byte =&gt; byte,
+        Width::Word =&gt; word,
+        Width::Dword =&gt; dword,
+        Width::Qword =&gt; qword,
+        Width::Xmmword =&gt; <span class="macro">panic!</span>(<span class="string">&quot;tried to access 64-bit register as an xmmword&quot;</span>),
     }
 }
 
@@ -998,102 +1216,22 @@
         }
 
         <span class="kw">let </span>name = <span class="kw">match </span>preg {
-            X86_64::RAX =&gt; <span class="kw">match </span>width {
-                Width::Byte =&gt; <span class="string">&quot;al&quot;</span>,
-                Width::Word =&gt; <span class="string">&quot;ax&quot;</span>,
-                Width::Dword =&gt; <span class="string">&quot;eax&quot;</span>,
-                Width::Qword =&gt; <span class="string">&quot;rax&quot;</span>,
-            },
-            X86_64::RBX =&gt; <span class="kw">match </span>width {
-                Width::Byte =&gt; <span class="string">&quot;bl&quot;</span>,
-                Width::Word =&gt; <span class="string">&quot;bx&quot;</span>,
-                Width::Dword =&gt; <span class="string">&quot;ebx&quot;</span>,
-                Width::Qword =&gt; <span class="string">&quot;rbx&quot;</span>,
-            },
-            X86_64::RCX =&gt; <span class="kw">match </span>width {
-                Width::Byte =&gt; <span class="string">&quot;cl&quot;</span>,
-                Width::Word =&gt; <span class="string">&quot;cx&quot;</span>,
-                Width::Dword =&gt; <span class="string">&quot;ecx&quot;</span>,
-                Width::Qword =&gt; <span class="string">&quot;rcx&quot;</span>,
-            },
-            X86_64::RDX =&gt; <span class="kw">match </span>width {
-                Width::Byte =&gt; <span class="string">&quot;dl&quot;</span>,
-                Width::Word =&gt; <span class="string">&quot;dx&quot;</span>,
-                Width::Dword =&gt; <span class="string">&quot;edx&quot;</span>,
-                Width::Qword =&gt; <span class="string">&quot;rdx&quot;</span>,
-            },
-            X86_64::RSI =&gt; <span class="kw">match </span>width {
-                Width::Byte =&gt; <span class="string">&quot;sil&quot;</span>,
-                Width::Word =&gt; <span class="string">&quot;si&quot;</span>,
-                Width::Dword =&gt; <span class="string">&quot;esi&quot;</span>,
-                Width::Qword =&gt; <span class="string">&quot;rsi&quot;</span>,
-            },
-            X86_64::RDI =&gt; <span class="kw">match </span>width {
-                Width::Byte =&gt; <span class="string">&quot;dil&quot;</span>,
-                Width::Word =&gt; <span class="string">&quot;di&quot;</span>,
-                Width::Dword =&gt; <span class="string">&quot;edi&quot;</span>,
-                Width::Qword =&gt; <span class="string">&quot;rdi&quot;</span>,
-            },
-            X86_64::RBP =&gt; <span class="kw">match </span>width {
-                Width::Byte =&gt; <span class="string">&quot;bpl&quot;</span>,
-                Width::Word =&gt; <span class="string">&quot;bp&quot;</span>,
-                Width::Dword =&gt; <span class="string">&quot;ebp&quot;</span>,
-                Width::Qword =&gt; <span class="string">&quot;rbp&quot;</span>,
-            },
-            X86_64::RSP =&gt; <span class="kw">match </span>width {
-                Width::Byte =&gt; <span class="string">&quot;spl&quot;</span>,
-                Width::Word =&gt; <span class="string">&quot;sp&quot;</span>,
-                Width::Dword =&gt; <span class="string">&quot;esp&quot;</span>,
-                Width::Qword =&gt; <span class="string">&quot;rsp&quot;</span>,
-            },
-            X86_64::R8 =&gt; <span class="kw">match </span>width {
-                Width::Byte =&gt; <span class="string">&quot;r8b&quot;</span>,
-                Width::Word =&gt; <span class="string">&quot;r8w&quot;</span>,
-                Width::Dword =&gt; <span class="string">&quot;r8d&quot;</span>,
-                Width::Qword =&gt; <span class="string">&quot;r8&quot;</span>,
-            },
-            X86_64::R9 =&gt; <span class="kw">match </span>width {
-                Width::Byte =&gt; <span class="string">&quot;r9b&quot;</span>,
-                Width::Word =&gt; <span class="string">&quot;r9w&quot;</span>,
-                Width::Dword =&gt; <span class="string">&quot;r9d&quot;</span>,
-                Width::Qword =&gt; <span class="string">&quot;r9&quot;</span>,
-            },
-            X86_64::R10 =&gt; <span class="kw">match </span>width {
-                Width::Byte =&gt; <span class="string">&quot;r10b&quot;</span>,
-                Width::Word =&gt; <span class="string">&quot;r10w&quot;</span>,
-                Width::Dword =&gt; <span class="string">&quot;r10d&quot;</span>,
-                Width::Qword =&gt; <span class="string">&quot;r10&quot;</span>,
-            },
-            X86_64::R11 =&gt; <span class="kw">match </span>width {
-                Width::Byte =&gt; <span class="string">&quot;r11b&quot;</span>,
-                Width::Word =&gt; <span class="string">&quot;r11w&quot;</span>,
-                Width::Dword =&gt; <span class="string">&quot;r11d&quot;</span>,
-                Width::Qword =&gt; <span class="string">&quot;r11&quot;</span>,
-            },
-            X86_64::R12 =&gt; <span class="kw">match </span>width {
-                Width::Byte =&gt; <span class="string">&quot;r12b&quot;</span>,
-                Width::Word =&gt; <span class="string">&quot;r12w&quot;</span>,
-                Width::Dword =&gt; <span class="string">&quot;r12d&quot;</span>,
-                Width::Qword =&gt; <span class="string">&quot;r12&quot;</span>,
-            },
-            X86_64::R13 =&gt; <span class="kw">match </span>width {
-                Width::Byte =&gt; <span class="string">&quot;r13b&quot;</span>,
-                Width::Word =&gt; <span class="string">&quot;r13w&quot;</span>,
-                Width::Dword =&gt; <span class="string">&quot;r13d&quot;</span>,
-                Width::Qword =&gt; <span class="string">&quot;r13&quot;</span>,
-            },
-            X86_64::R14 =&gt; <span class="kw">match </span>width {
-                Width::Byte =&gt; <span class="string">&quot;r14b&quot;</span>,
-                Width::Word =&gt; <span class="string">&quot;r14w&quot;</span>,
-                Width::Dword =&gt; <span class="string">&quot;r14d&quot;</span>,
-                Width::Qword =&gt; <span class="string">&quot;r14&quot;</span>,
-            },
-            X86_64::R15 =&gt; <span class="kw">match </span>width {
-                Width::Byte =&gt; <span class="string">&quot;r15b&quot;</span>,
-                Width::Word =&gt; <span class="string">&quot;r15w&quot;</span>,
-                Width::Dword =&gt; <span class="string">&quot;r15d&quot;</span>,
-                Width::Qword =&gt; <span class="string">&quot;r15&quot;</span>,
-            },
+            X86_64::RAX =&gt; format_int_reg(<span class="string">&quot;al&quot;</span>, <span class="string">&quot;ax&quot;</span>, <span class="string">&quot;eax&quot;</span>, <span class="string">&quot;rax&quot;</span>, width),
+            X86_64::RBX =&gt; format_int_reg(<span class="string">&quot;bl&quot;</span>, <span class="string">&quot;bx&quot;</span>, <span class="string">&quot;ebx&quot;</span>, <span class="string">&quot;rbx&quot;</span>, width),
+            X86_64::RCX =&gt; format_int_reg(<span class="string">&quot;cl&quot;</span>, <span class="string">&quot;cx&quot;</span>, <span class="string">&quot;ecx&quot;</span>, <span class="string">&quot;rcx&quot;</span>, width),
+            X86_64::RDX =&gt; format_int_reg(<span class="string">&quot;dl&quot;</span>, <span class="string">&quot;dx&quot;</span>, <span class="string">&quot;edx&quot;</span>, <span class="string">&quot;rdx&quot;</span>, width),
+            X86_64::RSI =&gt; format_int_reg(<span class="string">&quot;sil&quot;</span>, <span class="string">&quot;si&quot;</span>, <span class="string">&quot;esi&quot;</span>, <span class="string">&quot;rsi&quot;</span>, width),
+            X86_64::RDI =&gt; format_int_reg(<span class="string">&quot;dil&quot;</span>, <span class="string">&quot;di&quot;</span>, <span class="string">&quot;edi&quot;</span>, <span class="string">&quot;rdi&quot;</span>, width),
+            X86_64::RBP =&gt; format_int_reg(<span class="string">&quot;bpl&quot;</span>, <span class="string">&quot;bp&quot;</span>, <span class="string">&quot;ebp&quot;</span>, <span class="string">&quot;rbp&quot;</span>, width),
+            X86_64::RSP =&gt; format_int_reg(<span class="string">&quot;spl&quot;</span>, <span class="string">&quot;sp&quot;</span>, <span class="string">&quot;esp&quot;</span>, <span class="string">&quot;rsp&quot;</span>, width),
+            X86_64::R8 =&gt; format_int_reg(<span class="string">&quot;r8b&quot;</span>, <span class="string">&quot;r8w&quot;</span>, <span class="string">&quot;r8d&quot;</span>, <span class="string">&quot;r8&quot;</span>, width),
+            X86_64::R9 =&gt; format_int_reg(<span class="string">&quot;r9b&quot;</span>, <span class="string">&quot;r9w&quot;</span>, <span class="string">&quot;r9d&quot;</span>, <span class="string">&quot;r9&quot;</span>, width),
+            X86_64::R10 =&gt; format_int_reg(<span class="string">&quot;r10b&quot;</span>, <span class="string">&quot;r10w&quot;</span>, <span class="string">&quot;r10d&quot;</span>, <span class="string">&quot;r10&quot;</span>, width),
+            X86_64::R11 =&gt; format_int_reg(<span class="string">&quot;r11b&quot;</span>, <span class="string">&quot;r11w&quot;</span>, <span class="string">&quot;r11d&quot;</span>, <span class="string">&quot;r11&quot;</span>, width),
+            X86_64::R12 =&gt; format_int_reg(<span class="string">&quot;r12b&quot;</span>, <span class="string">&quot;r12w&quot;</span>, <span class="string">&quot;r12d&quot;</span>, <span class="string">&quot;r12&quot;</span>, width),
+            X86_64::R13 =&gt; format_int_reg(<span class="string">&quot;r13b&quot;</span>, <span class="string">&quot;r13w&quot;</span>, <span class="string">&quot;r13d&quot;</span>, <span class="string">&quot;r13&quot;</span>, width),
+            X86_64::R14 =&gt; format_int_reg(<span class="string">&quot;r14b&quot;</span>, <span class="string">&quot;r14w&quot;</span>, <span class="string">&quot;r14d&quot;</span>, <span class="string">&quot;r14&quot;</span>, width),
+            X86_64::R15 =&gt; format_int_reg(<span class="string">&quot;r15b&quot;</span>, <span class="string">&quot;r15w&quot;</span>, <span class="string">&quot;r15d&quot;</span>, <span class="string">&quot;r15&quot;</span>, width),
             <span class="kw">_ </span>=&gt; <span class="macro">unreachable!</span>(),
         };
 
@@ -1157,10 +1295,12 @@
     ) -&gt; String {
         <span class="kw">let </span>emitter = AsmEmitter {
             mode: format,
-            mac_os: <span class="macro">matches!</span>(target, TargetPair::X86_64macOS),
+            pair: target,
             state: String::default(),
             pool: module.symbols().clone(),
             label_count: <span class="number">0</span>,
+            block_names: SecondaryMap::default(),
+            data_names: SecondaryMap::default(),
             fixed_interval_comments,
         };
 
@@ -1180,10 +1320,12 @@
 
 <span class="kw">struct </span>AsmEmitter {
     mode: X86_64Assembly,
-    mac_os: bool,
+    pair: TargetPair,
     state: String,
     pool: StringPool,
     label_count: usize,
+    block_names: SecondaryMap&lt;MIRBlock, String&gt;,
+    data_names: SecondaryMap&lt;MIRFuncData, String&gt;,
     fixed_interval_comments: bool,
 }
 
@@ -1199,12 +1341,11 @@
         <span class="self">self</span>.emit_extern_symbols(module);
 
         <span class="kw">for </span>(function, frame) <span class="kw">in </span>module.functions() {
-            <span class="kw">let </span>name = into_mac_os_symbol_name(
+            <span class="kw">let </span>name = <span class="self">self</span>.correct_symbol_name(
                 module
                     .symbols()
                     .get(function.name())
                     .expect(<span class="string">&quot;should have name&quot;</span>),
-                <span class="self">self</span>.mac_os,
             );
 
             <span class="self">self</span>.emit_function(<span class="kw-2">&amp;</span>name, function);
@@ -1217,14 +1358,25 @@
         <span class="self">self</span>.state
     }
 
+    <span class="attr">#[inline]
+    </span><span class="kw">fn </span>is_mac_os(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
+        <span class="macro">matches!</span>(<span class="self">self</span>.pair, TargetPair::X86_64macOS | TargetPair::Arm64macOS)
+    }
+
+    <span class="kw">fn </span>correct_symbol_name(<span class="kw-2">&amp;</span><span class="self">self</span>, name: <span class="kw-2">&amp;</span>str) -&gt; String {
+        <span class="kw">if </span><span class="self">self</span>.is_mac_os() {
+            <span class="macro">format!</span>(<span class="string">&quot;_{name}&quot;</span>)
+        } <span class="kw">else </span>{
+            name.to_string()
+        }
+    }
+
     <span class="kw">fn </span>emit_global_symbols(<span class="kw-2">&amp;mut </span><span class="self">self</span>, module: <span class="kw-2">&amp;</span>MIRModule&lt;Inst&gt;) {
         <span class="kw">let </span>strings = module.symbols();
 
         <span class="kw">for </span>(function, frame) <span class="kw">in </span>module.functions() {
-            <span class="kw">let </span>name = into_mac_os_symbol_name(
-                strings.get(function.name()).expect(<span class="string">&quot;should have name&quot;</span>),
-                <span class="self">self</span>.mac_os,
-            );
+            <span class="kw">let </span>name =
+                <span class="self">self</span>.correct_symbol_name(strings.get(function.name()).expect(<span class="string">&quot;should have name&quot;</span>));
 
             <span class="kw">let </span>real = <span class="kw">match </span><span class="self">self</span>.mode {
                 X86_64Assembly::GNU | X86_64Assembly::GNUIntel =&gt; {
@@ -1279,21 +1431,138 @@
         }
     }
 
+    <span class="kw">fn </span>emit_section_text(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
+        <span class="kw">let </span>s = <span class="kw">match </span><span class="self">self</span>.pair {
+            TargetPair::X86_64Linux | TargetPair::Aarch64Linux | TargetPair::Debug3Reg =&gt; {
+                <span class="kw">match </span><span class="self">self</span>.mode {
+                    X86_64Assembly::GNU | X86_64Assembly::GNUIntel =&gt; <span class="string">&quot;    .text&quot;</span>,
+                    X86_64Assembly::NASM =&gt; <span class="string">&quot;    section .text&quot;</span>,
+                    X86_64Assembly::MASM =&gt; {
+                        <span class="macro">panic!</span>(<span class="string">&quot;cannot create MASM assembly output when targeting Linux&quot;</span>)
+                    }
+                }
+            }
+            TargetPair::X86_64macOS | TargetPair::Arm64macOS =&gt; <span class="kw">match </span><span class="self">self</span>.mode {
+                X86_64Assembly::GNU | X86_64Assembly::GNUIntel =&gt; <span class="string">&quot;    .text&quot;</span>,
+                X86_64Assembly::NASM =&gt; <span class="string">&quot;    section __TEXT,__text&quot;</span>,
+                X86_64Assembly::MASM =&gt; {
+                    <span class="macro">panic!</span>(<span class="string">&quot;cannot create MASM assembly output when targeting macOS&quot;</span>)
+                }
+            },
+            TargetPair::X86_64Windows | TargetPair::Arm64Windows =&gt; <span class="kw">match </span><span class="self">self</span>.mode {
+                X86_64Assembly::GNU | X86_64Assembly::GNUIntel =&gt; <span class="string">&quot;    .text&quot;</span>,
+                X86_64Assembly::NASM =&gt; <span class="string">&quot;    section .text&quot;</span>,
+                X86_64Assembly::MASM =&gt; <span class="string">&quot;_TEXT SEGMENT&quot;</span>,
+            },
+        };
+
+        <span class="self">self</span>.state += s;
+        <span class="self">self</span>.state += <span class="string">&quot;\n&quot;</span>;
+    }
+
+    <span class="kw">fn </span>emit_section_constant(<span class="kw-2">&amp;mut </span><span class="self">self</span>, constant: <span class="kw-2">&amp;</span>Constant) {
+        <span class="kw">const </span>SECTION_NAMES: [[<span class="kw-2">&amp;</span>str; <span class="number">7</span>]; <span class="number">2</span>] = [
+            <span class="comment">// Linux
+            </span>[
+                <span class="string">&quot;.rodata.cst8,\&quot;aM\&quot;,@progbits,8&quot;</span>,    <span class="comment">// quad-label
+                </span><span class="string">&quot;.rodata.cst8,\&quot;aM\&quot;,@progbits,8&quot;</span>,    <span class="comment">// quad
+                </span><span class="string">&quot;.rodata.cst4,\&quot;aM\&quot;,@progbits,4&quot;</span>,    <span class="comment">// long
+                </span><span class="string">&quot;.rodata.cst2,\&quot;aM\&quot;,@progbits,2&quot;</span>,    <span class="comment">// short
+                </span><span class="string">&quot;.rodata.cst1,\&quot;aM\&quot;,@progbits,1&quot;</span>,    <span class="comment">// byte
+                </span><span class="string">&quot;.rodata,\&quot;a\&quot;,@progbits&quot;</span>,            <span class="comment">// array
+                </span><span class="string">&quot;.rodata.str1.1,\&quot;aMS\&quot;,@progbits,1&quot;</span>, <span class="comment">// string: MUST HAVE .size FOLLOWING IT
+            </span>],
+            <span class="comment">// macOS
+            </span>[
+                <span class="string">&quot;__TEXT,__literal8&quot;</span>, <span class="comment">// quad-label
+                </span><span class="string">&quot;__TEXT,__literal8&quot;</span>, <span class="comment">// quad
+                </span><span class="string">&quot;__TEXT,__literal4&quot;</span>, <span class="comment">// long
+                </span><span class="string">&quot;__TEXT,__const&quot;</span>,    <span class="comment">// short
+                </span><span class="string">&quot;__TEXT,__const&quot;</span>,    <span class="comment">// byte
+                </span><span class="string">&quot;__TEXT,__const&quot;</span>,    <span class="comment">// array
+                </span><span class="string">&quot;__TEXT,__cstring&quot;</span>,  <span class="comment">// string: MUST HAVE .size FOLLOWING IT
+            </span>],
+        ];
+
+        <span class="kw">fn </span>index_align_of_constant(constant: <span class="kw-2">&amp;</span>Constant) -&gt; (usize, usize) {
+            <span class="kw">match </span><span class="kw-2">&amp;</span>constant {
+                Constant::QuadLabel(<span class="kw">_</span>) =&gt; (<span class="number">0</span>, <span class="number">8</span>),
+                Constant::Quad(<span class="kw">_</span>) =&gt; (<span class="number">1</span>, <span class="number">8</span>),
+                Constant::Long(<span class="kw">_</span>) =&gt; (<span class="number">2</span>, <span class="number">4</span>),
+                Constant::Short(<span class="kw">_</span>) =&gt; (<span class="number">3</span>, <span class="number">2</span>),
+                Constant::Byte(<span class="kw">_</span>) =&gt; (<span class="number">4</span>, <span class="number">1</span>),
+                Constant::Array(inside) =&gt; {
+                    <span class="comment">// this is guaranteed to terminate eventually, we&#39;ll get the align of the innermost array element
+                    // and then we&#39;ll know our minimum alignment for the array as a whole
+                    </span>(<span class="number">5</span>, index_align_of_constant(constant).<span class="number">1</span>)
+                }
+                Constant::String(<span class="kw">_</span>) =&gt; (<span class="number">6</span>, <span class="number">1</span>),
+            }
+        }
+
+        <span class="kw">let </span>(section_name_index, align) = index_align_of_constant(constant);
+
+        <span class="kw">let </span>name = <span class="kw">match </span><span class="self">self</span>.pair {
+            TargetPair::X86_64Linux | TargetPair::Aarch64Linux | TargetPair::Debug3Reg =&gt; {
+                <span class="kw">if </span>!<span class="macro">matches!</span>(
+                    <span class="self">self</span>.mode,
+                    X86_64Assembly::GNU | X86_64Assembly::GNUIntel | X86_64Assembly::NASM
+                ) {
+                    <span class="macro">panic!</span>(<span class="string">&quot;cannot create MASM assembly output when targeting Linux&quot;</span>)
+                }
+
+                SECTION_NAMES[<span class="number">0</span>][section_name_index]
+            }
+            TargetPair::X86_64macOS | TargetPair::Arm64macOS =&gt; {
+                <span class="kw">if </span>!<span class="macro">matches!</span>(
+                    <span class="self">self</span>.mode,
+                    X86_64Assembly::GNU | X86_64Assembly::GNUIntel | X86_64Assembly::NASM
+                ) {
+                    <span class="macro">panic!</span>(<span class="string">&quot;cannot create MASM assembly output when targeting macOS&quot;</span>)
+                }
+
+                SECTION_NAMES[<span class="number">1</span>][section_name_index]
+            }
+            TargetPair::X86_64Windows | TargetPair::Arm64Windows =&gt; <span class="string">&quot;.rdata&quot;</span>,
+        };
+
+        <span class="kw">let </span>line = <span class="kw">match </span><span class="self">self</span>.mode {
+            X86_64Assembly::GNU | X86_64Assembly::GNUIntel =&gt; <span class="macro">format!</span>(<span class="string">&quot;    .section {name}&quot;</span>),
+            X86_64Assembly::NASM =&gt; <span class="macro">format!</span>(<span class="string">&quot;    section {name}&quot;</span>),
+            X86_64Assembly::MASM =&gt; <span class="string">&quot;CONST SEGMENT&quot;</span>.to_string(),
+        };
+
+        <span class="self">self</span>.state += <span class="kw-2">&amp;</span>line;
+        <span class="self">self</span>.state += <span class="string">&quot;\n&quot;</span>;
+
+        <span class="kw">match </span><span class="self">self</span>.mode {
+            X86_64Assembly::GNU | X86_64Assembly::GNUIntel =&gt; {
+                <span class="self">self</span>.state += <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">&quot;    .align {align}\n&quot;</span>);
+            }
+            X86_64Assembly::NASM =&gt; {
+                <span class="self">self</span>.state += <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">&quot;    align {align}\n&quot;</span>);
+            }
+            X86_64Assembly::MASM =&gt; {
+                <span class="comment">// we don&#39;t have to worry about it for MASM
+            </span>}
+        }
+    }
+
     <span class="kw">fn </span>emit_function_name(<span class="kw-2">&amp;mut </span><span class="self">self</span>, name: <span class="kw-2">&amp;</span>str, defined_by_caller: <span class="kw-2">&amp;</span>[PReg]) {
+        <span class="self">self</span>.emit_section_text();
+
         <span class="kw">let </span>name = <span class="kw">match </span><span class="self">self</span>.mode {
             X86_64Assembly::GNU | X86_64Assembly::GNUIntel =&gt; {
-                <span class="self">self</span>.state += <span class="string">&quot;    .text\n&quot;</span>;
+                <span class="self">self</span>.state += <span class="string">&quot;    .align 32\n&quot;</span>;
 
                 <span class="macro">format!</span>(<span class="string">&quot;{name}:&quot;</span>)
             }
             X86_64Assembly::NASM =&gt; {
-                <span class="self">self</span>.state += <span class="string">&quot;    section .text\n&quot;</span>;
+                <span class="self">self</span>.state += <span class="string">&quot;    align 32\n&quot;</span>;
 
                 <span class="macro">format!</span>(<span class="string">&quot;{name}:&quot;</span>)
             }
             X86_64Assembly::MASM =&gt; {
-                <span class="self">self</span>.state += <span class="string">&quot;_TEXT SEGMENT\n&quot;</span>;
-
                 <span class="macro">format!</span>(<span class="string">&quot;{name} PROC&quot;</span>)
             }
         };
@@ -1323,8 +1592,54 @@
         <span class="self">self</span>.state += <span class="string">&quot;\n&quot;</span>;
     }
 
+    <span class="kw">fn </span>emit_single_constant(<span class="kw-2">&amp;mut </span><span class="self">self</span>, key: MIRFuncData, constant: <span class="kw-2">&amp;</span>Constant) {
+        <span class="self">self</span>.emit_section_constant(constant);
+
+        <span class="kw">let </span>constant = <span class="kw">match </span><span class="self">self</span>.mode {
+            X86_64Assembly::GNU | X86_64Assembly::GNUIntel =&gt; <span class="kw">match </span>constant {
+                Constant::QuadLabel(block) =&gt; {
+                    <span class="kw">let </span>name = <span class="kw-2">&amp;</span><span class="self">self</span>.block_names[<span class="kw-2">*</span>block];
+
+                    <span class="macro">format!</span>(<span class="string">&quot;    .quad {name}&quot;</span>)
+                }
+                Constant::Quad(value) =&gt; <span class="macro">format!</span>(<span class="string">&quot;    .quad 0x{value:016x}&quot;</span>),
+                Constant::Long(value) =&gt; <span class="macro">format!</span>(<span class="string">&quot;    .long 0x{value:08x}&quot;</span>),
+                Constant::Short(value) =&gt; <span class="macro">format!</span>(<span class="string">&quot;   .short 0x{value:04x}&quot;</span>),
+                Constant::Byte(value) =&gt; <span class="macro">format!</span>(<span class="string">&quot;   .byte 0x{value:02x}&quot;</span>),
+                Constant::Array(<span class="kw">_</span>) =&gt; <span class="macro">todo!</span>(),
+                Constant::String(<span class="kw">_</span>) =&gt; <span class="macro">todo!</span>(),
+            },
+            X86_64Assembly::NASM =&gt; {
+                <span class="macro">todo!</span>()
+            }
+            X86_64Assembly::MASM =&gt; {
+                <span class="macro">todo!</span>()
+            }
+        };
+
+        <span class="kw">let </span>label = <span class="macro">format!</span>(<span class="string">&quot;{}:\n&quot;</span>, <span class="kw-2">&amp;</span><span class="self">self</span>.data_names[key]);
+
+        <span class="self">self</span>.state += <span class="kw-2">&amp;</span>label;
+        <span class="self">self</span>.state += <span class="kw-2">&amp;</span>constant;
+        <span class="self">self</span>.state += <span class="string">&quot;\n&quot;</span>;
+    }
+
+    <span class="kw">fn </span>emit_function_data(<span class="kw-2">&amp;mut </span><span class="self">self</span>, function: <span class="kw-2">&amp;</span>MIRFunction&lt;Inst&gt;) {
+        <span class="kw">match </span><span class="self">self</span>.mode {
+            X86_64Assembly::GNU | X86_64Assembly::GNUIntel =&gt; {
+                <span class="kw">for </span>(key, data) <span class="kw">in </span>function.data() {
+                    <span class="self">self</span>.emit_single_constant(key, data);
+                }
+            }
+            X86_64Assembly::NASM =&gt; {}
+            X86_64Assembly::MASM =&gt; {}
+        }
+    }
+
     <span class="kw">fn </span>emit_function(<span class="kw-2">&amp;mut </span><span class="self">self</span>, name: <span class="kw-2">&amp;</span>str, function: <span class="kw-2">&amp;</span>MIRFunction&lt;Inst&gt;) {
-        <span class="kw">let </span><span class="kw-2">mut </span>block_names = SecondaryMap::with_capacity(function.program_order().len());
+        <span class="self">self</span>.block_names = SecondaryMap::default();
+        <span class="self">self</span>.data_names = SecondaryMap::default();
+
         <span class="kw">let </span>(fixed_begin_at, fixed_end_at, defined_by_caller) = <span class="self">self</span>.fixed_begin_end(function);
         <span class="kw">let </span><span class="kw-2">mut </span>i = <span class="number">0usize</span>;
 
@@ -1333,19 +1648,46 @@
         <span class="comment">// skip 1, we don&#39;t want to put a label on the first block
         </span><span class="kw">for </span><span class="kw-2">&amp;</span>block <span class="kw">in </span>function.program_order().iter().skip(<span class="number">1</span>) {
             <span class="kw">let </span>curr = <span class="self">self</span>.label_count;
-            <span class="kw">let </span>next = mem::replace(<span class="kw-2">&amp;mut </span><span class="self">self</span>.label_count, curr + <span class="number">1</span>);
+            <span class="kw">let </span>name = <span class="kw">match </span><span class="self">self</span>.mode {
+                X86_64Assembly::MASM =&gt; <span class="macro">format!</span>(<span class="string">&quot;$L{curr}&quot;</span>),
+                X86_64Assembly::NASM | X86_64Assembly::GNU | X86_64Assembly::GNUIntel =&gt; {
+                    <span class="macro">format!</span>(<span class="string">&quot;.L{curr}&quot;</span>)
+                }
+            };
 
-            block_names.insert(block, <span class="macro">format!</span>(<span class="string">&quot;.L{next}&quot;</span>));
+            <span class="self">self</span>.label_count += <span class="number">1</span>;
+            <span class="self">self</span>.block_names.insert(block, name);
+        }
+
+        <span class="kw">for </span>(key, <span class="kw">_</span>) <span class="kw">in </span>function.data() {
+            <span class="kw">let </span>curr = <span class="self">self</span>.label_count;
+            <span class="kw">let </span>name = <span class="kw">match </span><span class="self">self</span>.mode {
+                X86_64Assembly::MASM =&gt; {
+                    <span class="kw">let </span>name = <span class="self">self</span>.pool.get(function.name()).unwrap();
+
+                    <span class="macro">format!</span>(<span class="string">&quot;{name}_const_L{curr}&quot;</span>)
+                }
+                X86_64Assembly::NASM | X86_64Assembly::GNU | X86_64Assembly::GNUIntel =&gt; {
+                    <span class="macro">format!</span>(<span class="string">&quot;.LC{curr}&quot;</span>)
+                }
+            };
+
+            <span class="self">self</span>.label_count += <span class="number">1</span>;
+            <span class="self">self</span>.data_names.insert(key, name);
+        }
+
+        <span class="kw">if </span><span class="self">self</span>.mode == X86_64Assembly::MASM {
+            <span class="self">self</span>.emit_function_data(function);
         }
 
         <span class="kw">for </span><span class="kw-2">&amp;</span>block <span class="kw">in </span>function.program_order().iter() {
-            <span class="kw">if let </span><span class="prelude-val">Some</span>(name) = block_names.get(block) {
+            <span class="kw">if let </span><span class="prelude-val">Some</span>(name) = <span class="self">self</span>.block_names.get(block) {
                 <span class="self">self</span>.state += name;
                 <span class="self">self</span>.state += <span class="string">&quot;:\n&quot;</span>;
             }
 
             <span class="kw">for </span><span class="kw-2">&amp;</span>inst <span class="kw">in </span>function.block(block) {
-                <span class="kw">let </span>asm = <span class="self">self</span>.emit_inst(inst, <span class="kw-2">&amp;</span>block_names);
+                <span class="kw">let </span>asm = <span class="self">self</span>.emit_inst(inst);
 
                 <span class="self">self</span>.emit_single_inst(i, asm, <span class="kw-2">&amp;</span>fixed_begin_at, <span class="kw-2">&amp;</span>fixed_end_at);
 
@@ -1361,6 +1703,10 @@
                 <span class="self">self</span>.state += <span class="string">&quot;    section \&quot;.note.GNU-stack\&quot;,\&quot;\&quot;,@progbits\n&quot;</span>;
             }
             X86_64Assembly::MASM =&gt; <span class="self">self</span>.state += <span class="string">&quot;_TEXT ENDS\n&quot;</span>,
+        }
+
+        <span class="kw">if </span><span class="self">self</span>.mode != X86_64Assembly::MASM {
+            <span class="self">self</span>.emit_function_data(function);
         }
     }
 
@@ -1455,7 +1801,7 @@
         }
     }
 
-    <span class="kw">fn </span>emit_inst(<span class="kw-2">&amp;</span><span class="self">self</span>, inst: Inst, block_names: <span class="kw-2">&amp;</span>SecondaryMap&lt;MIRBlock, String&gt;) -&gt; String {
+    <span class="kw">fn </span>emit_inst(<span class="kw-2">&amp;</span><span class="self">self</span>, inst: Inst) -&gt; String {
         <span class="kw">match </span>inst {
             Inst::Nop(<span class="kw">_</span>) =&gt; <span class="string">&quot;nop&quot;</span>.into(),
             Inst::Mov(mov) =&gt; <span class="self">self</span>.emit_mov(mov),
@@ -1463,6 +1809,9 @@
             Inst::Movzx(movzx) =&gt; <span class="self">self</span>.emit_movzx(movzx),
             Inst::MovStore(mov) =&gt; <span class="self">self</span>.emit_mov_store(mov),
             Inst::Movabs(movabs) =&gt; <span class="self">self</span>.emit_movabs(movabs),
+            Inst::Movaps(movaps) =&gt; <span class="self">self</span>.emit_movaps(movaps),
+            Inst::MovFloatLoad(movs) =&gt; <span class="self">self</span>.emit_movs_load(movs),
+            Inst::MovFloatStore(movs) =&gt; <span class="self">self</span>.emit_movs_store(movs),
             Inst::Lea(lea) =&gt; <span class="self">self</span>.emit_lea(lea),
             Inst::ALU(alu) =&gt; <span class="self">self</span>.emit_alu(alu),
             Inst::Not(not) =&gt; <span class="self">self</span>.emit_not(not),
@@ -1473,6 +1822,8 @@
             Inst::Cqo(<span class="kw">_</span>) =&gt; <span class="string">&quot;cqo&quot;</span>.into(),
             Inst::Div(div) =&gt; <span class="self">self</span>.emit_div(div),
             Inst::IDiv(idiv) =&gt; <span class="self">self</span>.emit_idiv(idiv),
+            Inst::PXor(pxor) =&gt; <span class="self">self</span>.emit_pxor(pxor),
+            Inst::FloatArith(arith) =&gt; <span class="self">self</span>.emit_float_alu(arith),
             Inst::Cmp(cmp) =&gt; <span class="self">self</span>.emit_cmp(cmp),
             Inst::Test(test) =&gt; <span class="self">self</span>.emit_test(test),
             Inst::Set(set) =&gt; <span class="self">self</span>.emit_set(set),
@@ -1480,7 +1831,7 @@
             Inst::Pop(pop) =&gt; <span class="self">self</span>.emit_pop(pop),
             Inst::Call(call) =&gt; <span class="self">self</span>.emit_call(call),
             Inst::IndirectCall(indirectcall) =&gt; <span class="self">self</span>.emit_indirectcall(indirectcall),
-            Inst::Jump(jump) =&gt; <span class="self">self</span>.emit_jump(jump, block_names),
+            Inst::Jump(jump) =&gt; <span class="self">self</span>.emit_jump(jump),
             Inst::Ret(<span class="kw">_</span>) =&gt; <span class="string">&quot;ret&quot;</span>.into(),
             Inst::Ud2(<span class="kw">_</span>) =&gt; <span class="string">&quot;ud2&quot;</span>.into(),
         }
@@ -1578,6 +1929,24 @@
                     <span class="macro">format!</span>(<span class="string">&quot;[{e1} + {e2}*{integral} + {offset}]&quot;</span>)
                 }
             }
+            IndirectAddress::RipLocalData(data) =&gt; {
+                <span class="kw">let </span>string = <span class="kw-2">&amp;</span><span class="self">self</span>.data_names[data];
+
+                <span class="kw">match </span><span class="self">self</span>.mode {
+                    X86_64Assembly::GNU =&gt; <span class="macro">format!</span>(<span class="string">&quot;{string}(%rip)&quot;</span>),
+                    X86_64Assembly::NASM =&gt; <span class="macro">format!</span>(<span class="string">&quot;[rel {string}]&quot;</span>),
+                    X86_64Assembly::GNUIntel | X86_64Assembly::MASM =&gt; <span class="macro">format!</span>(<span class="string">&quot;{string}[rip]&quot;</span>),
+                }
+            }
+            IndirectAddress::RipLocalLabel(bb) =&gt; {
+                <span class="kw">let </span>string = <span class="kw-2">&amp;</span><span class="self">self</span>.block_names[bb];
+
+                <span class="kw">match </span><span class="self">self</span>.mode {
+                    X86_64Assembly::GNU =&gt; <span class="macro">format!</span>(<span class="string">&quot;{string}(%rip)&quot;</span>),
+                    X86_64Assembly::NASM =&gt; <span class="macro">format!</span>(<span class="string">&quot;[rel {string}]&quot;</span>),
+                    X86_64Assembly::GNUIntel | X86_64Assembly::MASM =&gt; <span class="macro">format!</span>(<span class="string">&quot;{string}[rip]&quot;</span>),
+                }
+            }
             IndirectAddress::RipGlobal(global) =&gt; {
                 <span class="kw">let </span>string = <span class="self">self</span>.pool.get(global).expect(<span class="string">&quot;invalid symbol key&quot;</span>);
 
@@ -1594,18 +1963,10 @@
         <span class="kw">let </span>reference = <span class="self">self</span>.emit_indirect_address(loc);
         <span class="kw">let </span>prefix = <span class="kw">match </span><span class="self">self</span>.mode {
             X86_64Assembly::GNU =&gt; <span class="string">&quot;&quot;</span>,
-            X86_64Assembly::NASM =&gt; <span class="kw">match </span>width {
-                Width::Byte =&gt; <span class="string">&quot;byte &quot;</span>,
-                Width::Word =&gt; <span class="string">&quot;word &quot;</span>,
-                Width::Dword =&gt; <span class="string">&quot;dword &quot;</span>,
-                Width::Qword =&gt; <span class="string">&quot;qword &quot;</span>,
-            },
-            X86_64Assembly::GNUIntel | X86_64Assembly::MASM =&gt; <span class="kw">match </span>width {
-                Width::Byte =&gt; <span class="string">&quot;byte ptr &quot;</span>,
-                Width::Word =&gt; <span class="string">&quot;word ptr &quot;</span>,
-                Width::Dword =&gt; <span class="string">&quot;dword ptr &quot;</span>,
-                Width::Qword =&gt; <span class="string">&quot;qword ptr &quot;</span>,
-            },
+            X86_64Assembly::NASM =&gt; format_int_reg(<span class="string">&quot;byte &quot;</span>, <span class="string">&quot;word &quot;</span>, <span class="string">&quot;dword &quot;</span>, <span class="string">&quot;qword &quot;</span>, width),
+            X86_64Assembly::GNUIntel | X86_64Assembly::MASM =&gt; {
+                format_int_reg(<span class="string">&quot;byte ptr &quot;</span>, <span class="string">&quot;word ptr &quot;</span>, <span class="string">&quot;dword ptr &quot;</span>, <span class="string">&quot;qword ptr &quot;</span>, width)
+            }
         };
 
         <span class="macro">format!</span>(<span class="string">&quot;{prefix}{reference}&quot;</span>)
@@ -1634,12 +1995,7 @@
 
     <span class="kw">fn </span>suffix(<span class="kw-2">&amp;</span><span class="self">self</span>, width: Width) -&gt; <span class="kw-2">&amp;</span><span class="lifetime">&#39;static </span>str {
         <span class="kw">if </span><span class="self">self</span>.mode == X86_64Assembly::GNU {
-            <span class="kw">match </span>width {
-                Width::Byte =&gt; <span class="string">&quot;b&quot;</span>,
-                Width::Word =&gt; <span class="string">&quot;w&quot;</span>,
-                Width::Dword =&gt; <span class="string">&quot;l&quot;</span>,
-                Width::Qword =&gt; <span class="string">&quot;q&quot;</span>,
-            }
+            format_int_reg(<span class="string">&quot;b&quot;</span>, <span class="string">&quot;w&quot;</span>, <span class="string">&quot;l&quot;</span>, <span class="string">&quot;q&quot;</span>, width)
         } <span class="kw">else </span>{
             <span class="string">&quot;&quot;
         </span>}
@@ -1698,6 +2054,32 @@
         <span class="kw">let </span>(lhs, rhs) = <span class="self">self</span>.reorder_operands(value, dest);
 
         <span class="macro">format!</span>(<span class="string">&quot;movabs {lhs}, {rhs}&quot;</span>)
+    }
+
+    <span class="kw">fn </span>emit_movaps(<span class="kw-2">&amp;</span><span class="self">self</span>, movaps: Movaps) -&gt; String {
+        <span class="kw">let </span>src = <span class="self">self</span>.emit_reg(movaps.src, Width::Qword);
+        <span class="kw">let </span>dest = <span class="self">self</span>.emit_reg(movaps.dest.to_reg(), Width::Qword);
+        <span class="kw">let </span>(lhs, rhs) = <span class="self">self</span>.reorder_operands(src, dest);
+
+        <span class="macro">format!</span>(<span class="string">&quot;movaps {lhs}, {rhs}&quot;</span>)
+    }
+
+    <span class="kw">fn </span>emit_movs_load(<span class="kw-2">&amp;</span><span class="self">self</span>, movs: MovFloatLoad) -&gt; String {
+        <span class="kw">let </span>src = <span class="self">self</span>.emit_rmi(RegMemImm::Mem(movs.src), Width::Qword);
+        <span class="kw">let </span>dest = <span class="self">self</span>.emit_reg(movs.dest.to_reg(), Width::Qword);
+        <span class="kw">let </span>suffix = <span class="self">Self</span>::float_op_suffix(movs.format);
+        <span class="kw">let </span>(lhs, rhs) = <span class="self">self</span>.reorder_operands(src, dest);
+
+        <span class="macro">format!</span>(<span class="string">&quot;movs{suffix} {lhs}, {rhs}&quot;</span>)
+    }
+
+    <span class="kw">fn </span>emit_movs_store(<span class="kw-2">&amp;</span><span class="self">self</span>, movs: MovFloatStore) -&gt; String {
+        <span class="kw">let </span>src = <span class="self">self</span>.emit_reg(movs.src, Width::Qword);
+        <span class="kw">let </span>dest = <span class="self">self</span>.emit_rmi(RegMemImm::Mem(movs.dest), Width::Qword);
+        <span class="kw">let </span>suffix = <span class="self">Self</span>::float_op_suffix(movs.format);
+        <span class="kw">let </span>(lhs, rhs) = <span class="self">self</span>.reorder_operands(src, dest);
+
+        <span class="macro">format!</span>(<span class="string">&quot;movs{suffix} {lhs}, {rhs}&quot;</span>)
     }
 
     <span class="kw">fn </span>emit_lea(<span class="kw-2">&amp;</span><span class="self">self</span>, lea: Lea) -&gt; String {
@@ -1763,6 +2145,35 @@
         <span class="kw">let </span>suffix = <span class="self">self</span>.suffix(idiv.width);
 
         <span class="macro">format!</span>(<span class="string">&quot;idiv{suffix} {src}&quot;</span>)
+    }
+
+    <span class="kw">fn </span>emit_pxor(<span class="kw-2">&amp;</span><span class="self">self</span>, pxor: PXor) -&gt; String {
+        <span class="kw">let </span>src = <span class="self">self</span>.emit_reg(pxor.rhs, Width::Xmmword);
+        <span class="kw">let </span>dest = <span class="self">self</span>.emit_reg(pxor.lhs.to_reg(), Width::Xmmword);
+        <span class="kw">let </span>(lhs, rhs) = <span class="self">self</span>.reorder_operands(src, dest);
+
+        <span class="macro">format!</span>(<span class="string">&quot;pxor {lhs}, {rhs}&quot;</span>)
+    }
+
+    <span class="kw">fn </span>emit_float_alu(<span class="kw-2">&amp;</span><span class="self">self</span>, arith: FloatArith) -&gt; String {
+        <span class="kw">let </span>width = <span class="kw">match </span>arith.format {
+            FloatFormat::Single =&gt; Width::Dword,
+            FloatFormat::Double =&gt; Width::Qword,
+        };
+
+        <span class="kw">let </span>src = <span class="self">self</span>.emit_rmi(arith.rhs.into(), width);
+        <span class="kw">let </span>dest = <span class="self">self</span>.emit_reg(arith.lhs.to_reg(), width);
+        <span class="kw">let </span>suffix = <span class="self">Self</span>::float_op_suffix(arith.format);
+        <span class="kw">let </span>opc = <span class="kw">match </span>arith.opc {
+            FloatArithOpcode::Add =&gt; <span class="string">&quot;adds&quot;</span>,
+            FloatArithOpcode::Sub =&gt; <span class="string">&quot;subs&quot;</span>,
+            FloatArithOpcode::Mul =&gt; <span class="string">&quot;muls&quot;</span>,
+            FloatArithOpcode::Div =&gt; <span class="string">&quot;divs&quot;</span>,
+        };
+
+        <span class="kw">let </span>(lhs, rhs) = <span class="self">self</span>.reorder_operands(src, dest);
+
+        <span class="macro">format!</span>(<span class="string">&quot;{opc}{suffix} {lhs}, {rhs}&quot;</span>)
     }
 
     <span class="kw">fn </span>emit_cmp(<span class="kw-2">&amp;</span><span class="self">self</span>, cmp: Cmp) -&gt; String {
@@ -1838,6 +2249,13 @@
         }
     }
 
+    <span class="kw">fn </span>float_op_suffix(format: FloatFormat) -&gt; <span class="kw-2">&amp;</span><span class="lifetime">&#39;static </span>str {
+        <span class="kw">match </span>format {
+            FloatFormat::Single =&gt; <span class="string">&quot;s&quot;</span>,
+            FloatFormat::Double =&gt; <span class="string">&quot;d&quot;</span>,
+        }
+    }
+
     <span class="kw">fn </span>emit_set(<span class="kw-2">&amp;</span><span class="self">self</span>, set: Set) -&gt; String {
         <span class="kw">let </span>dest = <span class="self">self</span>.emit_reg(set.dest.to_reg(), Width::Byte);
         <span class="kw">let </span>suffix = <span class="self">Self</span>::condition_code_suffix(set.condition);
@@ -1845,10 +2263,10 @@
         <span class="macro">format!</span>(<span class="string">&quot;set{suffix} {dest}&quot;</span>)
     }
 
-    <span class="kw">fn </span>emit_jump(<span class="kw-2">&amp;</span><span class="self">self</span>, jump: Jump, block_names: <span class="kw-2">&amp;</span>SecondaryMap&lt;MIRBlock, String&gt;) -&gt; String {
+    <span class="kw">fn </span>emit_jump(<span class="kw-2">&amp;</span><span class="self">self</span>, jump: Jump) -&gt; String {
         <span class="kw">let </span>name = <span class="kw">match </span>jump.target {
             JumpTarget::Global(name) =&gt; <span class="self">self</span>.pool.get(name).unwrap(),
-            JumpTarget::Local(bb) =&gt; <span class="kw-2">&amp;</span>block_names[bb],
+            JumpTarget::Local(bb) =&gt; <span class="kw-2">&amp;</span><span class="self">self</span>.block_names[bb],
         };
 
         <span class="kw">let </span>suffix = <span class="kw">match </span>jump.condition {

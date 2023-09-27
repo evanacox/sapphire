@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `src/codegen/isel.rs`."><title>isel.rs - source</title><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/SourceSerif4-Regular-46f98efaafac5295.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/FiraSans-Regular-018c141bf0843ffd.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/FiraSans-Medium-8f9a781e4970d388.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/SourceSerif4-Bold-a2c9cd1067f8b328.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2"><link rel="stylesheet" href="../../../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../../../static.files/rustdoc-cb6f1f67f1bcd037.css" id="mainThemeStyle"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="sapphire" data-themes="" data-resource-suffix="" data-rustdoc-version="1.73.0-nightly (1b198b3a1 2023-08-13)" data-channel="nightly" data-search-js="search-6dfdfced5eff6596.js" data-settings-js="settings-de11bff964e9d4e5.js" data-settings-css="settings-8c76f75bfb6bd192.css" data-theme-light-css="light-1596385f77d47ef2.css" data-theme-dark-css="dark-0a43001d3fc2282c.css" data-theme-ayu-css="ayu-fd19013d6ce078bf.css" ><script src="../../../static.files/storage-db41da1a38ea3cb8.js"></script><script defer src="../../../static.files/src-script-3280b574d94e47b4.js"></script><script defer src="../../../src-files.js"></script><script defer src="../../../static.files/main-0795b7d26be81095.js"></script><noscript><link rel="stylesheet" media="(prefers-color-scheme:light)" href="../../../static.files/light-1596385f77d47ef2.css"><link rel="stylesheet" media="(prefers-color-scheme:dark)" href="../../../static.files/dark-0a43001d3fc2282c.css"><link rel="stylesheet" href="../../../static.files/noscript-cffde32267a19fd6.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-16x16-8b506e7a72182f1c.png"><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-2c020d218678b618.svg"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.6.0/katex.min.css">
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `src/codegen/isel.rs`."><title>isel.rs - source</title><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/SourceSerif4-Regular-46f98efaafac5295.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/FiraSans-Regular-018c141bf0843ffd.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/FiraSans-Medium-8f9a781e4970d388.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/SourceSerif4-Bold-a2c9cd1067f8b328.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2"><link rel="stylesheet" href="../../../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../../../static.files/rustdoc-fa3bb1812debf86c.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="sapphire" data-themes="" data-resource-suffix="" data-rustdoc-version="1.74.0-nightly (5ae769f06 2023-09-26)" data-channel="nightly" data-search-js="search-8be46b629f5f14a8.js" data-settings-js="settings-74424d7eec62a23e.js" ><script src="../../../static.files/storage-fec3eaa3851e447d.js"></script><script defer src="../../../static.files/src-script-3280b574d94e47b4.js"></script><script defer src="../../../src-files.js"></script><script defer src="../../../static.files/main-c5bd66d33317d69f.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-5d8b3c7633ad77ba.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-16x16-8b506e7a72182f1c.png"><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-2c020d218678b618.svg"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.6.0/katex.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.6.0/katex.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.6.0/contrib/auto-render.min.js"></script>
 </head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"></nav><main><nav class="sub"><a class="sub-logo-container" href="../../../sapphire/index.html"><img class="rust-logo" src="../../../static.files/rust-logo-151179464ae7ed46.svg" alt="logo"></a><form class="search-form"><span></span><input class="search-input" name="search" aria-label="Run search in the documentation" autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"><div id="help-button" title="help" tabindex="-1"><a href="../../../help.html">?</a></div><div id="settings-menu" tabindex="-1"><a href="../../../settings.html" title="settings"><img width="22" height="22" alt="Change settings" src="../../../static.files/wheel-7b819b6101059cd0.svg"></a></div></form></nav><section id="main-content" class="content"><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers"><a href="#1" id="1">1</a>
@@ -756,6 +756,25 @@
 <a href="#753" id="753">753</a>
 <a href="#754" id="754">754</a>
 <a href="#755" id="755">755</a>
+<a href="#756" id="756">756</a>
+<a href="#757" id="757">757</a>
+<a href="#758" id="758">758</a>
+<a href="#759" id="759">759</a>
+<a href="#760" id="760">760</a>
+<a href="#761" id="761">761</a>
+<a href="#762" id="762">762</a>
+<a href="#763" id="763">763</a>
+<a href="#764" id="764">764</a>
+<a href="#765" id="765">765</a>
+<a href="#766" id="766">766</a>
+<a href="#767" id="767">767</a>
+<a href="#768" id="768">768</a>
+<a href="#769" id="769">769</a>
+<a href="#770" id="770">770</a>
+<a href="#771" id="771">771</a>
+<a href="#772" id="772">772</a>
+<a href="#773" id="773">773</a>
+<a href="#774" id="774">774</a>
 </pre></div><pre class="rust"><code><span class="comment">//======---------------------------------------------------------------======//
 //                                                                           //
 // Copyright 2022-2023 Evan Cox &lt;evanacox00@gmail.com&gt;. All rights reserved. //
@@ -777,6 +796,7 @@
 <span class="kw">use </span>smallvec::{smallvec, SmallVec};
 <span class="kw">use </span>std::collections::VecDeque;
 <span class="kw">use </span>std::marker::PhantomData;
+<span class="kw">use </span>std::mem;
 
 <span class="doccomment">/// An instruction selector that lowers one [`Inst`] into (potentially many) [`MachInst`]s.
 ///
@@ -949,7 +969,7 @@
             order.push_front(mir_block);
         }
 
-        (Vec::from_iter(order.into_iter()), block_length)
+        (Vec::from_iter(order), block_length)
     }
 
     <span class="kw">fn </span>emit_func(
@@ -965,8 +985,11 @@
         <span class="comment">// we haven&#39;t computed block lengths due to how isel works, need to do that now
         </span>context.compute_block_lengths(<span class="kw-2">&amp;</span>order, <span class="kw-2">&amp;</span>block_length, <span class="kw-2">&amp;mut </span>blocks);
 
+        <span class="kw">let </span>insts = context.take_insts();
+        <span class="kw">let </span>data = context.take_data();
+
         (
-            MIRFunction::new(name, context.take_insts(), blocks, order, fixed),
+            MIRFunction::new(name, insts, blocks, order, data, fixed),
             frame,
         )
     }
@@ -1014,6 +1037,8 @@
     </span>fixed_intervals: SecondaryMap&lt;PReg, SmallVec&lt;[FixedIntervalData; <span class="number">2</span>]&gt;&gt;,
     <span class="comment">// the current function being lowered
     </span>func: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span><span class="lifetime">&#39;module </span>Function&gt;,
+    <span class="comment">// the list of function constants to emit with the function
+    </span>data: ArenaMap&lt;MIRFuncData, Arch::Data&gt;,
     externals: Vec&lt;(Str, Extern)&gt;,
 }
 
@@ -1038,6 +1063,7 @@
             next_int_vreg_id: <span class="number">0</span>,
             next_float_vreg_id: <span class="number">0</span>,
             func: <span class="prelude-val">None</span>,
+            data: ArenaMap::default(),
             externals: Vec::default(),
         }
     }
@@ -1094,6 +1120,12 @@
         result
     }
 
+    <span class="doccomment">/// Gets the function-associated constant data that goes along with
+    /// the MIR of the function
+    </span><span class="kw">pub fn </span>take_data(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; ArenaMap&lt;MIRFuncData, Arch::Data&gt; {
+        mem::take(<span class="kw-2">&amp;mut </span><span class="self">self</span>.data)
+    }
+
     <span class="doccomment">/// Push an instruction into the result buffer.
     ///
     /// This should be called in the order that the instructions should appear
@@ -1103,6 +1135,12 @@
     </span><span class="attr">#[inline]
     </span><span class="kw">pub fn </span>emit(<span class="kw-2">&amp;mut </span><span class="self">self</span>, inst: Arch::Inst) {
         <span class="self">self</span>.current_linear.push(inst);
+    }
+
+    <span class="doccomment">/// Adds a constant to the function, and returns a reference to it
+    </span><span class="attr">#[inline]
+    </span><span class="kw">pub fn </span>add_constant(<span class="kw-2">&amp;mut </span><span class="self">self</span>, constant: Arch::Data) -&gt; MIRFuncData {
+        <span class="self">self</span>.data.insert(constant)
     }
 
     <span class="doccomment">/// Called before we begin lowering a single [`ir::Inst`]. This must be accompanied by
@@ -1302,7 +1340,7 @@
             RegClass::Float =&gt; {
                 <span class="self">self</span>.next_float_vreg_id += <span class="number">1</span>;
 
-                VReg::int(<span class="self">self</span>.next_float_vreg_id - <span class="number">1</span>)
+                VReg::float(<span class="self">self</span>.next_float_vreg_id - <span class="number">1</span>)
             }
         };
 
@@ -1366,7 +1404,7 @@
         <span class="self">self</span>.merged.contains(inst)
     }
 
-    <span class="doccomment">/// Gets the [`RegClass`] that a given [`Value`](ir::Value) can go in.
+    <span class="doccomment">/// Gets the [`RegClass`] that a given [`Value`] can go in.
     </span><span class="attr">#[inline]
     </span><span class="kw">pub fn </span>val_class(val: Value, def: <span class="kw-2">&amp;</span>FunctionDefinition) -&gt; RegClass {
         <span class="kw">match </span>def.dfg.ty(val).unpack() {
