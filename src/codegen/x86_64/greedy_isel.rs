@@ -950,8 +950,24 @@ impl<'mo, 'fr, 'ta, 'ctx> GenericInstVisitor<(), Ctx<'mo, 'fr, 'ta, 'ctx>> for G
         }));
     }
 
-    fn visit_fconst(&mut self, data: &FConstInst, context: Ctx<'_, '_, '_, '_>) {
-        todo!()
+    fn visit_fconst(&mut self, data: &FConstInst, (def, fr, ctx): Ctx<'_, '_, '_, '_>) {
+        let (data, format) = {
+            let float = data.result_ty().unwrap().unwrap_float();
+            let c = match float.format() {
+                FloatFormat::Single => Constant::Long(data.value() as u32),
+                FloatFormat::Double => Constant::Quad(data.value()),
+            };
+
+            (ctx.add_constant(c), float.format())
+        };
+
+        let reg = self.curr_result_reg(RegClass::Float, (def, fr, ctx));
+
+        ctx.emit(Inst::MovFloatLoad(MovFloatLoad {
+            format,
+            src: IndirectAddress::RipLocalData(data),
+            dest: WriteableReg::from_reg(reg),
+        }))
     }
 
     fn visit_bconst(&mut self, data: &BConstInst, (def, fr, ctx): Ctx<'_, '_, '_, '_>) {

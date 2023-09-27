@@ -8,27 +8,25 @@
 //                                                                           //
 //======---------------------------------------------------------------======//
 
-//! x86-64 Backend
-//!
-//! This is the main module for code specific to the generic "x86-64 backend,"
-//! with code for general x86-64 codegen and code for specific ABIs on x86-64.
+use crate::codegen::{FuncData, MIRBlock};
 
-mod data;
-mod emit;
-mod greedy_isel;
-mod mir;
-mod platforms;
-mod sysv;
-mod target;
-mod testing;
-mod win64;
+/// A single, self-contained constant for x86-64.
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Constant {
+    /// A `.quad` that refers to a label
+    QuadLabel(MIRBlock),
+    /// A `.quad` (8-byte) constant
+    Quad(u64),
+    /// A `.long` (4-byte) constant
+    Long(u32),
+    /// A `.short` (2-byte) constant
+    Short(u16),
+    /// A `.byte` (1-byte) constant
+    Byte(u8),
+    /// An array of constants with a specified relative order
+    Array(Box<[Constant]>),
+    /// A string constant that is **not** null-terminated by default
+    String(Box<[char]>),
+}
 
-pub use data::*;
-pub use emit::*;
-pub use greedy_isel::*;
-pub use mir::*;
-pub use platforms::*;
-pub use sysv::*;
-pub use target::*;
-pub use testing::*;
-pub use win64::*;
+impl FuncData for Constant {}

@@ -17,6 +17,7 @@ use crate::ir::{FloatFormat, Function, Module, Type, TypePool, UType};
 use crate::utility::SaHashMap;
 use std::fmt;
 use std::fmt::Debug;
+use std::hash::Hash;
 use std::marker::PhantomData;
 use std::str::FromStr;
 
@@ -353,11 +354,21 @@ impl ArenaKey for WriteableReg {
     }
 }
 
+/// Associated data that a function uses, it can be in several
+/// different target-defined forms.
+///
+/// Any emitter needs to know how to emit these, but other than that there's
+/// nothing target-independent.
+pub trait FuncData: Sized + Clone + Hash + PartialEq + Eq + PartialOrd + Ord {}
+
 /// Models the architecture-specific details that a backend needs to deal with,
 /// mainly fundamental type layouts.
 pub trait Architecture {
     /// The MIR instruction type used for the architecture
     type Inst: MachInst<Arch = Self>;
+
+    /// The type of function-associated data that this architecture has in its MIR
+    type Data: FuncData;
 
     /// Returns the specific CPU architecture this is configured for
     fn cpu() -> CPUArch;

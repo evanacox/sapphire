@@ -10,8 +10,8 @@
 
 use crate::codegen::x86_64::X86_64;
 use crate::codegen::{
-    CallUseDefId, MIRBlock, MachInst, PReg, Reg, RegClass, RegCollector, RegToRegCopy, StackFrame,
-    UnconditionalBranch, VariableLocation, WriteableReg,
+    CallUseDefId, MIRBlock, MIRFuncData, MachInst, PReg, Reg, RegClass, RegCollector, RegToRegCopy,
+    StackFrame, UnconditionalBranch, VariableLocation, WriteableReg,
 };
 use crate::ir::FloatFormat;
 use crate::utility::Str;
@@ -288,6 +288,10 @@ pub enum IndirectAddress {
     RegScaledReg(Reg, Reg, Scale),
     /// Adds a register to another register that's scaled, and adds a final offset. `[reg1 + reg2*scale + index`]
     RegScaledRegIndex(Reg, Reg, ScaleAnd30BitOffset),
+    /// This is the `[rip + label]` addressing mode for accessing a local piece of data
+    RipLocalData(MIRFuncData),
+    /// This is the `[rip + label]` addressing mode for accessing a local block
+    RipLocalLabel(MIRBlock),
     /// This is the `[rip + global]` addressing mode for accessing a global
     RipGlobal(Str),
 }
@@ -845,6 +849,10 @@ pub enum Inst {
     Ud2(Ud2),
 }
 
+// we want Inst to always line up cleanly inside cache lines, on x86-64 this is
+// 2 instructions per cache line, on M1 (and other 128byte cache line CPUs) its 4
+//
+// therefore, we ensure that it stays exactly 32 bytes
 assert_eq_size!(Inst, [u64; 4]);
 
 macro_rules! push_if_reg {
@@ -878,6 +886,8 @@ macro_rules! push_if_reg {
                 $collector.push(r2);
             }
             IndirectAddress::RipGlobal(_) => {}
+            IndirectAddress::RipLocalLabel(_) => {}
+            IndirectAddress::RipLocalData(_) => {}
         }
     };
 
@@ -971,6 +981,8 @@ macro_rules! rewrite_for {
                 )
             }
             IndirectAddress::RipGlobal(s) => IndirectAddress::RipGlobal(s),
+            IndirectAddress::RipLocalLabel(s) => IndirectAddress::RipLocalLabel(s),
+            IndirectAddress::RipLocalData(s) => IndirectAddress::RipLocalData(s),
         }
     }};
 }

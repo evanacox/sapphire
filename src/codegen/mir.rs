@@ -119,6 +119,9 @@ pub trait MachInst: Copy + Debug + Hash + Sized {
 dense_arena_key! {
     /// A reference to a single block of MIR.
     pub struct MIRBlock;
+
+    /// A reference to a piece of data inside a [`MIRFunction`].
+    pub struct MIRFuncData;
 }
 
 /// The different types of external entities that MIR can reference. This is
@@ -250,6 +253,7 @@ pub struct MIRFunction<Inst: MachInst> {
     order: Vec<MIRBlock>,
     fixed: FixedIntervals,
     blocks: ArenaMap<MIRBlock, MIRBlockInterval>,
+    data: ArenaMap<MIRFuncData, <Inst::Arch as Architecture>::Data>,
 }
 
 impl<Inst: MachInst> MIRFunction<Inst> {
@@ -258,6 +262,7 @@ impl<Inst: MachInst> MIRFunction<Inst> {
         insts: Vec<Inst>,
         blocks: ArenaMap<MIRBlock, MIRBlockInterval>,
         order: Vec<MIRBlock>,
+        data: ArenaMap<MIRFuncData, <Inst::Arch as Architecture>::Data>,
         fixed: FixedIntervals,
     ) -> Self {
         Self {
@@ -266,6 +271,7 @@ impl<Inst: MachInst> MIRFunction<Inst> {
             blocks,
             order,
             fixed,
+            data,
         }
     }
 
@@ -288,6 +294,17 @@ impl<Inst: MachInst> MIRFunction<Inst> {
     #[inline]
     pub fn program_order(&self) -> &[MIRBlock] {
         &self.order
+    }
+
+    /// Returns all the individual pieces of data in a function.
+    ///
+    /// Each of these pieces of data can be re-ordered relative to each other,
+    /// but require their own independent label. They are also allowed to be merged.
+    #[inline]
+    pub fn data(
+        &self,
+    ) -> impl Iterator<Item = (MIRFuncData, &'_ <Inst::Arch as Architecture>::Data)> + '_ {
+        self.data.iter()
     }
 
     /// Returns the program order of the blocks, i.e. the order they need to be in when

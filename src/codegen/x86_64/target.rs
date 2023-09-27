@@ -112,6 +112,8 @@ impl X86_64 {
 impl Architecture for X86_64 {
     type Inst = x86_64::Inst;
 
+    type Data = x86_64::Constant;
+
     #[inline]
     fn cpu() -> CPUArch {
         CPUArch::X86_64
